@@ -1,0 +1,18 @@
+#!/bin/bash --login
+## SLURM submission for Experiment 2: MMS verification
+#
+#SBATCH -A Multiscaleml          # allocation name
+#SBATCH --nodes=1                # Total # of nodes
+#SBATCH -n 16                    # Total # of cores
+#SBATCH --time=12:00:00          # Total run time limit (hh:mm:ss)
+#SBATCH -J mms_verification      # Job name
+#SBATCH -C amr
+#SBATCH --mem-per-cpu=8G
+
+ml purge
+ml Miniforge3
+conda activate heat
+export JAX_PLATFORMS=cpu
+
+# Pass --smoke as $1 to run the tiny config; no arg => full config.
+python3 experiment.py ${1}

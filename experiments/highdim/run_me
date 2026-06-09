@@ -1,0 +1,24 @@
+#!/bin/bash --login
+## SLURM submission for the high-dimensional (4D / 6D) particle experiment.
+## Modeled on Keller_Segel/case2_test3/run_me.
+#
+#SBATCH -A Multiscaleml          # allocation name
+#SBATCH --nodes=1                # Total # of nodes
+#SBATCH -n 16                    # Total # of cores
+#SBATCH --time=12:00:00          # Total run time limit (hh:mm:ss)
+#SBATCH -J highdim_particle      # Job name
+#SBATCH -C amr
+#SBATCH --mem-per-cpu=8G
+
+ml purge
+ml Miniforge3
+conda activate heat
+export JAX_PLATFORMS=cpu
+
+# Usage:
+#   sbatch run_me                 # full d=4
+#   sbatch run_me --d6            # full d=6
+#   sbatch run_me --smoke         # tiny d=4 smoke
+#   sbatch run_me "--smoke --d6"  # tiny d=6 smoke
+# Extra args ($1) are forwarded verbatim to experiment.py.
+python3 experiment.py ${1}

@@ -1,0 +1,17 @@
+#!/bin/bash --login
+## FILENAME:  myjobsubmissionfile
+#
+#SBATCH -A Multiscaleml     # allocation name
+#SBATCH --nodes=1           # Total # of nodes 
+#SBATCH -n 16             # Total # of nodes 
+#SBATCH --time=4:00:00        # Total run time limit (hh:mm:ss)
+#SBATCH -J job          # Job name         # Name of stderr error file
+#SBATCH -C amr
+#SBATCH --mem-per-cpu=8G
+
+ml purge
+ml Miniforge3
+ml OpenMPI/4.1.6-GCC-13.2.0
+conda activate heat
+
+python3 simulation.py ${1}

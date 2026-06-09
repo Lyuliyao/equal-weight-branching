@@ -1,0 +1,13 @@
+#!/bin/bash --login
+#SBATCH -A Multiscaleml
+#SBATCH --nodes=1
+#SBATCH -n 16
+#SBATCH --time=4:00:00
+#SBATCH -J cost_match
+#SBATCH -C amr
+#SBATCH --mem-per-cpu=8G
+ml purge
+ml Miniforge3
+conda activate heat
+export JAX_PLATFORMS=cpu
+python3 cost_match.py

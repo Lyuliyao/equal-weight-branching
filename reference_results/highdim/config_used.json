@@ -1,0 +1,25 @@
+{
+  "d": 6,
+  "D_v": 0.1,
+  "lambda": 6.0,
+  "alpha": 1.0,
+  "beta": 0.5,
+  "eta": 0.5,
+  "T": 2.0,
+  "tau": 0.02,
+  "N0": 20000,
+  "buffer_mult": 8,
+  "sigma0": 1.0,
+  "n_snapshots": 21,
+  "seeds": [
+    0,
+    1,
+    2
+  ],
+  "fht_deg": 8,
+  "fht_rank": 6,
+  "fht_sketch": 5,
+  "fht_grid": 41,
+  "results_dir": "results/highdim",
+  "smoke": false
+}
