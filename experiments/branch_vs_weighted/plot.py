@@ -74,10 +74,10 @@ def plot_ness(rows):
         t, nb, sb = seed_avg(rows, m, "N_local_B")
         axes[2].semilogy(t, nb, color=METHOD_COLORS[m])
     axes[2].set_xlabel(r"$t$"); axes[2].set_ylabel(r"$N_B$")
-    axes[2].text(0.62, 0.10, "Poisson &", color=METHOD_COLORS["poisson"], fontsize=7,
-                 transform=axes[2].transAxes)
-    axes[2].text(0.62, 0.02, "min.-var.", color=METHOD_COLORS["minvar"], fontsize=7,
-                 transform=axes[2].transAxes)
+    axes[2].text(0.05, 0.90, "Poisson", color=METHOD_COLORS["poisson"], fontsize=7,
+                 ha="left", va="top", transform=axes[2].transAxes)
+    axes[2].text(0.05, 0.78, "min.-var.", color=METHOD_COLORS["minvar"], fontsize=7,
+                 ha="left", va="top", transform=axes[2].transAxes)
     fig.savefig(os.path.join(RD, "ness_vs_t.pdf"))
     plt.close(fig)
 
