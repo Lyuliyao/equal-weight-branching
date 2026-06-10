@@ -1,7 +1,7 @@
-"""Publication figure for the MMS verification (paper Sec. 5.1).
+r"""Publication figure for the MMS verification (paper Sec. 5.1).
 
-Single full-width PDF with three panels (error vs N, tau, K), physical width
-4.773 in (include at width=\linewidth)."""
+Single full-width PDF, three square panels (error vs N, tau, K),
+physical width 4.773 in (include at width=\linewidth)."""
 import os, sys, csv
 import numpy as np
 import matplotlib
@@ -24,31 +24,41 @@ def load(name, xcol):
     return x, mu, sd
 
 
-def panel(ax, x, mu, sd, xlabel, logx=True, fit_slope=False, ref_slope=None):
-    if logx:
-        ax.set_xscale("log")
-    ax.set_yscale("log")
-    ax.errorbar(x, mu, yerr=sd, color=C, marker="o", capsize=2, lw=1.2)
-    if fit_slope:
-        p = np.polyfit(np.log(x), np.log(mu), 1)
-        ax.plot(x, np.exp(np.polyval(p, np.log(x))), "k--", lw=0.8,
-                label=rf"slope $={p[0]:.2f}$")
-    if ref_slope is not None:
-        s, lab = ref_slope
-        yref = mu[0] * (x / x[0]) ** s
-        ax.plot(x, yref, color="0.45", ls=":", lw=0.9, label=lab)
-    ax.set_xlabel(xlabel)
-    ax.legend()
-
-
-fig, axes = plt.subplots(1, 3, figsize=(TEXTWIDTH_IN, 0.34 * TEXTWIDTH_IN),
+fig, axes = plt.subplots(1, 3, figsize=(TEXTWIDTH_IN, 0.42 * TEXTWIDTH_IN),
                          constrained_layout=True)
+for a in axes:
+    a.set_box_aspect(1)
+
+# (a) error vs N (log-log) + fitted slope
 x, mu, sd = load("errors_vs_N.csv", "N")
-panel(axes[0], x, mu, sd, r"$N$", fit_slope=True, ref_slope=(-0.5, r"$N^{-1/2}$"))
-axes[0].set_ylabel(r"relative $L^2$ error")
+axes[0].set_xscale("log"); axes[0].set_yscale("log")
+axes[0].errorbar(x, mu, yerr=sd, color=C, marker="o", capsize=2, lw=1.2)
+p = np.polyfit(np.log(x), np.log(mu), 1)
+axes[0].plot(x, np.exp(np.polyval(p, np.log(x))), "k--", lw=0.8)
+axes[0].text(0.06, 0.06, rf"slope $={p[0]:.2f}$", transform=axes[0].transAxes,
+             fontsize=7, va="bottom")
+axes[0].set_xlabel(r"$N$"); axes[0].set_ylabel(r"relative $L^2$ error")
+axes[0].set_yticks([0.06, 0.1, 0.2, 0.3])
+axes[0].set_yticklabels(["0.06", "0.1", "0.2", "0.3"], fontsize=7)
+
+
+# (b) error vs tau (log x)
 x, mu, sd = load("errors_vs_tau.csv", "tau")
-panel(axes[1], x, mu, sd, r"$\tau$")
+axes[1].set_xscale("log"); axes[1].set_yscale("log")
+axes[1].errorbar(x, mu, yerr=sd, color=C, marker="o", capsize=2, lw=1.2)
+axes[1].set_xlabel(r"$\tau$")
+axes[1].set_yticks([0.055, 0.06, 0.065])
+axes[1].set_yticklabels(["0.055", "0.060", "0.065"], fontsize=7)
+
+
+# (c) error vs K (linear x, log y)
 x, mu, sd = load("errors_vs_K.csv", "K")
-panel(axes[2], x, mu, sd, r"$K$", logx=False)
+axes[2].set_yscale("log")
+axes[2].errorbar(x, mu, yerr=sd, color=C, marker="o", capsize=2, lw=1.2)
+axes[2].set_xlabel(r"$K$")
+axes[2].set_yticks([0.01, 0.03, 0.09])
+axes[2].set_yticklabels(["0.01", "0.03", "0.09"], fontsize=7)
+axes[2].minorticks_off()
+
 fig.savefig(os.path.join(RD, "mms_convergence.pdf"))
 print("wrote", os.path.join(RD, "mms_convergence.pdf"))

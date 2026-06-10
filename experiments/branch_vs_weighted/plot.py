@@ -45,7 +45,7 @@ def plot_snapshots(rows):
     for ax, (name, f) in zip(axes, fields):
         im = ax.imshow(f, origin="lower", extent=[-np.pi, np.pi, -np.pi, np.pi],
                        vmin=0, vmax=vmax, cmap="viridis")
-        ax.set_title(METHOD_LABELS[name], fontsize=8)
+        ax.set_title({"reference": "reference", "weighted": "weighted", "poisson": "Poisson", "minvar": "min.-variance"}[name], fontsize=8)
         ax.set_xticks([]); ax.set_yticks([]); ax.grid(False)
     fig.colorbar(im, ax=axes, shrink=0.85, pad=0.015, aspect=14)
     fig.savefig(os.path.join(RD, "snapshots_final.pdf"))
@@ -53,36 +53,46 @@ def plot_snapshots(rows):
 
 
 def plot_ness(rows):
-    fig, axes = plt.subplots(1, 3, figsize=(0.85 * TEXTWIDTH_IN, 0.32 * TEXTWIDTH_IN),
+    fig, axes = plt.subplots(1, 3, figsize=(0.85 * TEXTWIDTH_IN, 0.40 * TEXTWIDTH_IN),
                              constrained_layout=True)
+    for a in axes:
+        a.set_box_aspect(1)
     t, g, _ = seed_avg(rows, "weighted", "global_nESS")
     tb, lb, _ = seed_avg(rows, "weighted", "local_nESS_B")
-    axes[0].plot(t, g, color=METHOD_COLORS["weighted"], label="global")
-    axes[0].plot(tb, lb, color=METHOD_COLORS["weighted"], ls="--", label=r"local ($B$)")
-    axes[0].set_xlabel(r"$t$"); axes[0].set_ylabel(r"$\mathrm{nESS}$ (weighted)")
-    axes[0].set_ylim(0, 1.05); axes[0].legend()
+    axes[0].plot(t, g, color=METHOD_COLORS["weighted"])
+    axes[0].plot(tb, lb, color=METHOD_COLORS["weighted"], ls="--")
+    axes[0].set_xlabel(r"$t$"); axes[0].set_ylabel(r"$\mathrm{nESS}$")
+    axes[0].set_ylim(0, 1.05)
+    axes[0].text(0.62, 0.10, "global", color=METHOD_COLORS["weighted"], fontsize=7,
+                 transform=axes[0].transAxes)
+    axes[0].text(0.40, 0.72, r"local ($B$)", color=METHOD_COLORS["weighted"], fontsize=7,
+                 transform=axes[0].transAxes)
     t, mw, _ = seed_avg(rows, "weighted", "max_w_over_mean_w")
     axes[1].semilogy(t, mw, color=METHOD_COLORS["weighted"])
-    axes[1].set_xlabel(r"$t$"); axes[1].set_ylabel(r"$\max_i w_i/\overline{w}$ (weighted)")
+    axes[1].set_xlabel(r"$t$"); axes[1].set_ylabel(r"$\max_i w_i\,/\,\overline{w}$")
     for m in ["poisson", "minvar"]:
         t, nb, sb = seed_avg(rows, m, "N_local_B")
-        axes[2].semilogy(t, nb, color=METHOD_COLORS[m], label=METHOD_LABELS[m])
-    axes[2].set_xlabel(r"$t$"); axes[2].set_ylabel(r"$N_B$ (branching)")
-    axes[2].legend()
+        axes[2].semilogy(t, nb, color=METHOD_COLORS[m])
+    axes[2].set_xlabel(r"$t$"); axes[2].set_ylabel(r"$N_B$")
+    axes[2].text(0.62, 0.10, "Poisson &", color=METHOD_COLORS["poisson"], fontsize=7,
+                 transform=axes[2].transAxes)
+    axes[2].text(0.62, 0.02, "min.-var.", color=METHOD_COLORS["minvar"], fontsize=7,
+                 transform=axes[2].transAxes)
     fig.savefig(os.path.join(RD, "ness_vs_t.pdf"))
     plt.close(fig)
 
 
 def plot_l2(rows):
-    fig, ax = plt.subplots(figsize=fig_size(0.70, aspect=0.62),
+    fig, ax = plt.subplots(figsize=fig_size(0.70, aspect=0.95),
                            constrained_layout=True)
+    ax.set_box_aspect(1)
     for m in METHODS:
         t, mu, sd = seed_avg(rows, m, "L2_rel_err")
         ax.semilogy(t, mu, color=METHOD_COLORS[m], label=METHOD_LABELS[m])
         ax.fill_between(t, np.maximum(mu - sd, 1e-12), mu + sd,
                         color=METHOD_COLORS[m], alpha=0.2, lw=0)
     ax.set_xlabel(r"$t$"); ax.set_ylabel(r"relative $L^2$ error")
-    ax.legend()
+    ax.legend(loc="lower left", fontsize=7)
     fig.savefig(os.path.join(RD, "l2_vs_t.pdf"))
     plt.close(fig)
 
@@ -91,8 +101,9 @@ def plot_box(rows):
     tmax = max(float(r["t"]) for r in rows)
     data = [[float(r["L2_rel_err"]) for r in rows
              if r["method"] == m and abs(float(r["t"]) - tmax) < 1e-12] for m in METHODS]
-    fig, ax = plt.subplots(figsize=fig_size(0.60, aspect=0.72),
+    fig, ax = plt.subplots(figsize=fig_size(0.60, aspect=0.95),
                            constrained_layout=True)
+    ax.set_box_aspect(1)
     bp = ax.boxplot(data, tick_labels=["weighted", "Poisson", "min.-var."],
                     patch_artist=True, widths=0.55)
     for patch, m in zip(bp["boxes"], METHODS):

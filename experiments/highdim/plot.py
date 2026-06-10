@@ -34,24 +34,32 @@ def seed_avg(rows, method, col):
 
 
 def metrics_figure(rows, d):
-    fig, axes = plt.subplots(2, 3, figsize=(TEXTWIDTH_IN, 0.62 * TEXTWIDTH_IN),
+    fig, axes = plt.subplots(2, 3, figsize=(TEXTWIDTH_IN, 0.66 * TEXTWIDTH_IN),
                              constrained_layout=True)
+    for a in axes.flat:
+        a.set_box_aspect(1)
     panels = [("moment_m", r"$m(t)$", METHODS, "linear"),
-              ("total_mass", r"total mass $M(t)$", METHODS, "linear"),
+              ("total_mass", r"$M(t)$", METHODS, "linear"),
               ("N_active", r"$N_{\mathrm{act}}$", ["poisson", "minvar"], "linear"),
               ("N_local_B", r"$N_B$", ["poisson", "minvar"], "linear"),
-              ("global_nESS", r"$\mathrm{nESS}$ (weighted)", ["weighted"], "linear"),
-              ("max_w_over_mean_w", r"$\max_i w_i/\overline{w}$ (weighted)", ["weighted"], "log")]
+              ("global_nESS", r"$\mathrm{nESS}$", ["weighted"], "linear"),
+              ("max_w_over_mean_w", r"$\max_i w_i\,/\,\overline{w}$", ["weighted"], "log")]
     for ax, (col, ylab, ms, sc) in zip(axes.flat, panels):
+        ymax = 0.0
         for m in ms:
             t, mu = seed_avg(rows, m, col)
-            ax.plot(t, mu, color=METHOD_COLORS[m], label=METHOD_LABELS[m])
-        if sc == "log":
+            ymax = max(ymax, float(np.max(mu)))
+            ax.plot(t, mu, color=METHOD_COLORS[m],
+                    label={"weighted": "weighted", "poisson": "Poisson", "minvar": "min.-var."}[m])
+        if sc == "log" and ymax >= 20:
             ax.set_yscale("log")
+        elif col in ("N_active", "N_local_B"):
+            ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 3))
         ax.set_ylabel(ylab); ax.set_xlabel(r"$t$")
-    axes[0, 0].legend(fontsize=7)
-    fig.savefig(os.path.join(RD, f"highdim_metrics_d{d}.pdf").replace("highdim_metrics", "metrics") if False
-                else os.path.join(RD, f"metrics_d{d}.pdf"))
+    handles, labels = axes[0, 0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="upper center", ncol=3, fontsize=7,
+               bbox_to_anchor=(0.5, 1.05))
+    fig.savefig(os.path.join(RD, f"metrics_d{d}.pdf"), bbox_inches="tight")
     plt.close(fig)
 
 
@@ -62,8 +70,10 @@ def marginals_figure(d=6, seed=0):
     zg = f["zgrid"]; fm = f["fht_marg1d"]
     ncol = 3; nrow = int(np.ceil(d / ncol))
     fig, axes = plt.subplots(nrow, ncol,
-                             figsize=(0.9 * TEXTWIDTH_IN, 0.30 * TEXTWIDTH_IN * nrow),
+                             figsize=(0.9 * TEXTWIDTH_IN, 0.36 * TEXTWIDTH_IN * nrow),
                              constrained_layout=True, sharex=True, sharey=True)
+    for a in axes.flat:
+        a.set_box_aspect(1)
     width = centers[1] - centers[0]
     for j, ax in enumerate(axes.flat):
         if j >= d:
@@ -72,8 +82,10 @@ def marginals_figure(d=6, seed=0):
         ax.plot(zg, fm[j], color="#d62728", lw=1.2, label="FHT")
         ax.set_title(rf"$z_{{{j+1}}}$", fontsize=8)
         ax.grid(False)
-    axes.flat[0].legend(fontsize=7)
-    fig.savefig(os.path.join(RD, f"marginals_d{d}.pdf"))
+    handles, labels = axes.flat[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="upper center", ncol=2, fontsize=7,
+               bbox_to_anchor=(0.5, 1.06))
+    fig.savefig(os.path.join(RD, f"marginals_d{d}.pdf"), bbox_inches="tight")
     plt.close(fig)
 
 
