@@ -1,0 +1,51 @@
+{
+  "cfg": {
+    "D": 0.05,
+    "lambda": 8.0,
+    "beta": 1.0,
+    "sigma": 0.5,
+    "x0": [
+      0.0,
+      0.0
+    ],
+    "T": 1.0,
+    "tau": 0.002,
+    "N0": 20000,
+    "buffer_mult": 16,
+    "K": 16,
+    "grid": 256,
+    "ref_substeps": 1,
+    "eta": 0.5,
+    "n_snapshots": 20,
+    "seeds": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "results_dir": "results/branch_vs_weighted",
+    "smoke": false
+  },
+  "N0_LIST": [
+    20000,
+    131072
+  ],
+  "SEEDS": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "POLICIES": [
+    "ess",
+    "always"
+  ],
+  "ESS_THRESHOLD": 0.5,
+  "resample_seed_offset": 10000,
+  "numpy": "2.4.4",
+  "jax": "0.10.0"
+}
