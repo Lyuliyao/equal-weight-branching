@@ -1,0 +1,34 @@
+{
+  "_comment": "5.5(c) nonradial 4-cluster (tetrahedral) focusing run. DESCRIBES the experiment; simulation_focusing.py is driven by CLI flags. Tests whether the focusing transition and self-convergence behavior are geometry-robust (nonradial). No universal critical-mass claim.",
+  "model": {
+    "equation": "d_t rho = Delta rho - chi div(rho grad c);  -Delta c + kappa^2 c = rho - rho_bar",
+    "box_side_L": 12.0,
+    "kappa": 0.1,
+    "chi": 1.0,
+    "branching": false,
+    "drift_sign": "+chi grad c (inward / aggregating)"
+  },
+  "ic": {
+    "type": "tetra",
+    "M": 80,
+    "sigma_c": 0.25,
+    "centers": [[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]]
+  },
+  "resolution_grid": {
+    "N": [800000, 3200000],
+    "H": [18, 24, 32],
+    "tau": [1e-4, 5e-5],
+    "T": 1.0,
+    "seeds": [0, 1, 2]
+  },
+  "self_convergence": {
+    "Qc_pairs": [[12, 24], [16, 32]]
+  },
+  "diagnostics": [
+    "R_0.5", "R_0.9", "rho_core", "P_H", "C_H", "Qc",
+    "per-cluster centroids", "per-cluster R_0.5/R_0.9",
+    "min_intercluster_dist (cluster merging indicator)",
+    "mass_drift (sanity)"
+  ],
+  "production_note": "Recommended: M=80, sigma_c=0.25 at N=8e5, H=24, tau=1e-4, seeds {0,1,2}; plus an (N,H) self-convergence check at H in {18,24,32}, N in {8e5,3.2e6}."
+}

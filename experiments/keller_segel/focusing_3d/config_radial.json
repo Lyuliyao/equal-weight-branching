@@ -1,0 +1,32 @@
+{
+  "_comment": "5.5(b) radial Gaussian mass sweep + (N,H) self-convergence grid. This file DESCRIBES the experiment grid; simulation_focusing.py is driven by CLI flags (one run per (M,N,H,tau,seed) tuple). run_focusing.sb expands this grid. No universal critical-mass claim: this is a family-dependent focusing transition over the one-parameter mass family.",
+  "model": {
+    "equation": "d_t rho = Delta rho - chi div(rho grad c);  -Delta c + kappa^2 c = rho - rho_bar",
+    "box_side_L": 12.0,
+    "kappa": 0.1,
+    "chi": 1.0,
+    "branching": false,
+    "drift_sign": "+chi grad c (inward / aggregating)"
+  },
+  "ic": {
+    "type": "radial",
+    "sigma": 0.45,
+    "mass_sweep_M": [20, 40, 60, 80, 100]
+  },
+  "resolution_grid": {
+    "N": [200000, 800000, 3200000],
+    "H": [12, 18, 24, 32],
+    "tau": [1e-4, 5e-5],
+    "T": 1.0,
+    "seeds": [0, 1, 2]
+  },
+  "self_convergence": {
+    "Qc_pairs": [[12, 24], [16, 32]],
+    "note": "Q_c(t) = ||c_{H_hi}||_inf / ||c_{H_lo}||_inf from the SAME cloud; reported per (N,H) to expose under-resolution. H=32 only if stable."
+  },
+  "diagnostics": [
+    "R_0.5", "R_0.9", "rho_core", "P_H", "C_H", "Qc",
+    "mass_drift (sanity: should be ~0)"
+  ],
+  "production_note": "Recommended primary grid for the figures: M in {20,40,60,80,100} at N=8e5, H=24, tau=1e-4, seeds {0,1,2}; plus an (N,H) self-convergence sub-grid at M=80 over N in {2e5,8e5,3.2e6}, H in {12,18,24,32}."
+}

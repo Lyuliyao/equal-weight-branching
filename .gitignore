@@ -9,3 +9,7 @@ slurm-*.out
 core.*
 *.log
 .DS_Store
+scratch_smoke/
+results_smoke/
+scratch_*/
+*_smoke/

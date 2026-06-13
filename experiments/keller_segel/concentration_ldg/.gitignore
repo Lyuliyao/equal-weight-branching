@@ -1,0 +1,13 @@
+# Heavy / generated data — not tracked
+results/
+results_*/
+scratch*/
+*.npz
+*.pdf
+*.png
+slurm-*.out
+slurm_*.out
+*.log
+__pycache__/
+*.pyc
+logs/

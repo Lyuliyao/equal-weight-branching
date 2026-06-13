@@ -1,0 +1,38 @@
+#!/bin/bash --login
+## SLURM submission for the field-coupled 6D kinetic Keller-Segel experiment.
+## Modeled on highdim/run_me and Keller_Segel/case2_test3/run_me.
+#
+#SBATCH -A Multiscaleml          # allocation name
+#SBATCH --nodes=1                # Total # of nodes
+#SBATCH -n 16                    # Total # of cores
+#SBATCH --time=12:00:00          # Total run time limit (hh:mm:ss)
+#SBATCH -J kinetic_ks            # Job name
+#SBATCH -C amr
+#SBATCH --mem-per-cpu=8G
+
+ml purge
+ml Miniforge3
+conda activate heat
+export JAX_PLATFORMS=cpu
+
+# ---------------------------------------------------------------------------
+# Usage:
+#   sbatch run_me                      # PRODUCTION: config_prod.json
+#   sbatch run_me "--config config_pilot.json"   # PILOT
+#   sbatch run_me "--config config_pilot.json"   # any config via $1
+#
+# Extra args ($1) are forwarded verbatim to experiment_kinetic.py.
+# Default (no arg) runs the production config.
+# ---------------------------------------------------------------------------
+ARGS="${1:---config config_prod.json}"
+python3 experiment_kinetic.py ${ARGS}
+
+# ===========================================================================
+# SMOKE invocation (clearly labeled).  DO NOT enable both blocks at once.
+# Tiny run: N0=3000, ~50 steps (T=0.1, tau=2e-3), 1 seed, K_x=6, eval grid 16^3.
+# Writes to .../kinetic_ks/scratch_smoke (separate dir, never touches prod/pilot).
+# To run the SMOKE instead of the production line above, comment out the
+# `python3 ... ${ARGS}` line and uncomment exactly the next line:
+#
+#   python3 experiment_kinetic.py --smoke
+# ===========================================================================

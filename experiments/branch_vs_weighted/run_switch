@@ -1,0 +1,21 @@
+#!/bin/bash --login
+## SLURM submission for the two-stage switching-growth experiment.
+## Branching vs weighted+resample; full production config in experiment_switch.py.
+#
+#SBATCH -A Multiscaleml          # allocation name
+#SBATCH --nodes=1                # Total # of nodes
+#SBATCH -n 16                    # Total # of cores
+#SBATCH --time=12:00:00          # Total run time limit (hh:mm:ss)
+#SBATCH -J switch_growth         # Job name
+#SBATCH -C amr
+#SBATCH --mem-per-cpu=8G
+
+ml purge
+ml Miniforge3
+conda activate heat
+export JAX_PLATFORMS=cpu
+
+cd /mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching/experiments/branch_vs_weighted
+
+# Pass --smoke as $1 to run the tiny config; no arg => full production config.
+python3 experiment_switch.py ${1}

@@ -101,6 +101,56 @@ def r_of(X, cfg):
     return cfg["lambda"] * G_of(X, cfg) - cfg["beta"]
 
 
+# ---------------------------------------------------------------------------
+# Nonlinear localized growth (Option B): the reaction coefficient reads a LOCAL
+# concentration functional c[u] of the density, so weight degeneracy (which
+# corrupts the density near the peak) feeds back into the coefficient.
+#     r[u](x) = lambda G(x) (1 - alpha c[u]) - beta,
+#     c[u]    = ( int G_loc(x) u(x) dx ) / ( int G_loc dx ),
+# with G_loc a NARROW Gaussian at x0 (sigma_loc < sigma), so c[u] measures the
+# central/peak density -- exactly the quantity weight degeneracy gets wrong.
+# Each method evaluates c[u] from ITS OWN cloud; the reference recomputes c[u]
+# from its grid density each substep, so the comparison stays self-consistent.
+# All of this is active only when cfg["nonlinear"] is True.
+# ---------------------------------------------------------------------------
+def _sigma_loc(cfg):
+    return cfg.get("sigma_loc", 0.5 * cfg["sigma"])
+
+
+def _Zloc(cfg):
+    """int_{T^2} G_loc dx ~ 2 pi sigma_loc^2 (sigma_loc small => bump well inside)."""
+    return 2.0 * np.pi * _sigma_loc(cfg) ** 2
+
+
+def G_loc_of(X, cfg):
+    d2 = periodic_sq_dist(X, jnp.asarray(cfg["x0"]))
+    return jnp.exp(-d2 / (2.0 * _sigma_loc(cfg) ** 2))
+
+
+def G_loc_grid(XX, YY, cfg):
+    x0 = cfg["x0"]
+    dx = XX - x0[0]; dy = YY - x0[1]
+    dx = dx - L * np.round(dx / L); dy = dy - L * np.round(dy / L)
+    return np.exp(-(dx * dx + dy * dy) / (2.0 * _sigma_loc(cfg) ** 2))
+
+
+def local_conc_particles(X, w, mask, M0, N0, cfg):
+    """c[u] from the particle cloud.  u_emp = (M0/N0) sum_i w_i delta_{X_i}
+    (branching: w_i = 1, mask selects active), so int G_loc u = (M0/N0) sum w_i G_loc(X_i)."""
+    gl = G_loc_of(X, cfg)
+    num = (M0 / N0) * float(jnp.sum(gl * w * mask))
+    return num / _Zloc(cfg)
+
+
+def local_conc_grid(u, GLg, cell_area, cfg):
+    return float(np.sum(GLg * u) * cell_area) / _Zloc(cfg)
+
+
+def r_of_nl(X, cfg, c_loc):
+    """Nonlinear Option-B reaction at the given local concentration c_loc."""
+    return cfg["lambda"] * G_of(X, cfg) * (1.0 - cfg["alpha"] * c_loc) - cfg["beta"]
+
+
 def grid_coords(n):
     """Cell-centered periodic grid on [-pi,pi]^2; returns (XX, YY) meshgrid xy."""
     xs = -np.pi + (np.arange(n) + 0.5) * (L / n)
@@ -136,13 +186,25 @@ def reference_solver(cfg):
     sub = cfg["ref_substeps"]
     dt = tau / sub
     diff_half = np.exp(cfg["D"] * lap * (dt / 2.0))  # half diffusion (Strang)
-    react = np.exp(rg * dt)                          # full reaction
+    react = np.exp(rg * dt)                          # full reaction (linear)
+
+    nonlinear = cfg.get("nonlinear", False)
+    if nonlinear:
+        GLg = G_loc_grid(XX, YY, cfg)
+        cell_area = (L / n) ** 2
 
     def advance_one_tau(u):
         for _ in range(sub):
             uh = np.fft.fft2(u) * diff_half
             u = np.real(np.fft.ifft2(uh))
-            u = u * react
+            if nonlinear:
+                # self-consistent: recompute the local concentration from the
+                # current grid density, then apply the density-dependent reaction
+                c = local_conc_grid(u, GLg, cell_area, cfg)
+                rg_t = cfg["lambda"] * Gg * (1.0 - cfg["alpha"] * c) - cfg["beta"]
+                u = u * np.exp(rg_t * dt)
+            else:
+                u = u * react
             uh = np.fft.fft2(u) * diff_half
             u = np.real(np.fft.ifft2(uh))
         return u
@@ -259,11 +321,42 @@ def branch_compact(X_active, nu, buffer_size):
     return Xbuf, mask, overflow, n_new
 
 
+def population_control(Xbuf, n_active, N_lo, N_hi, w_c, buffer_size, key):
+    """Equal-weight population control keeping the active count in [N_lo/2, N_hi].
+
+    If n_active > N_hi: randomly keep half of the particles and rescale the common
+    weight by n_active/keep (preserving the total mass exactly).  If 0 < n_active
+    < N_lo: duplicate every particle and halve the common weight.  All particles
+    keep a single common weight w_c, and the total mass w_c*n_active is preserved
+    exactly across both operations (so the reaction multiplier is still unbiased;
+    only the variance of the empirical measure changes).  Returns
+    (Xbuf, mask, n_new, w_c).
+    """
+    pos = np.asarray(Xbuf)[:n_active]
+    if n_active > N_hi:
+        keep = n_active // 2                              # > N_hi/2
+        perm = np.asarray(jax.random.permutation(key, n_active))[:keep]
+        pos = pos[perm]
+        w_c = w_c * (n_active / keep)                     # preserve mass exactly
+        n_new = keep
+    elif 0 < n_active < N_lo:
+        pos = np.repeat(pos, 2, axis=0)
+        w_c = w_c * 0.5
+        n_new = 2 * n_active
+    else:
+        n_new = n_active
+    Xout = np.zeros((buffer_size, 2), dtype=np.float64)
+    Xout[:n_new] = pos
+    mask = np.zeros((buffer_size,), dtype=bool)
+    mask[:n_new] = True
+    return Xout, mask, n_new, w_c
+
+
 # ---------------------------------------------------------------------------
 # Run all three methods for one seed
 # ---------------------------------------------------------------------------
 def run_seed(seed, cfg, ref_u0, advance_ref, XX, YY, Gg, density_estimation,
-             density_evaluate_grid, records, fields_store):
+             density_evaluate_grid, records, fields_store, pstore):
     t0 = time.time()
     n = cfg["grid"]
     cell_area = (L / n) ** 2
@@ -303,6 +396,13 @@ def run_seed(seed, cfg, ref_u0, advance_ref, XX, YY, Gg, density_estimation,
 
     Xp, maskp = init_buffer()  # poisson
     Xm, maskm = init_buffer()  # minvar
+    Xc, maskc = init_buffer()  # minvar + population control
+    w_c = M0 / N0              # common per-particle weight for the controlled run
+    pc_hi = int(cfg.get("pc_cull_at", 2 * N0))    # cull when count exceeds this
+    pc_lo = int(cfg.get("pc_dup_below", N0 // 2)) # duplicate when count below this
+    ps_p = 0                   # integrated particle-steps (Poisson)
+    ps_m = 0                   # integrated particle-steps (full minvar)
+    ps_c = 0                   # integrated particle-steps (population-controlled)
     overflow_p = False
     overflow_m = False
 
@@ -325,6 +425,11 @@ def run_seed(seed, cfg, ref_u0, advance_ref, XX, YY, Gg, density_estimation,
         mass_m = (nm_act / N0) * M0
         um = reconstruct_field(density_estimation, density_evaluate_grid,
                                Xm, jnp.ones((buffer_size,)), maskm, mass_m, XX, YY)
+        # population-controlled minvar: mass = w_c * N_active (w_c rescaled at control)
+        nc_act = int(jnp.sum(maskc))
+        mass_c = w_c * nc_act
+        uc = reconstruct_field(density_estimation, density_evaluate_grid,
+                               Xc, jnp.ones((buffer_size,)), maskc, mass_c, XX, YY)
 
         Bmask = (Gg >= eta)
         # weighted diagnostics
@@ -343,6 +448,21 @@ def run_seed(seed, cfg, ref_u0, advance_ref, XX, YY, Gg, density_estimation,
         Gp = np.asarray(G_of(Xp, cfg)) * np.asarray(maskp)
         n_local_p = int(np.sum((np.asarray(G_of(Xp, cfg)) >= eta) & np.asarray(maskp)))
         n_local_m = int(np.sum((np.asarray(G_of(Xm, cfg)) >= eta) & np.asarray(maskm)))
+        n_local_c = int(np.sum((np.asarray(G_of(Xc, cfg)) >= eta) & np.asarray(maskc)))
+
+        # local concentration c[u] each method reads (nonlinear Option B only):
+        # this is the coefficient input; its error vs the reference exposes the
+        # feedback bias caused by weight degeneracy.
+        if cfg.get("nonlinear", False):
+            GLg_s = G_loc_grid(XX, YY, cfg)
+            cl_ref = local_conc_grid(u_ref_s, GLg_s, cell_area, cfg)
+            cl_w = local_conc_particles(Xw, ww, maskw, M0, N0, cfg)
+            cl_p = local_conc_particles(Xp, jnp.ones((buffer_size,)), maskp, M0, N0, cfg)
+            cl_m = local_conc_particles(Xm, jnp.ones((buffer_size,)), maskm, M0, N0, cfg)
+            cl_c = local_conc_particles(Xc, jnp.ones((buffer_size,)), maskc, M0, N0, cfg)
+        else:
+            cl_ref = cl_w = cl_p = cl_m = cl_c = np.nan
+        c_loc_map = {"weighted": cl_w, "poisson": cl_p, "minvar": cl_m, "minvar_pc": cl_c}
 
         for method, u, extra in [
             ("weighted", uw, dict(global_nESS=global_nESS_w, local_nESS_B=local_nESS_w,
@@ -354,7 +474,12 @@ def run_seed(seed, cfg, ref_u0, advance_ref, XX, YY, Gg, density_estimation,
             ("minvar", um, dict(global_nESS=np.nan, local_nESS_B=np.nan,
                                 max_w_over_mean_w=np.nan, N_active=nm_act,
                                 N_local_B=n_local_m)),
+            ("minvar_pc", uc, dict(global_nESS=np.nan, local_nESS_B=np.nan,
+                                   max_w_over_mean_w=np.nan, N_active=nc_act,
+                                   N_local_B=n_local_c)),
         ]:
+            extra = dict(extra, c_local=c_loc_map[method], c_local_ref=cl_ref,
+                         c_local_err=abs(c_loc_map[method] - cl_ref))
             m = grid_metrics(u, u_ref_s, XX, YY, Gg, eta, cell_area)
             rec = dict(seed=seed, method=method, t=t, runtime_s=np.nan)
             rec.update(m)
@@ -362,7 +487,7 @@ def run_seed(seed, cfg, ref_u0, advance_ref, XX, YY, Gg, density_estimation,
             if record:
                 records.append(rec)
 
-        return uw, up, um, u_ref_s
+        return uw, up, um, uc, u_ref_s
 
     # snapshot at t=0
     if 0 in snap_steps:
@@ -379,29 +504,69 @@ def run_seed(seed, cfg, ref_u0, advance_ref, XX, YY, Gg, density_estimation,
         # to 0). Since normal(kT,(M,2))[:k]==normal(kT,(k,2)), the shared front
         # particles receive identical Brownian increments across methods.
         dWbuf = jax.random.normal(kT, shape=(buffer_size, 2), dtype=jnp.float64)
+        nonlinear = cfg.get("nonlinear", False)
 
         # ---- WEIGHTED (fixed N0) ----
-        rW = r_of(Xw, cfg)
+        # In the nonlinear case each method reads a LOCAL concentration from its
+        # OWN cloud, so weight degeneracy feeds back into the coefficient.
+        if nonlinear:
+            cW = local_conc_particles(Xw, ww, maskw, M0, N0, cfg)
+            rW = r_of_nl(Xw, cfg, cW)
+        else:
+            rW = r_of(Xw, cfg)
         Xw = wrap_torus(em_transport(Xw, jnp.zeros_like(Xw), cfg["D"], tau, dWbuf[:N0]), period)
         ww = reaction_weighted(ww, rW, tau)
 
         # ---- POISSON branching (full buffer + mask) ----
-        rP = r_of(Xp, cfg)
+        if nonlinear:
+            cP = local_conc_particles(Xp, jnp.ones((buffer_size,)), maskp, M0, N0, cfg)
+            rP = r_of_nl(Xp, cfg, cP)
+        else:
+            rP = r_of(Xp, cfg)
         Xp = wrap_torus(em_transport(Xp, jnp.zeros_like(Xp), cfg["D"], tau, dWbuf), period)
         nu_p = jnp.where(maskp, reaction_poisson(kp_r, rP, tau), 0)
         Xpb, mpb, ov_p, n_new_p = branch_compact(Xp, nu_p, buffer_size)
         if ov_p:
             raise RuntimeError(f"poisson buffer overflow at step {s} (n_new>{buffer_size}); increase buffer_mult")
         Xp, maskp = jnp.asarray(Xpb), jnp.asarray(mpb)
+        ps_p += n_new_p
 
         # ---- MINVAR branching (full buffer + mask) ----
-        rM = r_of(Xm, cfg)
+        if nonlinear:
+            cM = local_conc_particles(Xm, jnp.ones((buffer_size,)), maskm, M0, N0, cfg)
+            rM = r_of_nl(Xm, cfg, cM)
+        else:
+            rM = r_of(Xm, cfg)
         Xm = wrap_torus(em_transport(Xm, jnp.zeros_like(Xm), cfg["D"], tau, dWbuf), period)
         nu_m = jnp.where(maskm, reaction_minvar(km_r, rM, tau), 0)
         Xmb, mmb, ov_m, n_new_m = branch_compact(Xm, nu_m, buffer_size)
         if ov_m:
             raise RuntimeError(f"minvar buffer overflow at step {s} (n_new>{buffer_size}); increase buffer_mult")
         Xm, maskm = jnp.asarray(Xmb), jnp.asarray(mmb)
+        ps_m += n_new_m
+
+        # ---- MINVAR + POPULATION CONTROL ----
+        # This run SHARES the minimum-variance branching randomness (km_r) and the
+        # transport increment (dWbuf) with the uncontrolled minvar run, so without
+        # a cap it is byte-identical to minvar; the only added randomness is the
+        # culling key kc_pop (fold_in does not consume `key`, so the existing
+        # weighted/Poisson/minvar streams are unchanged).  Hence the difference
+        # between minvar and minvar_pc isolates the effect of the population cap.
+        kc_r = km_r
+        kc_pop = jax.random.fold_in(km_r, 202)
+        if nonlinear:
+            cC = local_conc_particles(Xc, jnp.ones((buffer_size,)), maskc, M0, N0, cfg)
+            rC = r_of_nl(Xc, cfg, cC)
+        else:
+            rC = r_of(Xc, cfg)
+        Xc = wrap_torus(em_transport(Xc, jnp.zeros_like(Xc), cfg["D"], tau, dWbuf), period)
+        nu_c = jnp.where(maskc, reaction_minvar(kc_r, rC, tau), 0)
+        Xcb, mcb0, ov_c, n_new_c = branch_compact(Xc, nu_c, buffer_size)
+        if ov_c:
+            raise RuntimeError(f"minvar_pc buffer overflow at step {s} (n_new>{buffer_size}); increase buffer_mult")
+        Xcb, mcb, n_new_c, w_c = population_control(Xcb, n_new_c, pc_lo, pc_hi, w_c, buffer_size, kc_pop)
+        Xc, maskc = jnp.asarray(Xcb), jnp.asarray(mcb)
+        ps_c += n_new_c
 
         if s in snap_steps:
             out = snapshot(s)              # records metrics once
@@ -417,10 +582,12 @@ def run_seed(seed, cfg, ref_u0, advance_ref, XX, YY, Gg, density_estimation,
     # store final-time fields for plotting (captured during the loop -> no duplicate rows)
     if final_fields is None:
         final_fields = snapshot(steps, record=False)
-    uw_f, up_f, um_f, uref_f = final_fields
+    uw_f, up_f, um_f, uc_f, uref_f = final_fields
     fields_store[seed] = dict(
-        reference=uref_f, weighted=uw_f, poisson=up_f, minvar=um_f,
+        reference=uref_f, weighted=uw_f, poisson=up_f, minvar=um_f, minvar_pc=uc_f,
     )
+    # integrated particle-steps (cost proxy): weighted is fixed at N0 per step
+    pstore.append(dict(seed=seed, weighted=N0 * steps, poisson=ps_p, minvar=ps_m, minvar_pc=ps_c))
     return overflow_p, overflow_m, runtime
 
 
@@ -455,12 +622,13 @@ def main():
 
     records = []
     fields_store = {}
+    pstore = []
     overflow_any = False
     t_all = time.time()
     for seed in cfg["seeds"]:
         ov_p, ov_m, rt = run_seed(seed, cfg, ref_u0, advance_ref, XX, YY, Gg,
                                   density_estimation, density_evaluate_grid,
-                                  records, fields_store)
+                                  records, fields_store, pstore)
         overflow_any = overflow_any or ov_p or ov_m
         print(f"seed {seed}: runtime {rt:.2f}s  overflow_poisson={ov_p} overflow_minvar={ov_m}")
 
@@ -469,13 +637,26 @@ def main():
             "peak_height", "peak_height_err", "peak_loc_err",
             "local_mass_B", "local_mass_B_err",
             "global_nESS", "local_nESS_B", "max_w_over_mean_w",
-            "N_active", "N_local_B", "runtime_s"]
+            "N_active", "N_local_B", "runtime_s",
+            "c_local", "c_local_ref", "c_local_err"]
     csv_path = os.path.join(rd, "metrics.csv")
     with open(csv_path, "w") as f:
         f.write(",".join(cols) + "\n")
         for rec in records:
             f.write(",".join(str(rec.get(c, "")) for c in cols) + "\n")
     print("wrote", csv_path, "rows:", len(records))
+
+    # integrated particle-steps per method (cost proxy)
+    ps_path = os.path.join(rd, "particle_steps.csv")
+    with open(ps_path, "w") as f:
+        f.write("seed,weighted,poisson,minvar,minvar_pc\n")
+        for r in pstore:
+            f.write(f"{r['seed']},{r['weighted']},{r['poisson']},{r['minvar']},{r['minvar_pc']}\n")
+    if pstore:
+        mv = np.mean([r["minvar"] for r in pstore])
+        pc = np.mean([r["minvar_pc"] for r in pstore])
+        print(f"mean particle-steps: minvar={mv:.3e}  minvar_pc={pc:.3e}  ratio={mv/pc:.2f}")
+    print("wrote", ps_path)
 
     # save fields for each seed
     for seed, fld in fields_store.items():
