@@ -1,0 +1,17 @@
+{
+  "cloud": null,
+  "a": 84.0,
+  "mass": 31.41592653589793,
+  "N": 400000,
+  "box": 1.0,
+  "grid": 221,
+  "Kg": 8,
+  "Kfull": 40,
+  "Kl": 40,
+  "c_window": 3.0,
+  "B_target": 3000,
+  "blob": true,
+  "seed": 0,
+  "out_dir": "/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching/reference_results/resolution_hybrid/20260613_2014_92c0226_coreKS_island/core_demo",
+  "smoke": false
+}

@@ -1,0 +1,19 @@
+{
+  "experiment": "multi_island",
+  "git_commit": "92c0226703c9c8c3cd638e0fb54488b1973eae4e",
+  "git_commit_short": "92c0226",
+  "command_line": "/mnt/home/lyuliyao/.conda/envs/heat/bin/python multi_island.py --M 16 --sigma 0.16 --D 0.01 --lambda 12 --beta 0.8 --T 0.8 --tau 1e-3 --N0 20000 --K 64 --grid 512 --seeds 0 --methods weighted weighted_ess_resample minvar_branch poisson_branch --out_dir /mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching/reference_results/multi_island/20260613_2008_92c0226_M16_N2e4_K64/seed_0",
+  "python_version": "3.12.7",
+  "numpy_version": "2.4.4",
+  "jax_version": "0.10.0",
+  "datetime": "2026-06-13T20:44:44",
+  "seeds": [
+    0
+  ],
+  "out_dir": "/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching/reference_results/multi_island/20260613_2008_92c0226_M16_N2e4_K64/seed_0",
+  "population_control_active": false,
+  "reference_solver": "Fourier Strang split-step, grid 512^2",
+  "ess_threshold": 0.5,
+  "buffer_size": 2325748,
+  "ref_mass_growth": 72.67960070903294
+}

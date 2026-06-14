@@ -1,0 +1,28 @@
+{
+  "experiment": "keller_segel/pp_injection",
+  "model": "2D parabolic-parabolic Keller-Segel on torus [0,2pi]^2",
+  "cells_pde": "u_t = div(grad u - chi u grad v) = 0  (conservative, M_u const)",
+  "chemical_pde": "v_t = Delta v + u - v  (cross-species injection reaction)",
+  "reaction_substep": "v^{n+1} = e^{-tau} v* + (1 - e^{-tau}) u*",
+  "reaction_implementation": "two-species birth-death: each v dies w.p. p=1-e^{-tau}; each u spawns a v at its location w.p. p=1-e^{-tau} (omega_u==omega_v)",
+  "p_birth_death": 0.001998001332666921,
+  "exact_mass_law": "M_u(t)=M_u(0); M_v(t)=M_u+(M_v0-M_u)e^{-t}",
+  "args": {
+    "n_samples": 30000,
+    "Mv0": 0.3,
+    "chi": 1.0,
+    "T": 2.0,
+    "dt": 0.002,
+    "n_freq": 5,
+    "seed": 0,
+    "out_dir": "/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching/reference_results/pp_injection/20260613_1929_92c0226_Nu30000_T2",
+    "smoke": false,
+    "legacy_multiplicative_v_source": false
+  },
+  "n_steps": 1000,
+  "M_u_initial": 1.0,
+  "M_v_initial": 0.3,
+  "omega_u_equals_omega_v": true,
+  "population_control_active": false,
+  "deterministic_reference_solver": "none (validation is against the exact analytic mass law, not a grid/Fourier/FD/LDG solver)"
+}

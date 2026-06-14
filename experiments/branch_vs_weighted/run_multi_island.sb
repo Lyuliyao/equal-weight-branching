@@ -1,0 +1,25 @@
+#!/bin/bash
+#SBATCH --job-name=multi_island
+#SBATCH --array=0-7
+#SBATCH --time=02:30:00
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=32G
+#SBATCH --partition=general-short
+#SBATCH --output=%x_seed_%a_%A.out
+#
+# Separated growth-island production (paper Sec. 5.2): one seed per array task.
+# Merge the per-seed dirs afterwards with merge_multi_island.py.
+#
+#   RUNDIR=.../reference_results/multi_island/<run_id> sbatch run_multi_island.sb
+#
+PY=/mnt/home/lyuliyao/.conda/envs/heat/bin/python
+EXPDIR=/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching/experiments/branch_vs_weighted
+cd "$EXPDIR"
+: "${RUNDIR:?set RUNDIR to the reference_results/multi_island/<run_id> path}"
+
+$PY multi_island.py \
+  --M 16 --sigma 0.16 --D 0.01 --lambda 12 --beta 0.8 \
+  --T 0.8 --tau 1e-3 --N0 20000 --K 64 --grid 512 \
+  --seeds ${SLURM_ARRAY_TASK_ID} \
+  --methods weighted weighted_ess_resample minvar_branch poisson_branch \
+  --out_dir "${RUNDIR}/seed_${SLURM_ARRAY_TASK_ID}"

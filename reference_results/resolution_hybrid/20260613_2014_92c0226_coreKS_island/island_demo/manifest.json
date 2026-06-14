@@ -1,0 +1,15 @@
+{
+  "experiment": "resolution_hybrid/reconstruct_from_snapshot",
+  "git_commit": "92c0226703c9c8c3cd638e0fb54488b1973eae4e",
+  "git_commit_short": "92c0226",
+  "command_line": "/mnt/home/lyuliyao/.conda/envs/heat/bin/python reconstruct_from_snapshot.py --cloud /mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching/reference_results/multi_island/20260613_2008_92c0226_M16_N2e4_K64/seed_0/clouds/cloud_minvar_branch_seed0.npz --ref_island_masses /mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching/experiments/branch_vs_weighted/results/mi_check/island_masses.csv --method_in_ref minvar_branch --Kg 8 --Kfull 48 --Kl 40 --grid 288 --out_dir /mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching/reference_results/resolution_hybrid/20260613_2014_92c0226_coreKS_island/island_demo",
+  "python_version": "3.12.7",
+  "numpy_version": "2.4.4",
+  "datetime": "2026-06-13T20:31:11",
+  "cloud": "/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching/reference_results/multi_island/20260613_2008_92c0226_M16_N2e4_K64/seed_0/clouds/cloud_minvar_branch_seed0.npz",
+  "method": "minvar_branch",
+  "out_dir": "/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching/reference_results/resolution_hybrid/20260613_2014_92c0226_coreKS_island/island_demo",
+  "windows_detected_from": "particles (histogram + connected comp.)",
+  "n_islands_detected": 16,
+  "n_matched_to_known": 16
+}
