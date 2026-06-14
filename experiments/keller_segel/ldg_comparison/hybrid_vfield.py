@@ -87,11 +87,16 @@ class HybridVField:
     """Form I two-level spectral residual solver field for v on the window (x_c,L)."""
 
     def __init__(self, X_v, x_c, L, mass_v, Kg, Kl, taper_s=0.5,
-                 frac_in=0.5, frac_out=0.85):
+                 frac_in=0.5, frac_out=0.85, taper_s_hi=None):
         self.x_c = jnp.asarray(x_c)
         self.L = float(L)
         self.mass_v = float(mass_v)
         self.taper_s = taper_s
+        # separate low-pass width for the HIGH (Kl) part: a Gaussian taper of width
+        # taper_s_hi on the high modes is exactly an eta_h Gaussian-blob residual
+        # (the blob's Fourier transform is exp(-h^2 k^2/2)).  Smaller taper_s_hi =
+        # smoother local operator (more noise control, less core resolution).
+        self.taper_s_hi = taper_s if taper_s_hi is None else taper_s_hi
         self.frac_in = frac_in
         self.frac_out = frac_out
         Yv = (jnp.asarray(X_v) - self.x_c) * (jnp.pi / self.L)
@@ -101,16 +106,16 @@ class HybridVField:
     def grad(self, X_eval):
         X = jnp.asarray(X_eval)
         glo = grad_v_from_cloud(X, self.coeff_lo, self.x_c, self.L, self.mass_v, self.taper_s)
-        ghi = grad_v_from_cloud(X, self.coeff_hi, self.x_c, self.L, self.mass_v, self.taper_s)
+        ghi = grad_v_from_cloud(X, self.coeff_hi, self.x_c, self.L, self.mass_v, self.taper_s_hi)
         vlo = eval_v_from_cloud(X, self.coeff_lo, self.x_c, self.L, self.mass_v, self.taper_s)
-        vhi = eval_v_from_cloud(X, self.coeff_hi, self.x_c, self.L, self.mass_v, self.taper_s)
+        vhi = eval_v_from_cloud(X, self.coeff_hi, self.x_c, self.L, self.mass_v, self.taper_s_hi)
         chi, gchi = radial_taper(X, self.x_c, self.L, self.frac_in, self.frac_out)
         return (glo + chi[:, None] * (ghi - glo) + (vhi - vlo)[:, None] * gchi)
 
     def eval(self, X_eval):
         X = jnp.asarray(X_eval)
         vlo = eval_v_from_cloud(X, self.coeff_lo, self.x_c, self.L, self.mass_v, self.taper_s)
-        vhi = eval_v_from_cloud(X, self.coeff_hi, self.x_c, self.L, self.mass_v, self.taper_s)
+        vhi = eval_v_from_cloud(X, self.coeff_hi, self.x_c, self.L, self.mass_v, self.taper_s_hi)
         chi, _ = radial_taper(X, self.x_c, self.L, self.frac_in, self.frac_out)
         return vlo + chi * (vhi - vlo)
 

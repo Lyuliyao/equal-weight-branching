@@ -1,0 +1,34 @@
+#!/bin/bash
+#SBATCH --job-name=sf_taper_sweep
+#SBATCH --array=0-15
+#SBATCH --time=01:30:00
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=16G
+#SBATCH --partition=general-short
+#SBATCH --output=%x_%a_%A.out
+#
+# Solver-field v_hi-taper sweep: one (config, seed) per array task.
+# Maps the noise<->resolution tradeoff of the two-level spectral residual drift
+# (a Gaussian taper of width taper_hi on the high-Kl core part = an eta_h blob
+# residual).  Configs: current_fourier baseline + two_level taper_hi 0.5/0.35/0.25.
+#
+#   RUNDIR=/.../reference_results/keller_segel_ldg_pp/sf_taper_<run_id> \
+#       sbatch run_solver_field_sweep.sb
+#
+PY=/mnt/home/lyuliyao/.conda/envs/heat/bin/python
+EXPDIR=/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching/experiments/keller_segel/ldg_comparison
+cd "$EXPDIR" || exit 1
+: "${RUNDIR:?set RUNDIR to the output path}"
+
+cfg=$(( SLURM_ARRAY_TASK_ID / 4 ))
+seed=$(( SLURM_ARRAY_TASK_ID % 4 ))
+case $cfg in
+  0) NAME=current_fourier;          FLAGS="--solver_field current_fourier" ;;
+  1) NAME=two_level_taper0.5;       FLAGS="--solver_field two_level_spectral_residual --Kg 8 --Kl 24 --hybrid_taper_hi 0.5" ;;
+  2) NAME=two_level_taper0.35;      FLAGS="--solver_field two_level_spectral_residual --Kg 8 --Kl 24 --hybrid_taper_hi 0.35" ;;
+  3) NAME=two_level_taper0.25;      FLAGS="--solver_field two_level_spectral_residual --Kg 8 --Kl 24 --hybrid_taper_hi 0.25" ;;
+esac
+
+$PY simulation.py --N 80000 --K 10 --tau 2.5e-7 --n_steps 800 --seed $seed \
+    --report_times 6e-5 1.2e-4 2e-4 $FLAGS --diag_every 4 \
+    --outdir "${RUNDIR}/${NAME}_seed${seed}"

@@ -401,9 +401,10 @@ def run(args):
             inb = np.max(np.abs(Yv), axis=1) <= np.pi          # in-window v-particles
             Xin = jnp.asarray(np.asarray(X2)[inb])
             if int(Xin.shape[0]) > 0:
+                ts_hi = None if args.hybrid_taper_hi < 0 else args.hybrid_taper_hi
                 hyb = HybridVField(Xin, x_c, L, M_v_eff, args.Kg, args.Kl,
                                    taper_s=taper_s, frac_in=args.hybrid_frac_in,
-                                   frac_out=args.hybrid_frac_out)
+                                   frac_out=args.hybrid_frac_out, taper_s_hi=ts_hi)
                 gradv_u = hyb.grad(X1)
             else:
                 gradv_u = grad_v_from_cloud(X1, coeff_v, x_c, L, M_v_eff, taper_s=taper_s)
@@ -490,6 +491,9 @@ def build_parser():
     p.add_argument("--Kl", type=int, default=24, help="local high bandwidth (hybrid)")
     p.add_argument("--hybrid_frac_in", type=float, default=0.5)
     p.add_argument("--hybrid_frac_out", type=float, default=0.85)
+    p.add_argument("--hybrid_taper_hi", type=float, default=-1.0,
+                   help="separate low-pass width for the high-Kl core part (the "
+                        "Gaussian-blob/damping knob); <0 = use --filter_s for both")
     p.add_argument("--a_u", type=float, default=84.0, help="u0 ~ exp(-a_u |x|^2)")
     p.add_argument("--a_v", type=float, default=42.0, help="v0 ~ exp(-a_v |x|^2)")
     p.add_argument("--diag_grid", type=int, default=65,
