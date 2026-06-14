@@ -613,12 +613,22 @@ def resolve_cfg():
     p.add_argument("--seeds", type=int, nargs="+")
     p.add_argument("--methods", type=str, nargs="+")
     p.add_argument("--ess_threshold", type=float)
+    p.add_argument("--config", type=str, help="JSON config (e.g. config_multi_island.json); "
+                   "only known scalar/list keys are read")
     p.add_argument("--out_dir", type=str)
     args = p.parse_args()
 
     cfg = dict(DEFAULTS)
     if args.smoke:
         cfg.update(SMOKE)
+    if args.config:
+        with open(args.config) as fjson:
+            loaded = json.load(fjson)
+        for k in ["M", "sigma", "D", "lambda", "beta", "T", "tau", "N0", "K",
+                  "grid", "eta", "ess_threshold", "n_snapshots", "seeds", "methods",
+                  "buffer_safety", "recon_subsample"]:
+            if k in loaded:
+                cfg["lam" if k == "lambda" else k] = loaded[k]
     for k in ["M", "sigma", "D", "lam", "beta", "T", "tau", "N0", "K", "grid",
               "seeds", "methods", "ess_threshold", "out_dir"]:
         v = getattr(args, k)
