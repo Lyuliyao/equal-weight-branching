@@ -15,6 +15,9 @@ scratch_*/
 *_smoke/
 multi_island_seed_*.out
 staged_mi_seed_*.out
+# SLURM array stdout (sbatch --output=%x_%a_%A.out lands in the experiment dir)
+sf_taper_sweep_*.out
+experiments/**/*_[0-9]*.out
 
 # --- revision reference artifacts: commit small plot data + figures, keep raw arrays out ---
 !reference_results/**/plot_data/*.npz
@@ -52,3 +55,8 @@ reference_results/keller_segel_ldg_pp/particle_blowup_*/Np*/run.log
 reference_results/keller_segel_ldg_pp/solver_field_sweep_*/*/snapshots/
 reference_results/keller_segel_ldg_pp/solver_field_sweep_*/*.log
 reference_results/keller_segel_ldg_pp/solver_field_sweep_*/*/run.log
+# sf_taper sweep: keep diag CSVs + taper_sweep_compare.json + figures + plot_data;
+# drop the per-run u-snapshots (regenerable; ~13MB) and logs
+reference_results/keller_segel_ldg_pp/sf_taper_*/*/snapshots/*.npz
+reference_results/keller_segel_ldg_pp/sf_taper_*/*.log
+reference_results/keller_segel_ldg_pp/sf_taper_*/*/run.log

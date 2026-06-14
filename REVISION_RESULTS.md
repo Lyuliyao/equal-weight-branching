@@ -97,8 +97,10 @@ System (all of §3): `u_t − div(∇u − u∇v) = 0`, `v_t = Δv + u − v`, �
 - **Purpose:** the reconstruction used INSIDE the time step for the drift `b_u=χ∇v̂`, not just diagnostics. Form I two-level spectral residual `v̂=v_lo+χ(v_hi−v_lo)` (`v_lo=P_{Kg=8}`, `v_hi=P_{Kl=24}` on the core-adaptive window), fed into the u-drift. Gradient (incl. the taper term `(v_hi−v_lo)∇χ`) **FD-verified to 5.6e-8**.
 - **🟢 positive (Q3):** single-K Fourier under-resolves the inner core (`R_0.2/h_eff≈1.2`) — the window tracks the outer mass `R_0.8` while `R_0.2,R_0.1` keep collapsing; the residual field more than doubles inner-core resolution (`R_0.2/h_eff≈2.9`) and gives a *smoother* background drift (mean `drift_cfl≈1.1` vs `≈1.8`). The reconstruction issue is real for the drift field.
 - **🔴 negative (Q1) — corrected by the mechanism check:** the hybrid aborts the drift-CFL guard *earlier* (`~1.4e-4` vs `~1.9e-4`). Its average `drift_cfl` is lower, but per-step peaks spike past θ between samples — i.e. **high-Kl Monte-Carlo noise** in `∇v̂` (differentiating `P_{Kl}` amplifies high-mode particle noise ~Kl), **not** intrinsic dynamics and not a bug. **Confirmed:** stronger damping (filter_s 0.3) delays the abort to 1.49e-4 and cuts seed variance ~4×; lower Kl=16 similar.
-- **Decision — Scenario C:** the residual-reconstruction *principle* is correct (resolves the core, smooths the background drift), but the local *spectral* residual gradient is **noise-limited** at feasible particle counts. The indicated fix is a **smoother local operator (Gaussian-blob/KDE residual)** or stronger damping / lower Kl / HT, not the high-Kl local spectrum. Do not claim the solver resolves near-blow-up dynamics.
-- **Data:** `experiments/keller_segel/ldg_comparison/{hybrid_vfield.py (FD-verified),analyze_solver_field.py}`, `simulation.py --solver_field`, `reference_results/keller_segel_ldg_pp/solver_field_sweep_<run_id>/` (diag CSVs + README + compare json). **Not in paper.**
+- **🟢 Scenario-C fix tested (taper sweep, 16-task SLURM, 4 cfg × 4 seeds, N=8e4):** a Gaussian taper of width `h_hi` on the high-Kl core part is exactly an `η_h` blob residual (the blob FT is `exp(−h²k²/2)`); smaller `h_hi` = smoother local operator. The abort time recovers **monotonically** as the operator smooths — `h_hi`: 0.50→0.35→0.25 gives abort `t` = 1.39e-4 → 1.58e-4 → **1.89e-4**, recovering the global-`K` drift's 1.91e-4 (0.99×), while keeping a *smoother* drift (max `drift_cfl` 2.6 vs global-`K` 4.5) and cutting the seed-to-seed abort spread. This **confirms** the early abort was high-Kl Monte-Carlo noise in `∇v̂`, removable by smoothing — not intrinsic dynamics.
+- **🔴 honest catch (Q3 re-read):** the `R_0.2/h_core` "resolution gain" (1.0→3.1) is **dominated by the Kl=24-vs-K=10 grid factor**, not by better-tracked concentration. The reconstruction-free `R_0.2` per-seed spread is ~4× (e.g. current 0.0045–0.0197 at `t=1e-4`), so the config means (0.011 vs 0.015) are **within seed noise** — no config shows a clearly tighter actual core. Form I is drift-stable once smoothed, but does **not** demonstrably improve the pre-singular tracked concentration over the plain global-`K` drift, and costs ~2.5×/step.
+- **Decision — Scenario C (final):** the residual-reconstruction *principle* is correct (resolves the reconstruction grid in the core, smooths the background drift) and the noise→abort artifact is **fixable** by a smoother local operator (`h_hi≈0.25` Gaussian-blob residual). But fed back into the drift it is a **reconstruction/diagnostic option, not a validated accuracy improvement** on this benchmark — both it and the global-`K` drift are bandwidth/resolution-limited, consistent with §5.5 (core radii reconstruction-free; reconstructed peak/L2 bandwidth-sensitive). **Keep as record; not in paper.** Do not claim the solver resolves near-blow-up dynamics.
+- **Data:** `experiments/keller_segel/ldg_comparison/{hybrid_vfield.py (FD-verified; taper_s_hi knob),analyze_solver_field.py,analyze_taper_sweep.py,plot_taper_sweep.py}`, `simulation.py --solver_field --hybrid_taper_hi`, `reference_results/keller_segel_ldg_pp/{solver_field_sweep_<run_id>/,sf_taper_20260614_1983_3c6ae64/}` (diag CSVs + `taper_sweep_compare.json` + `figures/figure_taper_sweep.{pdf,png}` + `plot_data/`). **Not in paper.**
 
 ## 4. Other Keller–Segel / high-dim (unchanged this revision)
 
@@ -110,7 +112,7 @@ System (all of §3): `u_t − div(∇u − u∇v) = 0`, `v_t = Δv + u − v`, �
 
 ## 5. Not done (scoped honestly)
 
-- **Online solver-level hybrid reconstruction** (plan §4): feed the particle-adaptive hybrid field into the chemotactic drift inside the time step (the §3.3 drift-CFL abort and §3.5 caveats motivate it, but it is not yet implemented/verified).
+- ~~**Online solver-level hybrid reconstruction**~~ — **done** (§3.8): Form I residual field fed into the drift, FD-verified, swept over the local-operator smoothness. Outcome is drift-stable-but-not-more-accurate (record only, not in paper). No further runs planned unless the design changes.
 - **§5.4 manuscript rewrite** around **LDG vs particle-global-Fourier vs particle-adaptive** (now unblocked by the verified LDG reference §3.1). The current manuscript §5.4 still uses the FVM baseline as the grid reference.
 - **Pre-existing unrelated issue:** 5 introduction citations are missing from `main.bib` (`vazquez2006porous`, `fisher1937wave`, `williams2018combustion`, `doucet2000sequential`, `liu1998sequential`).
 
@@ -125,5 +127,8 @@ record only). For Keller–Segel, a verified direct LDG reference and the partic
 method reproduce the same pre-singular concentration; the numerical blow-up time and
 the candidate `T*` are resolution/bandwidth/window-sensitive and are **not** quoted
 as a continuum blow-up time. Particle-adaptive reconstruction helps the core but
-introduces local-bandwidth and signed-residual artifacts (mixed). The online
-solver-level hybrid and the §5.4 LDG rewrite remain.
+introduces local-bandwidth and signed-residual artifacts (mixed). The solver-level
+residual drift (Form I) is now implemented and tested: smoothing the local operator
+(`h_hi≈0.25` blob residual) makes it drift-stable to the same time as the global-`K`
+drift, but it is not demonstrably more accurate, so it stays a diagnostic record.
+The §5.4 LDG manuscript rewrite remains.
