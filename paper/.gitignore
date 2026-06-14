@@ -1,0 +1,16 @@
+# LaTeX build artifacts — keep source, figures, and the compiled PDF
+*.aux
+*.out
+*.toc
+*.bbl
+*.blg
+*.abs
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.spl
+*.run.xml
+# the root .gitignore ignores *.pdf and *.log globally; re-include what we want
+!figure/*.pdf
+!cmame-main.pdf
+!thumbnails/*

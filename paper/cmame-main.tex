@@ -1,0 +1,1894 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Submission manuscript for Computer Methods in Applied Mechanics
+%% and Engineering (CMAME, Elsevier), prepared with the official
+%% Elsevier "CAS" template bundle (els-cas-templates). The class
+%% cas-sc is the single-column manuscript layout; switch to cas-dc
+%% for the double-column production layout.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\documentclass[a4paper,fleqn]{cas-sc}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Bibliography -- CMAME uses numbered references.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\usepackage[numbers,sort&compress]{natbib}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Math, algorithms, and project-specific packages
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{lyu}
+\usepackage{algorithm}
+\usepackage{algpseudocode}%[noend]
+\usepackage{amsthm}\mathchardef\mhyphen="2D
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}[theorem]{Lemma}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{assumption}{Assumption}
+\newtheorem{corollary}{Corollary}
+
+\begin{document}
+
+\shorttitle{Equal-weight branching for non-conservative transport--reaction--diffusion equations}
+\shortauthors{L. Lyu and H. Lei}
+
+\title[mode=title]{Adaptive equal-weight branching particle methods for non-conservative transport--reaction--diffusion equations}
+
+\author[1,2]{Liyao Lyu}
+\cormark[1]
+\ead{lyuliyao@math.ucla.edu}
+\credit{Conceptualization, Methodology, Software, Formal analysis, Writing -- original draft}
+
+\author[2,3]{Huan Lei}
+\ead{leihuan@msu.edu}
+\credit{Conceptualization, Supervision, Funding acquisition, Writing -- review \& editing}
+
+\affiliation[1]{organization={Department of Mathematics, University of California, Los Angeles},
+            addressline={520 Portola Plaza},
+            city={Los Angeles},
+            state={CA},
+            country={USA}}
+
+\affiliation[2]{organization={Department of Computational Mathematics, Science \& Engineering, Michigan State University},
+            addressline={428 S Shaw Lane},
+            city={East Lansing},
+            state={MI},
+            country={USA}}
+
+\affiliation[3]{organization={Department of Statistics \& Probability, Michigan State University},
+            addressline={619 Red Cedar Road},
+            city={East Lansing},
+            state={MI},
+            country={USA}}
+
+\cortext[1]{Corresponding author.}
+
+\begin{abstract}
+Non-conservative transport--reaction--diffusion equations describe quantities that are transported,
+diffused, and locally created or destroyed, as in chemotaxis, reactive transport, and population dynamics.
+Particle methods naturally represent transport and diffusion through stochastic differential equations,
+but the reaction term changes mass and also needs to be encoded in the particle representation. The direct
+realization assigns each particle an exponential weight; this is unbiased, but under localized growth the
+represented mass concentrates onto a few particles and the local effective sample size (ESS) collapses
+where the solution grows. We develop an \emph{equal-weight stochastic branching} discretization that
+converts reaction-induced weight into integer particle count: mass creation becomes particle creation, so
+local resolution increases where mass is produced. The method combines an operator splitting of stochastic
+transport with a particle-level reaction step, for which we introduce a minimum-variance integer branching
+kernel alongside the Poisson birth--death kernel; the weighted update and both kernels reproduce the
+reaction multiplier in conditional mean but differ in conditional variance. We prove a continuous-time
+convergence result for the branching measure, with Monte-Carlo ($O(N^{-1/2})$) and reconstruction
+contributions. On a controlled localized-growth benchmark, branching is more accurate than both raw and systematically resampled weighted particles at the same initial budget, and comparable to ESS-triggered resampling at the final particle count, without any resampling schedule to tune. We then stress-test the scheme on Keller–Segel concentration and a high-dimensional kinetic benchmark. The branching step itself is mesh-free and dimension-agnostic, even though the density reconstruction is not.
+\end{abstract}
+
+\begin{highlights}
+\item Equal-weight branching encodes non-conservative reaction as integer particle count.
+\item A minimum-variance integer kernel lowers variance versus Poisson birth--death.
+\item Branching avoids the local effective-sample-size collapse of weighted particles.
+\item It outperforms raw and resampled weighted particles at equal cost, with no tuning.
+\item The reaction step is mesh-free and dimension-agnostic, tested to 6D and Keller--Segel.
+\end{highlights}
+
+\begin{keywords}
+particle methods \sep
+equal-weight branching \sep
+non-conservative transport--reaction--diffusion \sep
+weight degeneracy \sep
+chemotaxis
+\end{keywords}
+
+\maketitle
+
+\section{Introduction}
+Non-conservative transport--reaction--diffusion (TRD) equations describe a quantity that is simultaneously
+transported by a velocity field, spread by diffusion, and locally created or destroyed by a reaction term.
+On a domain $\Omega$, a scalar instance reads
+\begin{equation}\label{equ:intro_trd}
+\partial_t u = \nabla\!\cdot\!\big(a(u)\,u\big) + D\,\Delta u + r(u)\,u,
+\end{equation}
+where the total mass $\int_\Omega u\,\intd\bx$ is not preserved.
+Such models arise in chemotaxis~\cite{keller1970initiation,patlak1953random}, reactive and porous-media transport~\cite{vazquez2006porous},
+combustion~\cite{fisher1937wave,williams2018combustion}, and population dynamics~\cite{hundsdorfer2013numerical}. In these case, the solution routinely develops \emph{localized growth} or \emph{concentration}: the solution forms sharp, rapidly amplifying peaks where the
+reaction creates mass. Grid-based discretizations, such as  finite difference~\cite{hoff1978stability}, finite
+element~\cite{codina1998comparison}, finite volume~\cite{filbet2006finite,chertock2008second}, and
+discontinuous Galerkin schemes~\cite{ayuso2009discontinuous,xia2009application},  are highly developed for
+these problems, but resolving a moving, sharpening peak on a fixed mesh typically requires adaptive mesh
+refinement or carefully designed positivity-preserving limiters, and the achievable resolution is tied to the
+local mesh size.
+
+Particle discretizations offer a complementary, mesh-free route: the solution is represented as an empirical
+measure carried by particles, and the resolution follows the particles rather than a fixed grid. Transport and
+diffusion are represented naturally, since a drift--diffusion operator is exactly the generator of a stochastic
+differential equation (SDE), and particles can be advanced by integrating it. This is the basis of
+particle-in-cell solvers for kinetic equations~\cite{birdsall2018plasma,hockney2021computer}, blob and
+regularized-kernel methods~\cite{craig2016blob,carrillo2019blob,huang2017error}, and semi-Lagrangian particle
+schemes~\cite{qiu2010conservative,qiu2011conservative,qiu2011positivity}, whose convergence to the continuum
+equation is justified through the mean-field/propagation-of-chaos
+viewpoint~\cite{fournier2004microscopic,hauray2009wasserstein,chaintron2021propagation}. These developments,
+however, are largely confined to \emph{conservative} dynamics, where particle number and total mass are fixed.
+
+However, applying this idea to non-conservative equations raises an essential difficulty: the reaction term changes the total and local mass, and this change must be encoded in the particle representation. The most direct construction keeps the positions fixed under reaction and carries a time-dependent \emph{weight} $w_i$ on each particle, updated as $w_i \leftarrow w_i\,\exp(r_i\tau)$ over a step of size $\tau$. While reweighting itself is standard in sequential Monte Carlo and related particle systems~\cite{doucet2000sequential,liu1998sequential}, as a TRD discretization, it inherits a well-known failure mode: in a region of sustained localized growth, the multipliers $\exp(r_i\tau)$ increase multiplicatively, so the represented mass concentrates onto a small number of large-weight particles. The effective sample size (ESS) then collapses, and it does so precisely in the region where the solution is largest and most needs to be resolved. Increasing the global particle count alleviates but does not fully resolve this local degeneracy; it largely postpones rather than prevents it. The standard remedy is resampling, which duplicates high-weight particles and
+resets equal weights; it is effective, and we quantify it as a baseline in our numerical experiment.
+But resampling is a global operation that must be scheduled (a trigger threshold or period), it redistributes a
+fixed particle budget rather than growing resolution with the created mass, it injects variance of its own when
+applied too often, and for a finite (non-probability) measure it requires explicit mass bookkeeping. These are
+the gaps that an equal-weight, per-step, local representation of the reaction can close.
+
+Rather than repair the weighted representation, we take a different view of the reaction term. Instead of recording mass creation as a growing scalar weight, we record it as a growing \emph{integer particle count}: each particle is replaced by a random, equal-weight number of offspring whose mean equals the reaction multiplier $\exp(r_i\tau)$, so mass creation becomes particle creation and mass destruction becomes particle removal. Every particle keeps the same weight, and the local resolution automatically increases exactly where the reaction amplifies the solution. This is a stochastic branching (birth--death) process~\cite{harris1972nearest,bansaye2015stochastic}, and it is the natural representation here in two senses. Numerically, it keeps equal weights and adapts resolution to the growth, avoiding the local degeneracy of the weighted update. Physically, it mirrors the reaction itself: $r(u)$ creates and destroys mass of the existing field, and branching does the same to particles. The branching kernel is then a design degree of freedom that controls variance and local resolution, and we introduce two such kernels: a Poisson birth--death kernel and a minimum-variance integer kernel, which reproduce the reaction multiplier in conditional mean but differ in conditional variance.
+
+
+The scheme uses an operator splitting to separate the transport from the reaction: a local Kolmogorov linearization of the drift--diffusion part of \eqref{equ:intro_trd} realizes the transport as an SDE step, and the reaction is applied per particle, so that it needs no global weight normalization and acts directly on a finite (non-probability) measure. The particle viewpoint has a firm theoretical basis for chemotaxis: Stevens derived the Keller--Segel system as the mean-field limit of moderately interacting particles~\cite{Stevens_SIAM_2000}. Whereas that work establishes the continuous mean-field limit, we provide a fully discrete particle scheme -- finite particle number, time stepping, and reconstruction -- for non-conservative TRD equations, of which Keller--Segel is one instance. Related particle methods for these systems~\cite{wang2025novel,hu2024stochastic,chertock2025hybrid} represent transport and diffusion by particles but handle the reaction through a field update, and neural-network solvers based on Feynman--Kac or backward-SDE formulations~\cite{han2024deep,hutzenthaler2021speed,nguwi2024deep,han2018solving,hure2020deep} target a function-space solution; here the reaction is represented at the particle level and the solution is kept as a finite measure throughout. We exercise the scheme on its hardest case, Keller--Segel chemotaxis, whose two-dimensional dynamics can concentrate toward a Dirac profile in finite time~\cite{herrero1997blow,perthame2007transport}, and on a high-dimensional kinetic benchmark.
+
+\paragraph{Contributions}
+This paper develops and validates equal-weight branching as a particle discretization for non-conservative
+TRD equations. Specifically:
+\begin{itemize}
+\item[(i)] an equal-weight stochastic branching particle discretization for finite-measure non-conservative
+TRD equations, obtained by operator splitting of an SDE transport step and a particle-level reaction step.
+\item[(ii)] a unified treatment of the reaction step that places the weighted update, the Poisson
+birth--death kernel, and a \emph{minimum-variance integer branching} kernel side by side, with a proposition
+showing all three are unbiased for the reaction multiplier while differing in conditional variance.
+\item[(iii)] a continuous-time error analysis that proves convergence of the branching measure to the exact
+solution, with Monte-Carlo ($O(N^{-1/2})$) and reconstruction contributions and full proofs in
+Appendix~\ref{app:convergence}.
+\item[(iv)] a controlled numerical comparison showing that branching keeps local
+resolution where the weighted scheme degenerates, is more accurate than every weighted baseline at equal
+initial budget, and matches ESS-triggered resampling at the matched final particle count.
+\item[(v)] application to Keller--Segel concentration -- the hardest, concentration-dominated regime, where the
+solution can approach a Dirac profile in finite time -- as a flagship stress test, together with a
+high-dimensional kinetic stress test that illustrates the dimension-agnostic nature of the branching step.
+\end{itemize}
+
+
+
+\section{Equal-weight branching particle discretization}
+\label{sec:method}
+This section develops the discretization for a scalar non-conservative equation. The construction has four
+ingredients: a finite-measure particle representation, an operator splitting into
+transport and reaction, an SDE transport step, and a particle-level reaction step in which we compare the weighted
+update with two equal-weight branching kernels. The empirical measure is
+reconstructed by a truncated Fourier projection, and the extension to coupled
+systems, such as Keller--Segel is given in Section~\ref{sec:extension}.
+
+Let us start with the following scalar non-conservative advection-diffusion–reaction system on the $d$-dimensional torus $\mathbb{T}^d$ for a time $t \in (0, T]$:
+\begin{subequations}\label{equ:reaction-diffusion}
+\begin{align}
+\partial_t u &= \nabla \!\cdot\! \big( a(u) u \big) + D \Delta u + r(u) u, & \text{for } (x, t) \in \mathbb{T}^d \times (0, T], \label{equ:pde} \\
+u(x, 0) &= u_0(x), & \text{for } x \in \mathbb{T}^d. \label{equ:ic}
+\end{align}
+\end{subequations}
+Here, $u(x,t)$ is the scalar field, $a(u): \mathbb{R}_{+} \to \mathbb{R}^d$ is the advective velocity, $D > 0$ is the diffusion coefficient, and $r(u): \mathbb{R}_{+} \to \mathbb{R}$ is the reaction rate. The system is initialized with $u_0(x)$.
+Let $S(N,t)=\{\bX^N_i\}_{i\in\mathcal I(N,t)}$ denote a set of particles at time $t$ whose initial population is $N$, where the particles' indices are numbered consecutively in the index set $\mathcal I(N,t)$ and $\bX^N_i(t)$ denote the position of the $i\mhyphen$th particle. The associated empirical (finite) measure is
+\begin{equation}
+    t \to \mu^N(t,\intd \bx) =  \frac{1}{N}\sum_{i\in \mathcal I(N,t)}\delta_{\bX^N_i(t)},
+\end{equation}
+where $\delta_\bx $ denotes the Dirac measure at $\bx\in \mathbb{T}^d$. The core idea of particle-based methods is to approximate the PDE solution by the limit of the empirical measure
+\[
+\mu(t,\mathrm{d}\bx) = \lim_{N\to\infty} \mu^N(t,\mathrm{d}\bx).
+\]
+Since Eq. \eqref{equ:reaction-diffusion} is non-conservative, the total mass of the system is not preserved. Consequently, both $\mu^N$ and its limit $\mu$ should be viewed as finite measures rather than probability measures.
+
+
+\subsection{Initial condition and normalization}
+To connect the solution $u(t,\bx)$ to the measure $\mu(t,\mathrm{d}\bx)=\rho(t,\bx) \intd \bx$, we introduce a linear transformation between them. 
+We assume throughout that the initial data $u_0$ is nonnegative with positive finite total mass, so that $\mu(0,\cdot)$ can be normalized to a probability measure of total mass $1$; we define
+\begin{equation*}
+    u(t,\bx)\,\mathrm{d}\bx = Z \,\mu(t,\mathrm{d}\bx), \quad 
+Z = \int_{\Omega} u(0,\bx)\,\mathrm{d}\bx
+\end{equation*}
+denotes the total initial mass.
+Thus $\rho(0,\cdot)$ is a probability density
+\[
+\rho(0,\mathbf{x}) \;=\; \frac{u(0,\mathbf{x})}{Z},
+\]
+and we can sample the initial particle positions independently from $\rho(0,\cdot)$ (e.g., via Metropolis–Hastings) to form $S(N,0)=\{\mathbf{X}^i_0\}_{i=1}^N$. 
+Substituting $u=Z\rho$ into~\eqref{equ:reaction-diffusion}  yields
+\begin{equation}\label{equ:normalized_diffusion_reaction}
+\partial_t \rho 
+= \nabla \cdot \left( \tilde a(\rho)\rho \right)+ D \Delta\rho 
+  + \tilde r(\rho)\rho,
+\end{equation}
+with rescaled coefficients
+\[
+\tilde a(\rho) = a(Z\rho),  
+\qquad \tilde r(\rho) = r(Z\rho).
+\]
+Since reactions generally change the total mass, $\int_{\Omega}\rho(t,\mathbf{x})\,\mathrm{d}\mathbf{x}$ may not equal $1$ for $t>0$. Rather, it tracks the mass of $u$ via $\int_{\Omega} u(t,\mathbf{x})\,\mathrm{d}\mathbf{x} = Z \int_{\Omega} \rho(t,\mathbf{x})\,\mathrm{d}\mathbf{x}$.
+
+\subsection{Operator splitting}
+\label{sec:splitting}
+To approximate the solution of the PDE, we discretize the time interval $[0,T]$ with step size $\tau>0$ and grid points
+\[
+0 = t_0 < t_1 < \cdots < t_M = T,\qquad \tau=t_{n+1}-t_n.
+\]
+Then an operator-splitting strategy is used to separate the dynamics according to their physical mechanisms. 
+Equation~\eqref{equ:normalized_diffusion_reaction} can be written as
+\begin{equation}
+\partial_t \rho = \mathcal{A}\rho + \mathcal{B}\rho ,
+\end{equation}
+where the operators $\mathcal{A}$ and $\mathcal{B}$ correspond to
+\begin{align}
+\mathcal{A}\rho &= \nabla \cdot \left( \tilde a(\rho)\rho \right) + D\Delta\rho  , \\
+\mathcal{B}\rho &= \tilde r(\rho)\rho .
+\end{align}
+Here, $\mathcal{A}$ describes the advection--diffusion dynamics, while $\mathcal{B}$ accounts for the reaction mechanism (e.g., proliferation or death).  The evolution of the exact solution over $t$ can be expressed formally as
+\begin{equation}
+\rho(t,\bx) = \exp\left( t (\mathcal{A} + \mathcal{B}) \right)\rho(0,\bx).
+\end{equation}
+In practice, the operator $\exp\!\big(\tau(\mathcal{A}+\mathcal{B})\big)$ cannot be evaluated explicitly, 
+we adopt the first-order Lie--Trotter splitting \cite{trotter1959product}. The Trotter product formula guarantees
+convergence of the splitting in the limit, and a Baker--Campbell--Hausdorff expansion gives the first-order local
+accuracy in $\tau$ that controls the time-discretization term of the error decomposition~\eqref{eq:err-decomp}:
+\begin{equation}
+\exp\!\left( t (\mathcal{A} + \mathcal{B}) \right) 
+= \lim_{M\to\infty} \Big( \exp\!\left(\tfrac{t}{M} \mathcal{B}\right) 
+                          \exp\!\left(\tfrac{t}{M} \mathcal{A}\right) \Big)^M .
+\end{equation}
+At the discrete level, we approximate $\rho(t_{n+1},\cdot)$ by
+\begin{equation}
+\rho_{n+1} = \exp(\tau \mathcal{B}) \exp(\tau \mathcal{A}) \rho_n ,
+\end{equation}
+for $n=0,\cdots,M-1$.
+This scheme provides a simple and efficient first-order approximation; 
+higher-order splittings, such as Strang splitting \cite{strang1968construction}, may be employed for improved accuracy.
+In practice, this decomposition allows us to design particle-based updates for each subprocess separately:
+\begin{equation}
+\rho_n^\ast = \exp(\tau \mathcal{A})\rho_n, 
+\qquad 
+\rho_{n+1} = \exp(\tau \mathcal{B})\rho_n^\ast.
+\end{equation}
+
+\subsection{Advection--diffusion step}
+\label{sec:advection_diffusion}
+In this step, we propagate particles under the advection–diffusion dynamics, where each particle follows a stochastic path determined by both a drift and a diffusion term. At time step $n$, let $S^N_n = \{\bX^N_{i,n}\}_{i\in \mathcal I_n^N}$ denote  a set of particles  whose initial population is $N$, which induce the empirical measure 
+\[
+\mu^N_{n}= \frac{1}{N}\sum_{i\in \mathcal I_n^N}\delta_{\bX^N_{i,n}}
+\] 
+approximates the solution at step $n$ with a finite number of particles, i.e.,  $\lim_{N\to\infty} \mu^N_{n} (\intd \bx) = \mu_n(\intd \bx) = \rho_n(\bx)\intd \bx$. 
+Our goal is to evolve these particles according to the transition probability $p(\bx,s;\by,t)$, which leads to an updated empirical measure
+\[\mu_n^{N,*} = \int p(\bx,t_n;\by,t_n+\tau)  \mu_n^N(\intd \bx) =   \frac{1}{N}\sum_{i\in \mathcal I_n^N}\delta_{\bX_{i,n}^{N,*}}
+\]  
+reflecting the action of the advection--diffusion operator on the density.
+By the Kolmogorov forward equation, the transition density $p(\bx,s;\by,t)$ satisfies 
+\begin{equation}
+    \partial_t p = \tilde {\mathcal A }p := - \nabla \cdot(b  p) + \frac{1}{2}\nabla^2:(\sigma \sigma^\top p) 
+\end{equation}
+with initial condition $\lim_{t\to s^+} p(\bx,s;\cdot,t) = \delta_\bx$. By matching the differential operator $\mathcal A$ with the target PDE \eqref{equ:reaction-diffusion}, we have 
+\begin{equation}
+    b(x) = -\tilde a(\rho^N_n(x)), \quad \frac{1}{2}\sigma \sigma^\top = D,
+\end{equation}
+where $\rho^N_n(x)$ represents the interpolated density of $\mu_n^N$ and will be discussed in Sec. \ref{sec:interpolation}.
+Within each step the coefficients are frozen at the current reconstruction: the transport drift $b$ is evaluated
+from $\rho^N_n$ and held fixed over $[t_n,t_{n+1}]$, and the reaction rate is then evaluated from the
+post-transport reconstruction $\rho^{N,\ast}_n$ in the subsequent reaction substep (Section~\ref{sec:reaction}).
+%
+Accordingly, the evolution of each particle $\bX_{i}^{N}(t)$ as a stochastic process satisfying the It\^o stochastic differential equation
+\begin{equation}\label{equ:overd_langevin}
+    \intd \bX^N_{i}(t) = b(\bX^N_{i} (t)) \intd t  + \sigma \intd \bW^N_{i}(t),
+\end{equation}
+where $\bW^N_i(t)$ is a $d\mhyphen$dimensional Brownian motion.
+In practice, we approximate Eq. \eqref{equ:overd_langevin} using an Euler-Maruyama scheme with step size $\tau$, 
+\begin{equation}
+ \bX_{i,n}^{N,*} = \mathbf{X}_{N,n}^{i} + b(\bX^N_{i,n}) \tau  + \sigma \sqrt{\tau} \boldsymbol{\xi}^i_{N,n},
+ \label{eq:euler_maruyama}
+\end{equation}
+where $\boldsymbol{\xi}^i_{N,n}$ are independent and identically distributed standard normal random variables; see Algorithm \ref{alg:sde} for the summary of the particle propagation for the advection--diffusion step. 
+
+\begin{algorithm}
+\caption{SDE propagation of the advection--diffusion step}\label{alg:sde}
+\begin{algorithmic}
+\Require Particle set: $S=\{\mathbf{X}_i\}_{i\in\mathcal I}$; time step $\tau>0$
+\Require Drift term $b(\cdot)$
+\Require Diffusion strength $\sigma$
+\Ensure Propagated set $S_*=\{\mathbf{X}^{i,*}\}_{i\in\mathcal I}$
+\Procedure{SDE}{$S,\,\tau,\,b,\,\sigma$}
+  \State $S_{*}\gets [\ ]$
+  \For{$i\in\mathcal I$}
+    \State Sample $\boldsymbol{\xi}_i \sim \mathcal N(0,I_d)$ independently
+    \State $\mathbf{X}^*_i \gets \mathbf{X}_i \;+\; b(\mathbf{X}_i)\,\tau \;+\; \sqrt{\tau}\,\sigma\,\boldsymbol{\xi}_i$
+    \State Append $\mathbf{X}^{*}_i$ to $S_{*}$
+  \EndFor
+  \State \Return $S_{*}$
+\EndProcedure
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Reaction step: weighted update versus branching}
+\label{sec:reaction}
+The reaction sub-step advances the intermediate measure $\mu_n^{N,\ast}$ from the transport step under the
+reaction operator $\mathcal B$ over a time step $\tau$, that is, it solves the ordinary
+differential equation
+\[
+\partial_t \rho = c_n(\mathbf{x})\,\rho,
+\qquad c_n(\mathbf{x}) := \tilde r\!\big(\rho_n^\ast(\mathbf{x})\big),
+\]
+whose exact solution multiplies the density pointwise by the \emph{reaction multiplier}
+\begin{equation}\label{equ:multiplier}
+m(\bx) = \exp\!\big(c_n(\bx)\,\tau\big)\ge 0 .
+\end{equation}
+At the particle level we must therefore produce, from $\mu_n^{N,\ast}=\frac1N\sum_i \delta_{\bX_i^\ast}$, a new
+measure $\mu_{n+1}^N$ with
+\begin{equation}\label{equ:reaction_target}
+\mathbb E\big[\langle f,\mu_{n+1}^N\rangle\big]
+=\langle f, m\,\mu_n^{N,\ast}\rangle
+=\frac1N\sum_{i} m_i\, f(\bX_i^\ast),
+\qquad m_i := m(\bX_i^\ast),
+\end{equation}
+for all $f\in C_b(\mathbb T^d)$, i.e.\ the update must be \emph{unbiased} for the reaction multiplier. There is
+more than one particle realization of \eqref{equ:reaction_target}, and the choice has a decisive effect on the
+quality of the discretization. We describe the weighted update and two equal-weight branching kernels, and then
+contrast their conditional variance and resolution.
+
+\paragraph{Weighted update (baseline)}
+The most direct realization keeps the positions fixed and carries a scalar weight $w_i$ on each particle,
+\begin{equation}\label{equ:weighted}
+w_i^{n+1} = w_i^{n}\,m_i,
+\qquad
+\mu_w^{n+1}(\intd\bx) = \frac1N\sum_i w_i^{n+1}\,\delta_{\bX_i^\ast}(\intd\bx),
+\end{equation}
+which satisfies \eqref{equ:reaction_target} exactly and deterministically (the weight update has zero variance).
+Its drawback is that the weights become unequal. A standard measure of the resulting degeneracy is the
+normalized effective sample size (nESS),
+\begin{equation}\label{equ:ESS}
+\mathrm{nESS} = \frac{1}{N_{\mathrm{act}}}\,\frac{\big(\sum_i w_i\big)^2}{\sum_i w_i^2}\in(0,1],
+\end{equation}
+where $N_{\mathrm{act}}$ is the number of active particles; equal weights give $\mathrm{nESS}=1$, while
+$\mathrm{nESS}\to0$ indicates that the represented mass has concentrated onto a few particles. Under sustained
+localized growth the multipliers $m_i$ compound multiplicatively in the high-rate region, so $\mathrm{nESS}$
+decays there even though the global particle count is unchanged -- the local degeneracy described in the
+introduction. By construction $\mathrm{nESS}$ diagnoses the \emph{weighted} representation only: branching keeps
+all weights equal, so $\mathrm{nESS}\equiv1$ for the branching kernels. The corresponding resolution diagnostic
+for branching is the local particle count $N_B$, which we compare against the weighted local $\mathrm{nESS}(B)$
+in Section~\ref{sec:branch_vs_weight}.
+
+\paragraph{Equal-weight branching}
+Branching instead keeps all weights equal to $1/N$ and replaces particle $i$ by a random integer number of
+identical offspring $\nu_i\in\mathbb Z_{\ge0}$ with $\mathbb E[\nu_i]=m_i$. The updated set
+$S_{n+1}^N=\{\bX_{j,n+1}^N\}_{j\in\mathcal I_{n+1}^N}$ collects the offspring, and
+\begin{equation}
+\mu_{n+1}^{N}(\intd\bx)=\frac1N\sum_{j\in\mathcal I_{n+1}^N}\delta_{\bX_{j,n+1}^N}(\intd\bx),
+\end{equation}
+so that \eqref{equ:reaction_target} holds because $\mathbb E[\nu_i]=m_i$. Mass creation ($m_i>1$) becomes
+particle creation and mass loss ($m_i<1$) becomes removal, so the local particle count -- and hence the local
+resolution -- adapts to where the reaction acts, while every particle keeps weight $1/N$. We use two offspring
+distributions.
+
+\emph{(i) Poisson birth--death kernel} (a Poisson birth rule for $m_i\ge1$ and a Bernoulli survival rule for
+$m_i<1$). For $c_i\ge0$ (so $m_i\ge1$), keep the parent and add
+$\mathrm{Poisson}(m_i-1)$ children; for $c_i<0$ (so $m_i\in(0,1)$), keep the parent with probability $m_i$:
+\begin{equation}\label{equ:poisson_kernel}
+\nu_i =
+\begin{cases}
+1+\mathrm{Poisson}(m_i-1), & c_i\ge 0,\\[2pt]
+\mathrm{Bernoulli}(m_i), & c_i<0,
+\end{cases}
+\end{equation}
+which satisfies $\mathbb E[\nu_i]=m_i$, with $\operatorname{Var}(\nu_i)=m_i-1$ for $c_i\ge0$ and
+$\operatorname{Var}(\nu_i)=m_i(1-m_i)$ for $c_i<0$.
+
+\emph{(ii) Minimum-variance integer kernel.} The offspring count must be an integer with mean $m_i$, yet
+$m_i=e^{c_i\tau}$ is generally non-integer. We therefore round $m_i$ stochastically to one of its two bracketing
+integers $\lfloor m_i\rfloor$ and $\lfloor m_i\rfloor+1$ -- the stochastic-rounding rule, here used as an
+offspring distribution:
+\begin{equation}\label{equ:minvar_kernel}
+\nu_i=\lfloor m_i\rfloor + \mathrm{Bernoulli}(\theta_i),
+\qquad
+\theta_i = m_i-\lfloor m_i\rfloor,
+\end{equation}
+which gives $\mathbb E[\nu_i]=m_i$ and $\operatorname{Var}(\nu_i)=\theta_i(1-\theta_i)$. Among all
+integer-valued offspring distributions with mean $m_i$, this is the one of smallest variance
+(Proposition~\ref{prop:stochastic_branch}); since $\theta_i\in[0,1)$, the variance never exceeds $\tfrac14$ and vanishes
+whenever $m_i$ is an integer, where $\nu_i\equiv m_i$ deterministically.
+
+For $m_i\in(0,1)$ the rule reduces to $\mathrm{Bernoulli}(m_i)$, coinciding with the Poisson death rule. For
+$m_i>1$ its variance $\theta_i(1-\theta_i)$ is strictly smaller than the Poisson birth variance $m_i-1$, the gap
+being largest at integer $m_i$, where the Poisson rule still has variance $m_i-1$ while the present rule is
+deterministic.
+\begin{proposition}[Unbiasedness and conditional variance of the reaction step]
+\label{prop:stochastic_branch}
+Let $\mu=\frac1N\sum_{i\in\mathcal I}\delta_{\bX_i}$ and let $\mu_+$ be produced by any of the three reaction
+updates of Section~\ref{sec:reaction}, with multipliers $m_i=\exp(c_i\tau)$ and $c_i:=c(\bX_i)$. Then,
+conditionally on $\{\bX_i\}_{i\in\mathcal I}$,
+\[
+\mathbb E[\langle f,\mu_+\rangle]=\langle f,\, m\,\mu\rangle
+=\frac1N\sum_{i\in\mathcal I} m_i\,f(\bX_i)
+\qquad\text{for all } f\in C_b(\mathbb T^d),
+\]
+so all three updates are unbiased for the reaction multiplier. The conditional variance of $\langle f,\mu_+\rangle$
+is
+\[
+\operatorname{Var}\!\big(\langle f,\mu_+\rangle \,\big|\, \{\bX_i\}\big)
+=\frac1{N^2}\sum_{i\in\mathcal I}\operatorname{Var}(\nu_i)\,f(\bX_i)^2,
+\]
+with $\operatorname{Var}(\nu_i)$ as in \eqref{equ:poisson_kernel}--\eqref{equ:minvar_kernel} for the two
+branching kernels, and is $0$ for the weighted update. Moreover, among all integer-valued offspring distributions
+with mean $m_i$, the minimum-variance kernel \eqref{equ:minvar_kernel} attains the smallest possible variance,
+$\theta_i(1-\theta_i)$ with $\theta_i=m_i-\lfloor m_i\rfloor$.
+\end{proposition}
+
+\begin{proof}
+We treat unbiasedness, the conditional variance, and optimality in turn.
+
+\emph{Unbiasedness.} For either branching kernel the $\nu_i$ offspring of particle $i$ are placed at $\bX_i$, so
+$\langle f,\mu_+\rangle=\frac1N\sum_{i\in\mathcal I}\nu_i\,f(\bX_i)$. Taking the conditional expectation and using
+$\mathbb E[\nu_i\mid\bX_i]=m_i$ gives
+$\mathbb E[\langle f,\mu_+\rangle]=\frac1N\sum_i m_i\,f(\bX_i)=\langle f,m\mu\rangle$. For the weighted update
+$\langle f,\mu_+\rangle=\frac1N\sum_i w_i m_i\,f(\bX_i)$ holds deterministically, with the same value in
+expectation.
+
+\emph{Conditional variance.} The offspring counts $\nu_i$ are independent across $i$ given $\{\bX_i\}$, so
+\[
+\operatorname{Var}\!\big(\langle f,\mu_+\rangle\big)
+=\frac1{N^2}\sum_{i\in\mathcal I}\operatorname{Var}(\nu_i)\,f(\bX_i)^2 .
+\]
+The single-particle variances are $\operatorname{Var}(\nu_i)=m_i-1$ for the Poisson birth rule
+($\nu_i=1+\mathrm{Poisson}(m_i-1)$), $m_i(1-m_i)$ for the Bernoulli death rule, and $\theta_i(1-\theta_i)$ for the
+minimum-variance kernel \eqref{equ:minvar_kernel}, where $\nu_i\in\{\lfloor m_i\rfloor,\lfloor m_i\rfloor+1\}$
+with probabilities $1-\theta_i,\theta_i$. The weighted update is deterministic, so its variance is $0$.
+
+\emph{Optimality of \eqref{equ:minvar_kernel}.} Fix $i$ and let $\nu$ be any integer-valued random variable with
+$\mathbb E[\nu]=m_i$. Write $k=\lfloor m_i\rfloor$ and $\theta=\theta_i=m_i-k\in[0,1)$, and let
+$L(n)=\theta^2+(1-2\theta)(n-k)$ be the secant line of the convex map $n\mapsto(n-m_i)^2$ through $n=k$ and
+$n=k+1$. Since no integer lies strictly inside $(k,k+1)$, convexity gives $(n-m_i)^2\ge L(n)$ for every integer
+$n$, with equality iff $n\in\{k,k+1\}$. Taking expectations and using $\mathbb E[\nu]=m_i=k+\theta$,
+\[
+\operatorname{Var}(\nu)=\mathbb E[(\nu-m_i)^2]\ge\mathbb E[L(\nu)]
+=\theta^2+(1-2\theta)\theta=\theta(1-\theta),
+\]
+with equality iff $\nu\in\{k,k+1\}$ almost surely. This is precisely the kernel \eqref{equ:minvar_kernel}, which
+is therefore the minimum-variance integer-valued unbiased offspring distribution.
+\end{proof}
+Table~\ref{tab:kernels} summarizes the three reaction representations. All are unbiased; they differ in how the
+reaction is stored. The weighted update has zero sampling variance but lets weights -- and therefore the
+effective sample size -- degenerate locally. Branching keeps weights equal and trades a controlled offspring
+variance for adaptive local resolution, and the minimum-variance kernel minimizes that variance among
+integer-valued unbiased kernels. We summarize the equal-weight reaction step in Algorithm~\ref{alg:birthdeath};
+the weighted update simply replaces lines~\ref{alg:line:birth}--\ref{alg:line:death} by $w_i\leftarrow w_i m_i$.
+
+\begin{table}[t]
+\centering
+\caption{Reaction representations of the multiplier $m_i=\exp(c_i\tau)$, with $\theta_i=m_i-\lfloor m_i\rfloor$.
+All three are unbiased ($\mathbb E[\nu_i]=m_i$, or an exact factor $m_i$ for weights). ``Local resolution''
+refers to whether the number of particles in a growth region increases with the created mass.}
+\label{tab:kernels}
+\begin{tabular}{lccc}
+\hline
+Representation & weight & conditional variance & local resolution \\
+\hline
+Weighted update \eqref{equ:weighted}        & $w_i m_i$ (unequal) & $0$ & fixed count; nESS degenerates \\
+Poisson kernel \eqref{equ:poisson_kernel}   & $1/N$ (equal) & $m_i-1$ \,/\, $m_i(1-m_i)$ & adaptive \\
+Min.-variance kernel \eqref{equ:minvar_kernel} & $1/N$ (equal) & $\theta_i(1-\theta_i)\le \tfrac14$ & adaptive \\
+\hline
+\end{tabular}
+\end{table}
+
+
+\begin{algorithm}
+\caption{Equal-weight reaction (branching) step}\label{alg:birthdeath}
+\begin{algorithmic}[1]
+\Require Propagated particles $S=\{\mathbf X_{i}\}_{i\in\mathcal I}$, time step $\tau>0$, rate function $r(\cdot)$, kernel $\in\{\textsc{Poisson},\textsc{MinVar}\}$
+\Ensure Post-reaction set $S_{+}=\{\mathbf X_{i}\}_{i\in\mathcal I_{+}}$ (all weights $1/N$)
+\Procedure{Reaction}{$S,\,\tau,\,r(\cdot),\,\text{kernel}$}
+    \State $S_{+}\gets [\ ]$
+    \For{$i\in\mathcal I$}
+        \State $m_i \gets \exp\!\big(r(\mathbf X_{i})\,\tau\big)$
+        \If{kernel $=\textsc{Poisson}$} \label{alg:line:birth}
+            \State $\nu_i \gets 1+\mathrm{Poisson}(m_i-1)$ if $m_i\ge1$, else $\nu_i\gets\mathrm{Bernoulli}(m_i)$
+        \Else \Comment{minimum-variance}
+            \State $\nu_i \gets \lfloor m_i\rfloor + \mathrm{Bernoulli}(m_i-\lfloor m_i\rfloor)$ \label{alg:line:death}
+        \EndIf
+        \State Append $\nu_i$ copies of $\mathbf X_{i}$ to $S_{+}$
+    \EndFor
+    \State \Return $S_{+}$
+\EndProcedure
+\end{algorithmic}
+\end{algorithm}
+
+
+\subsection{Nonlinear interpolation}
+\label{sec:interpolation}
+To evaluate the functions $\tilde a(\rho)$ , and $\tilde r(\rho)$ , that govern the drift and reaction dynamics in our particle-based scheme, we need to reconstruct the continuous density 
+$\rho$ from its empirical measure. Specifically, given an empirical measure
+\[
+\mu^N_n= \frac{1}{N}\sum_{i\in \mathcal I^N_n}\delta_{\bX_{i,n}^N},
+\] 
+we seek a smooth approximation of $\rho^N_n$ that allows pointwise evaluation and differentiation as required by the operator $\mathcal{A}$ and $\mathcal{B}$.
+In this work, we choose to interpolate the empirical distribution in the Fourier space. Specifically, we project the density onto a finite set of Fourier basis functions, allowing efficient representation and differentiation. 
+The Fourier coefficients are evaluated from the particle locations $\bX^N_{i,n}$ under periodic boundary conditions. Without loss of generality, we take the periodic domain to be $\Omega=[-\pi,\pi]^d$ , from which the reconstructed density $\rho_n(t,x)$. To be more specific, we define a Fourier interpolation operator $\mathcal P_K$
+that maps the empirical particle distribution into a truncated Fourier representation 
+\[
+\rho^N_n(\bx) = \mathcal{P}_K(\mu^N_n)(\bx) 
+          = \sum_{\vert k_1\vert ,\dots,\vert k_d\vert \leq K} \hat{\rho}_n(k_1,\dots,k_d)\,\phi_{k_1}(\bx_1)\cdots\phi_{k_d}(\bx_d),
+\]
+where the one-dimensional basis functions on $[-\pi,\pi]$ are the orthonormal real Fourier modes
+\[
+\phi_k(x) =
+\begin{cases}
+\dfrac{1}{\sqrt{2\pi}}, & k=0, \\[4pt]
+\dfrac{1}{\sqrt{\pi}} \cos(k  x), & k \in \mathbb{Z}_+, \\[4pt]
+\dfrac{1}{\sqrt{\pi}}\sin(|k|  x), & k \in \mathbb{Z}_- ,
+\end{cases}
+\]
+so that $\int_{-\pi}^{\pi}\phi_k\phi_{k'}\,\intd x=\delta_{kk'}$, and the sum runs over all $d$ directions.
+
+The Fourier coefficients are computed directly from the empirical measure, i.e.\ as fixed-$N$ particle averages
+of the basis functions:
+\begin{equation}
+\begin{aligned}
+    \hat{\rho}_n(k_1,\dots,k_d) &= \int \phi_{k_1}(y_1)\cdots \phi_{k_d}(y_d)\,\mu^N_n(\intd\by)
+    = \frac{1}{N}\sum_{i\in \mathcal I^N_n} \phi_{k_1}(\bX_{i,n,1}^{N})\cdots \phi_{k_d}(\bX_{i,n,d}^{N}).
+\end{aligned}
+\label{eq:Fourier_mode}
+\end{equation}
+The process is shown in Algorithm \ref{alg:interpolate}. 
+This choice is motivated by the simplicity and spectral accuracy of Fourier methods for smooth periodic functions. However, we note that other functional spaces, such as polynomial bases, wavelets, or kernel-based representations, could offer better adaptability in non-periodic or highly localized settings. We leave the exploration of such alternatives to future work.
+
+
+
+\begin{algorithm}
+\caption{Interpolation Step (fixed-$N$ normalization)}\label{alg:interpolate}
+\begin{algorithmic}
+\Require Particle set: $S=\{ \mathbf{X}^i \}_{i\in \mathcal{I}}$; fixed initial population $N$; truncation index set $\mathcal{M}_K$; domain descriptor $\Omega$; basis $\{\psi_m\}_{m\in\mathcal{M}_K}$ with (optionally) known gradients $\{\nabla\psi_m\}_{m\in\mathcal{M}_K}$
+\Ensure Truncated field $\tilde{\rho}_n(\mathbf{x})$ (and, if needed, $\nabla\tilde{\rho}_n(\mathbf{x})$)
+\Procedure{Interp}{$S_n,\,N,\,\mathcal{M}_K,\,\Omega,\,\{\psi_m\}$}
+    \State \textbf{(Coefficient projection with fixed-$N$ normalization)}
+    \State For each $m\in\mathcal{M}_K$, set
+    \[
+      a_m \;\gets\; \frac{1}{N}\sum_{i\in\mathcal{I}} \psi_m\!\big(\mathbf{X}^i\big).
+    \]
+    \State \textbf{(Series assembly)}
+    \[
+      \tilde{\rho}_n(\mathbf{x}) \;\gets\; \sum_{m\in\mathcal{M}_K} a_m\,\psi_m(\mathbf{x}).
+    \]
+    \State \textbf{(Optional gradients for drift/evaluation)}
+    \If{gradients are required and $\{\nabla\psi_m\}$ are available}
+      \[
+        \nabla\tilde{\rho}_n(\mathbf{x}) \;\gets\; \sum_{m\in\mathcal{M}_K} a_m\,\nabla\psi_m(\mathbf{x}).
+      \]
+    \EndIf
+    \State \Return $\tilde{\rho}_n$ (and $\nabla\tilde{\rho}_n$ if computed)
+\EndProcedure
+\end{algorithmic}
+\end{algorithm}
+
+Because the coefficients are normalized by the \emph{initial} population $N_0$ rather than the current count,
+the reconstructed field $\tilde\rho_n$ carries the current mass: it integrates to $M_t=N_t/N_0$, i.e.
+$\tilde\rho_n = M_t\,\rho_n^{\mathrm{prob}}$ where $\rho_n^{\mathrm{prob}}$ is the unit-mass density of the active
+cloud. Consequently $\tilde u = Z\tilde\rho_n$ recovers the physical field with the correct total mass, and the
+drift and reaction coefficients are evaluated from this mass-carrying reconstruction throughout (so the factors
+$M_t$ enter consistently and do not need separate bookkeeping). In regions where $\tilde\rho_n$ is close to zero
+the per-particle rate (for a coupled source $f$, the quotient $\tilde r=f/(Z\tilde\rho_n)=f/\tilde u$) is regularized by a small density floor to keep the multiplier $e^{\tilde r\tau}$ bounded.
+
+\subsection{Optional population control}
+\label{sec:popcontrol}
+Sustained growth makes the active population $N_t$ grow, which is the mechanism by which branching adds local
+resolution but which can also raise the cost. When a cost ceiling is needed, we apply a global, equal-weight
+population control that rescales the count without introducing local weights. Writing the current mass as
+$M_t=\langle 1,\mu^N\rangle = N_t/N$, we resample $N_{\mathrm{targ}}$ particles uniformly (with replacement)
+from the current set and reattach the common mass factor,
+\begin{equation}
+\mu^N=\frac1N\sum_{i=1}^{N_t}\delta_{\bX_i}
+\;\longmapsto\;
+M_t\,\frac1{N_{\mathrm{targ}}}\sum_{j=1}^{N_{\mathrm{targ}}}\delta_{\tilde\bX_j},
+\end{equation}
+which preserves the total mass and the equal-weight property in expectation. This step is optional and is
+\emph{not} used in the branching-versus-weighted comparison of Section~\ref{sec:branch_vs_weight}; whenever it is
+active we report it explicitly.
+
+\section{Theoretical properties}
+\label{sec:theory}
+In this section we analyze the error between the numerical solution and the exact
+solution of~\eqref{equ:reaction-diffusion}. We decompose the error at a grid time
+$t_n$ into three parts:
+\begin{equation}\label{eq:err-decomp}
+u(t_n)-\mu_n^N
+=\underbrace{\bigl(u(t_n)-u_K(t_n)\bigr)}_{\text{coefficient regularization}}
++\underbrace{\bigl(u_K(t_n)-\mu^N(t_n)\bigr)}_{\text{continuous-time particle}}
++\underbrace{\bigl(\mu^N(t_n)-\mu_n^N\bigr)}_{\text{time discretization}}.
+\end{equation}
+The first term is the consistency error between the exact equation and the
+\emph{coefficient-regularized} equation~\eqref{equ:projected}; the latter replaces
+only the coefficient arguments $a(u),r(u)$ by $a(\mathcal P_K u_K),r(\mathcal P_K
+u_K)$, so it is \emph{not} a spectral Galerkin projection of the equation , and its error is governed by the spectral accuracy
+of $\mathcal P_K$ acting on the coefficient argument. The second term is the
+continuous-time particle approximation error between $u_K$ and the continuous-time
+branching measure $\mu^N$, an additive sampling fluctuation of size $O(1/N)$. The
+present paper controls these first two terms and thereby the continuous-time error
+$u-\mu^N$ (Theorem~\ref{thm:abstract_error}). The third term is the
+time-discretization error between $\mu^N$ and the fully discrete algorithm
+$\mu^N_n$; its analysis decomposes the flow by the operator splitting of
+Section~\ref{sec:splitting} and compares the continuous- and discrete-time flows
+pathwise on a single probability space, through a Harris-type graphical
+construction~\cite{harris1972nearest,bansaye2015stochastic} in the
+measure-valued/SDE form of~\cite{fournier2004microscopic}. That construction is
+carried out in a future work; combined
+with Theorem~\ref{thm:abstract_error} it yields the fully discrete bound
+\eqref{equ:abstract_rate_full}.
+
+\paragraph{The coefficient-regularized equation.}
+We introduce the projected PDE
+\begin{equation}\label{equ:projected}
+\partial_t u_K = \nabla\cdot\!\left( a(\mathcal P_K u_K)\, u_K\right)
++ D\,\Delta u_K + r\!\left(\mathcal P_K u_K\right) u_K,
+\end{equation}
+where $\mathcal P_K$ is the Fourier projection of Section~\ref{sec:interpolation}
+onto the modes with $|\mathbf k|_\infty\le K$. The first estimate bounds the gap
+between $u_K$ and the exact solution $u$.
+
+\begin{proposition}[Consistency of the coefficient-regularized PDE]
+\label{prop:u_u_K}
+Let $\mathbb T^d=(\mathbb R/2\pi\mathbb Z)^d$ and assume $a,r$ are bounded and
+Lipschitz with a uniform constant $C_{b,\mathrm{lip}}$, i.e.\ for all $x,y\in\mathbb R$
+\[
+|a(x)|,\,|r(x)|\le C_{b,\mathrm{lip}},\qquad
+|a(x)-a(y)|,\,|r(x)-r(y)|\le C_{b,\mathrm{lip}}\,|x-y|.
+\]
+Fix $T<\infty$ and $m>d/2+1$. Suppose that on $[0,T)$ the exact solution $u$ of the
+nonlinear PDE~\eqref{equ:reaction-diffusion} with periodic boundary conditions and
+the solution $u_K$ of the coefficient-regularized PDE~\eqref{equ:projected} exist
+and are unique (recall that \eqref{equ:projected} is not a spectral Galerkin
+truncation: $\mathcal P_K$ acts only on the coefficient arguments and $u_K$ need not
+be band-limited), and that $u\in L^\infty\bigl(0,T;H^m(\mathbb T^d)\bigr)$, so that
+$H^m\hookrightarrow W^{1,\infty}\hookrightarrow L^\infty$. Then the error
+$e_K=u-u_K$ satisfies, for all $t\le T$,
+\begin{equation}\label{eq:prop-uuK-bound}
+\|e_K(t)\|_{L^2}^2\;\le\; C_T\Bigl(\|e_K(0)\|_{L^2}^2
++ K^{-2m}\,\|u\|_{L^2(0,t;H^m)}^2\Bigr),
+\end{equation}
+where $C_T>0$ depends only on $T$, $D$, and the coefficient constants. The proof is
+given in Appendix~\ref{app:convergence}.
+\end{proposition}
+
+\paragraph{The continuous-time branching measure.}
+Let $S_K(N,t)=\{\bX^N_{i,K}(t)\}_{i\in\mathcal I(N,t)}$ be the particle set at time
+$t$, indexed by $\mathcal I(N,t)$, evolving under the continuous-time limit of the
+algorithm: the advection--diffusion step \eqref{eq:euler_maruyama} is realized as
+the SDE~\eqref{equ:overd_langevin}, and the reaction step
+(Section~\ref{sec:reaction}) as a birth--death process with instantaneous rates
+$c^\pm:=r^\pm(\mathcal P_K\mu^N)$, where $r^\pm=\max(\pm r,0)$. The associated
+empirical (finite) measure is
+\[
+\mu^N(t,\intd\bx)=\frac1N\sum_{i\in\mathcal I(N,t)}\delta_{\bX^N_{i,K}(t)}(\intd\bx).
+\]
+By It\^o's formula, for every $f\in C^2(\mathbb T^d)$,
+\begin{equation}\label{eq:weak-form}
+\begin{aligned}
+\langle f,\mu^N(t)\rangle
+&= \langle f,\mu^N(0)\rangle
+ - \int_0^t \langle\nabla f,\,a(\mathcal P_K\mu^N)\mu^N\rangle\,\intd\tau
+ + \int_0^t \langle\Delta f,\,D\,\mu^N\rangle\,\intd\tau\\
+&\quad + \int_0^t \langle f,\,r(\mathcal P_K\mu^N)\mu^N\rangle\,\intd\tau
+ + \frac1N\int_0^t\sum_{i\in\mathcal I(N,\tau)}\sqrt{2D}\,
+   \nabla f(\bX_{i,K}^N(\tau))\cdot\intd\bW^N_i(\tau)\\
+&\quad + \frac1N\int_0^t\sum_{i\in\mathcal I(N,\tau)}
+   f(\bX_{i,K}^N(\tau))\,\intd\widetilde{\mathcal R}^{+,N}_i(\tau)
+ - \frac1N\int_0^t\sum_{i\in\mathcal I(N,\tau)}
+   f(\bX_{i,K}^N(\tau))\,\intd\widetilde{\mathcal R}^{-,N}_i(\tau),
+\end{aligned}
+\end{equation}
+where the last two terms are the compensated Poisson martingales associated with the
+birth ($+$) and death ($-$) counts $\mathcal R^{\pm,N}_i$ of rate $c^\pm$. Their
+net compensator equals $c^+-c^-=r$, which is exactly the deterministic reaction
+drift already present in~\eqref{eq:weak-form}, so compensation records the reaction
+once as drift and once as a mean-zero martingale; the precise definitions and this
+bookkeeping are recalled in Appendix~\ref{app:convergence}. The next estimate
+controls the gap between $u_K$ and $\mu^N$ in the negative norm $H^{-s}$,
+$s>d/2+1$, with a constant independent of $N$.
+
+\begin{proposition}[Continuous-time particle approximation]
+\label{prop:u_K_mu}
+Under the coefficient assumptions of Proposition~\ref{prop:u_u_K}, fix $s>d/2+1$ and
+the cut-off $K$, and suppose that on $[0,T)$ the active set is uniformly bounded,
+$|\mathcal I(N,t)|\le C_N N$, the projected PDE~\eqref{equ:projected} has a unique
+solution $u_K$, and the band-limited coefficients and the solution are uniformly
+$W^{\lceil s\rceil,\infty}$-regular,
+\begin{equation}\label{eq:prop2-coeff}
+\sup_{t\le T}\Bigl(\bigl\|a(\mathcal P_K\mu^N(t))\bigr\|_{W^{\lceil s\rceil,\infty}}
++\bigl\|r(\mathcal P_K\mu^N(t))\bigr\|_{W^{\lceil s\rceil,\infty}}
++\|u_K(t)\|_{W^{\lceil s\rceil,\infty}}\Bigr)\le C_{T,K}.
+\end{equation}
+At fixed $K$ this is automatic: $\mathcal P_K\mu^N$ is a trigonometric polynomial of
+degree $\le K$, so the inverse estimate gives $\|\mathcal P_K\mu^N\|_{W^{m,\infty}}
+\le C_{m,K}\|\mu^N\|_{H^{-s}}\le C_{m,K}C_N\sqrt{C_s}$, while $a,r$ are smooth
+functions of $\mathcal P_K\mu^N$ and $u_K$ is the smooth solution
+of~\eqref{equ:projected}. Writing $E_K(t)=\tfrac12\|u_K(t)-\mu^N(t)\|_{H^{-s}}^2$,
+there is a constant $C=C_{T,K}$ depending on $C_N,C_{b,\mathrm{lip}},D,s,d$ and on
+$K$ through~\eqref{eq:prop2-coeff} but \emph{independent of $N$} such that
+\begin{equation}\label{eq:prop-uKmu-diff}
+\frac{d}{dt}\,\mathbb E E_K(t)\le C\,\mathbb E E_K(t)+\frac{C}{N},
+\end{equation}
+and therefore, by Gr\"onwall with constant forcing,
+\begin{equation}\label{eq:prop-uKmu-bound}
+\mathbb E E_K(t)\le e^{Ct}\,\mathbb E E_K(0)+\frac{e^{Ct}-1}{N}
+\le e^{Ct}\,\mathbb E E_K(0)+\frac{C_T}{N},\qquad t\le T.
+\end{equation}
+In particular, if $\mu^N(0)$ is an unbiased sample of $u_K(0)$ so that
+$\mathbb E E_K(0)\le C_s/N$, then $\mathbb E\|u_K(t)-\mu^N(t)\|_{H^{-s}}^2\le
+C_{T,K}/N$ for all $t\le T$. The proof is given in
+Appendix~\ref{app:convergence}.
+\end{proposition}
+
+Combining the two propositions gives the continuous-time convergence of the
+branching measure to the exact solution.
+
+\begin{theorem}[Continuous-time convergence]
+\label{thm:abstract_error}
+Let the hypotheses of Propositions~\ref{prop:u_u_K} and~\ref{prop:u_K_mu} hold with
+$m>d/2+1$ and $s>d/2+1$. Assume the scheme is initialized consistently and without
+bias: $u_K(0)=u(0)$ and $\mu^N(0)$ is an i.i.d.\ unbiased sample of $u(0)$, so that
+$\mathbb E\|u(0)-\mu^N(0)\|_{H^{-s}}^2\le C_s/N$. Then for all $t_n\le T$
+\begin{equation}\label{eq:u-muN-cont}
+\mathbb E\bigl\|u(t_n)-\mu^N(t_n)\bigr\|_{H^{-s}}^2
+\;\le\; C_{T,K}\Bigl(K^{-2m}\,\|u\|_{L^2(0,t_n;H^m)}^2+\tfrac1N\Bigr),
+\end{equation}
+with $C_{T,K}$ independent of $N$. The proof is given in
+Appendix~\ref{app:convergence}.
+\end{theorem}
+
+\begin{remark}[Fully discrete rate and the role of the kernel]\label{rem:rate}
+The implemented algorithm returns the fully discrete measure $\mu^N_n$, which
+differs from $\mu^N$ by the time-discretization term of~\eqref{eq:err-decomp}. That
+term is controlled, for fixed $K$, by $\mathbb E\|\mu^N(t_n)-\mu^N_n\|_{H^{-s}}^2\le
+C_{T,K}\tau^2$ in the companion paper described above; combining it with
+Theorem~\ref{thm:abstract_error} through the triangle inequality gives the fully
+discrete rate
+\begin{equation}\label{equ:abstract_rate_full}
+\Bigl(\mathbb E\bigl\|u(t_n)-\mu^N_n\bigr\|_{H^{-s}}^2\Bigr)^{1/2}
+\;\le\; C_{T,K}\bigl(N^{-1/2}+\tau+K^{-m}\bigr),
+\end{equation}
+with Monte-Carlo ($N^{-1/2}$), time-splitting ($\tau$), and reconstruction
+($K^{-m}$) contributions; the manufactured-solution study of Section~\ref{sec:mms}
+probes these three terms. The continuous-time bound~\eqref{eq:u-muN-cont}, and hence
+the $N^{-1/2}$ and $K^{-m}$ rates, are identical for the Poisson and
+minimum-variance kernels: as $\tau\downarrow0$ both converge to the same
+Poisson-clock birth--death limit, and their conditional offspring variances differ
+only at order $\tau^2$. The advantage of the minimum-variance kernel is the smaller
+conditional variance of Proposition~\ref{prop:stochastic_branch} and the resolution
+gains documented in Section~\ref{sec:branch_vs_weight}, not a faster asymptotic
+rate.
+\end{remark}
+
+\begin{remark}[Scope of the analysis]\label{rem:scope}
+The constant $C_{T,K}$ depends on the horizon $T$ and grows with $K$ through the
+Lipschitz and inverse constants of the band-limited coefficients, so it is not
+uniform in $K$; \eqref{equ:abstract_rate_full} should be read as convergence in $N$
+and $\tau$ at fixed $K$, or under a joint regime in which $K$ grows slowly enough
+that $C_{T,K}K^{-m}\to0$. The estimates hold under the regularity and localization
+hypotheses of Propositions~\ref{prop:u_u_K}--\ref{prop:u_K_mu}, in particular before
+any singular blow-up time, and do not assert convergence through a Dirac
+concentration. Finally, Theorem~\ref{thm:abstract_error} controls the $H^{-s}$
+distance of the empirical measure; at fixed $K$ this is equivalent, up to a
+$K$-dependent constant, to the $L^2$ error of the degree-$K$ reconstructed field of
+Section~\ref{sec:interpolation} reported in Section~\ref{sec:numerics}, because all
+$H^\sigma$ norms are equivalent on the degree-$K$ trigonometric class.
+\end{remark}
+
+
+\section{Coupled systems and implementation protocol}
+\label{sec:systems}
+\label{sec:extension}
+
+The scalar construction in Section~\ref{sec:method} is used in the numerical experiments through the following finite-measure formulation.  Consider a system with components $U=(u_1,\ldots,u_L)$ that can be written, for each component, in the multiplicative reaction form
+\begin{equation}
+\partial_t u_\ell
+= -\nabla\!\cdot\bigl(b_\ell[U]u_\ell\bigr)
+  + D_\ell \Delta u_\ell
+  + r_\ell[U]u_\ell,
+\qquad \ell=1,\ldots,L .
+\label{equ:system_multiplicative}
+\end{equation}
+The drift $b_\ell[U]$ may depend nonlocally on all components; for example, in Keller--Segel it is obtained from a chemical field solve, and in the kinetic test it depends on a spatial marginal.  Each component is represented by a finite empirical measure
+\begin{equation}
+\mu_{\ell,n}^N
+= \omega_{\ell,0}\sum_{i\in \mathcal I_{\ell,n}} w_{\ell,i,n}\,\delta_{X_{\ell,i,n}},
+\qquad
+\omega_{\ell,0}=\frac{M_{\ell,0}}{N_{\ell,0}},
+\qquad
+M_{\ell,0}=\int u_\ell(0,x)\,dx .
+\label{equ:system_measure}
+\end{equation}
+For the equal-weight branching method all active particles in component $\ell$ have the same weight $w_{\ell,i,n}\equiv 1$; mass change is recorded by the active count $|\mathcal I_{\ell,n}|$.  For the weighted baseline the active count is fixed and $w_{\ell,i,n}$ is updated multiplicatively.  In both cases the reconstructed physical field is
+\begin{equation}
+\widetilde u_{\ell,n}=P_K\mu_{\ell,n}^N,
+\label{equ:system_reconstruction}
+\end{equation}
+where $P_K$ denotes the Fourier reconstruction of Section~2.5, or the lower-dimensional field reconstruction specified in the experiment.  The normalization in \eqref{equ:system_measure} is important: the reconstruction carries the current physical mass and therefore can be used directly in the drift and reaction coefficients.
+
+One time step is a direct extension of the scalar splitting.  First the fields are reconstructed from the current empirical measures.  Then each component is transported by the SDE associated with its drift--diffusion operator.  The fields are reconstructed again at the transported positions, and the reaction multiplier $m_{\ell,i}=\exp\{r_\ell[\widetilde U^*](X^*_{\ell,i})\tau\}$ is represented either as a weight update or by one of the integer branching kernels of Section~2.4.  This is the algorithm actually used by the scalar, Keller--Segel, and kinetic experiments; the only difference between examples is how the fields entering $b_\ell$ and $r_\ell$ are reconstructed.
+
+\begin{algorithm}[t]
+\caption{One split step for a coupled finite-measure system}
+\label{alg:system_step}
+\begin{algorithmic}[1]
+\Require particle sets $\{X_{\ell,i,n},w_{\ell,i,n}\}_{i\in\mathcal I_{\ell,n}}$ for $\ell=1,\ldots,L$; step $\tau$; reconstruction operator $P_K$; reaction representation $\mathsf{kernel}\in\{\mathsf{weighted},\mathsf{Poisson},\mathsf{minvar}\}$
+\State reconstruct $\widetilde U_n=(P_K\mu_{1,n}^N,\ldots,P_K\mu_{L,n}^N)$
+\For{$\ell=1,\ldots,L$}
+\State transport each active particle by an Euler--Maruyama, exact OU, or problem-specific SDE step for $b_\ell[\widetilde U_n]$ and $D_\ell$:
+\[
+X^*_{\ell,i}=X_{\ell,i,n}+b_\ell[\widetilde U_n](X_{\ell,i,n})\tau+\sqrt{2D_\ell\tau}\,\xi_{\ell,i,n}
+\]
+\EndFor
+\State reconstruct the transported fields $\widetilde U^*=(P_K\mu_{1}^{N,*},\ldots,P_K\mu_L^{N,*})$
+\For{$\ell=1,\ldots,L$ and $i\in\mathcal I_{\ell,n}$}
+\State set $m_{\ell,i}=\exp\{r_\ell[\widetilde U^*](X^*_{\ell,i})\tau\}$
+\If{$\mathsf{kernel}=\mathsf{weighted}$}
+\State set $w_{\ell,i,n+1}=w_{\ell,i,n}m_{\ell,i}$ and keep the transported particle
+\ElsIf{$\mathsf{kernel}=\mathsf{Poisson}$}
+\State draw $\nu_{\ell,i}=1+\mathrm{Poisson}(m_{\ell,i}-1)$ if $m_{\ell,i}\ge 1$, and $\nu_{\ell,i}=\mathrm{Bernoulli}(m_{\ell,i})$ otherwise
+\State append $\nu_{\ell,i}$ equal-weight copies of $X^*_{\ell,i}$
+\Else
+\State draw $\nu_{\ell,i}=\lfloor m_{\ell,i}\rfloor+\mathrm{Bernoulli}(m_{\ell,i}-\lfloor m_{\ell,i}\rfloor)$ and append $\nu_{\ell,i}$ equal-weight copies of $X^*_{\ell,i}$
+\EndIf
+\EndFor
+\State optionally apply the explicitly reported population-control step of Section~2.6
+\end{algorithmic}
+\end{algorithm}
+
+Equation~\eqref{equ:system_multiplicative} also clarifies the scope of the coupled tests.  Branching is exact in conditional mean for sources that are absolutely continuous with respect to the current component, i.e. $F_\ell[U]=r_\ell[U]u_\ell$.  A source that creates component $\ell$ in regions where $u_\ell$ is absent, such as a cross-species injection term, should instead be represented by an injection/sampling kernel.  In the present paper the main branching evidence comes from the scalar localized-growth tests and from the kinetic field-coupled test, both of which have multiplicative reaction rates.  The conservative Keller--Segel and three-dimensional focusing examples are used to test the particle transport and field solve in concentration-dominated regimes, not to claim an additional branching advantage.
+
+\subsection{Cross-species source terms: injection kernels}
+\label{sec:injection}
+
+The multiplicative kernels of Algorithm~\ref{alg:system_step} apply to a source that is absolutely continuous with respect to the same component, $F_\ell[U]=r_\ell[U]u_\ell$, because the reaction multiplier $m_{\ell,i}=\exp(r_\ell\tau)$ then acts on the particles already carrying $u_\ell$.  A source that \emph{creates} component $\ell$ from another component is different: it deposits mass where the producing species lives, not where $u_\ell$ already is.  Representing it as a multiplicative rate $F_\ell/u_\ell$ on existing $\ell$-particles is fragile near small $u_\ell$ and undefined where $u_\ell$ vanishes.
+
+The parabolic--parabolic Keller--Segel chemical equation $v_t=\Delta v+u-v$ is the canonical example.  Its reaction substep $v_t=u-v$ has the exact one-step integrator
+\begin{equation}
+\mu_v^{n+1}=e^{-\tau}\,\mu_v^{*}+\bigl(1-e^{-\tau}\bigr)\,\mu_u^{*},
+\label{equ:injection}
+\end{equation}
+where $\mu_u^{*},\mu_v^{*}$ are the transported cell and chemical measures.  We realize \eqref{equ:injection} as a two-species birth--death process, with no division and no positivity floor: each transported chemical particle survives with probability $e^{-\tau}$ (the minimum-variance integer kernel for a multiplier below one), and each transported cell particle injects a new chemical particle at its own position with mean $q=(1-e^{-\tau})\,\omega_u/\omega_v$ by stochastic rounding $\nu_i=\lfloor q\rfloor+\mathrm{Bernoulli}(q-\lfloor q\rfloor)$.  When $\omega_u=\omega_v$ and $\tau$ is small this is a Bernoulli injection with probability $1-e^{-\tau}$.  Conditional on the transported clouds, \eqref{equ:injection} holds in mean, so the chemical mass obeys the exact balance $M_v(t)=M_u(0)+[M_v(0)-M_u(0)]e^{-t}$, which Section~\ref{sec:ks} verifies to sampling accuracy.  This is the unbiased extension of the equal-weight method to multi-species production and avoids the division by small $v$ inherent in a multiplicative chemical rate.
+
+\section{Numerical experiments}
+\label{sec:numerics}
+
+The numerical section is organized around the claims that the method is meant to support.  Section~\ref{sec:mms} verifies the observable convergence rates on a smooth problem with an exact solution.  Sections~\ref{sec:branch_vs_weight} and~\ref{sec:switch} are the controlled representation comparisons: the transport discretization, initial particles, reconstruction, and Brownian increments are shared, and only the reaction representation is changed.  Sections~\ref{sec:ks} and~\ref{sec:ks3d} then test the same particle-field machinery in two- and three-dimensional Keller--Segel concentration regimes.  The six-dimensional kinetic test is placed last, in Section~\ref{sec:kinetic_ks}, because its role is to show how the same reaction step transfers to a high-dimensional phase-space model once the field reconstruction is kept low-dimensional.
+
+Unless stated otherwise, errors are computed from the reconstructed physical field, $K$ denotes the Fourier bandwidth per spatial direction, and reported stochastic errors are averages over the stated seeds.  In all weighted-versus-branching comparisons the methods use common initial particles and common transport random numbers; therefore the comparison isolates the reaction representation rather than the transport noise.  The full run scripts, configurations, and reference CSV outputs are kept with the released code, while the paper reports only the diagnostics needed to support the claims.
+
+\subsection{Manufactured-solution verification}
+\label{sec:mms}
+
+We first use a smooth scalar problem for which the exact solution is known.  On $\mathbb T^2=[-\pi,\pi]^2$ we solve
+\begin{equation}
+\partial_t u=-\nabla\cdot(\mathbf b u)+D\Delta u+r(t,\mathbf x)u,
+\label{equ:mms_pde}
+\end{equation}
+with prescribed positive solution
+\begin{equation}
+ u_{\rm ex}(t,\mathbf x)=e^{\gamma t}\left(1+a_1\cos x_1+a_2\sin x_2+a_3\cos(x_1+x_2)\right).
+\label{equ:mms_exact}
+\end{equation}
+The reaction rate is obtained by substituting \eqref{equ:mms_exact} into \eqref{equ:mms_pde},
+\begin{equation}
+ r(t,\mathbf x)=\frac{\partial_t u_{\rm ex}+\nabla\cdot(\mathbf b u_{\rm ex})-D\Delta u_{\rm ex}}{u_{\rm ex}}.
+\label{equ:mms_r}
+\end{equation}
+We use $D=0.05$, $\mathbf b=(0.5,0.3)$, $\gamma=0.3$, $(a_1,a_2,a_3)=(0.2,0.15,0.1)$, and $T=0.5$.
+
+The particle-number refinement in Table~\ref{tab:mms_N} and Fig.~\ref{fig:mms} gives a fitted slope $-0.49$, matching the Monte-Carlo term $N^{-1/2}$ in the error decomposition.  At the largest tested $N$, the direct error against the exact solution is nearly flat as $\tau$ is refined, because the time-splitting error is below the sampling floor.  To expose that term, we use a lineage-coupled $(\tau,\tau/2)$ refinement and project the paired difference onto the deterministic splitting-bias field described in Appendix~B.  The projected branching difference scales as $\tau^{0.97}$, and the dominant Fourier modes in Table~\ref{tab:mms_modes} show the same first-order behavior.  Thus this test verifies both observable pieces of the fully discrete rate: the $N^{-1/2}$ sampling fluctuation and the first-order splitting contribution.
+
+\begin{table}[t]
+\centering
+\caption{Manufactured-solution particle-number study with $\tau=2.5\times10^{-3}$ and $K=8$.  Values are relative $L^2$ errors averaged over four seeds.}
+\label{tab:mms_N}
+\begin{tabular}{c c c c c c c}
+\toprule
+$N$ & $2\times10^3$ & $4\times10^3$ & $8\times10^3$ & $1.6\times10^4$ & $3.2\times10^4$ & $6.4\times10^4$ \\
+\midrule
+rel. $L^2$ error & 0.325 & 0.226 & 0.167 & 0.115 & 0.083 & 0.059 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.8\linewidth]{figure/mms_convergence.pdf}
+\caption{Manufactured-solution verification.  Left: relative $L^2$ error versus particle number $N$, with fitted slope $-0.49$.  Right: time-step refinement.  The total error against the exact solution is at the Monte-Carlo floor; the orange curve is the lineage-coupled branching difference projected onto the splitting-bias direction and shows first-order scaling.}
+\label{fig:mms}
+\end{figure}
+
+\begin{table}[t]
+\centering
+\caption{Mode-resolved convergence of the branching splitting bias.  For the dominant Fourier modes of the deterministic splitting-bias field $\varphi$, the spectral mean-field coefficient and the branching estimate both converge at first order in $\tau$.}
+\label{tab:mms_modes}
+\begin{tabular}{c c c}
+\toprule
+mode & spectral slope & branching slope \\
+\midrule
+$\sin x_1\sin x_2$ & 0.99 & 0.91 \\
+$\cos x_1\cos x_2$ & 1.00 & 0.94 \\
+$\cos x_1$ & 1.00 & 0.95 \\
+aggregate $(\|\varphi\|,\;P=\bar\rho\|\varphi\|)$ & 1.00 & 0.97 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Stationary localized growth: reaction representation at equal transport}
+\label{sec:branch_vs_weight}
+
+The next experiment is the main comparison between unequal weights and equal-weight branching.  We solve
+\begin{equation}
+\partial_t u=D\Delta u+r(\mathbf x)u,
+\qquad
+r(\mathbf x)=\lambda G(\mathbf x)-\beta,
+\qquad
+G(\mathbf x)=\exp\!\left(-\frac{|\mathbf x-\mathbf x_0|_{\mathbb T}^2}{2\sigma^2}\right),
+\label{equ:loc_growth}
+\end{equation}
+with $D=0.05$, $\lambda=8$, $\beta=1$, $\sigma=0.5$, $\mathbf x_0=0$, $u_0=1+G/2$, $T=1$, $\tau=2\times10^{-3}$, $K=16$, and $N_0=2\times10^4$.  The deterministic reference is a Fourier Strang split-step solution on a $256^2$ grid.  The diagnostic region is the fixed growth set $B=\{G\ge 0.5\}$.
+
+The raw weighted method develops exactly the degeneracy expected from localized multiplicative growth.  At $T=1$ its global normalized ESS is $0.021$, the maximum-to-mean weight ratio is $133$, and the relative $L^2$ error is $0.269\pm0.041$ (Table~\ref{tab:bw}).  Raising the global weighted population to $1.3\times10^5$ lowers the error but leaves the ESS and max-to-mean ratio essentially unchanged, showing that the failure is local weight concentration rather than only a small global sample size.  Equal-weight branching stores the same mass growth as particle count.  The Poisson kernel reduces the relative $L^2$ error to $0.062\pm0.035$, while the minimum-variance kernel gives $0.033\pm0.011$, consistent with its lower conditional offspring variance.
+
+The comparison with systematic resampling is reported by integrated particle-steps, $\sum_n N_{\rm act}(t_n)$, which is the hardware-independent work of a particle method.  At matched work $1.9\times10^7$ particle-steps, ESS-triggered systematic resampling gives error $0.047\pm0.012$, while minimum-variance branching gives $0.033\pm0.011$ (Table~\ref{tab:bw_cost}).  The resampling baseline reaches comparable accuracy only after increasing the work to $6.6\times10^7$ particle-steps.  Branching therefore provides the corrective effect of equalizing weights, but it does so locally through the reaction mechanism rather than through a global resampling schedule.
+
+The last row of Table~\ref{tab:bw} is the only population-controlled row in the main comparison.  It uses the same minimum-variance branching kernel with a cap $N_{\max}=4.0\times10^4$: after any reaction step that exceeds the cap, the active set is resampled down to $N_{\max}$ and a single common mass factor is updated to preserve total mass.  All particles remain equal-weight.  This bounded-memory variant is less accurate than uncapped minimum-variance branching but still far below the raw weighted error, which is the intended interpretation of the capped run.
+
+\begin{table}[t]
+\centering
+\caption{Localized-growth benchmark at $T=1$.  Weighted rows report nESS and max:mean weight as degeneracy diagnostics.  Branching rows have equal weights, so nESS is identically one and $N_{\rm act}$ is the active particle count.  The final row is a representative population-controlled minimum-variance run with cap $N_{\max}=4.0\times10^4$; the cap is an imposed upper bound, not the natural branching population.}
+\label{tab:bw}
+\begin{tabular}{l c c c c c c}
+\toprule
+method & $N_0$ & rel. $L^2$ error & global nESS & max:mean $w$ & $N_{\rm act}$ & peak-height error \\
+\midrule
+weighted & $2.0\times10^4$ & $0.269\pm0.041$ & 0.021 & 133 & $2.0\times10^4$ & 149 \\
+weighted & $6.0\times10^4$ & $0.151\pm0.021$ & 0.021 & 134 & $6.0\times10^4$ & $75\pm38$ \\
+weighted & $1.3\times10^5$ & $0.089\pm0.018$ & 0.021 & 141 & $1.3\times10^5$ & $31\pm8$ \\
+weighted + resample (ESS) & $2.0\times10^4$ & $0.073\pm0.033$ & 0.56 & 3.1 & $2.0\times10^4$ & $37\pm34$ \\
+weighted + resample (ESS) & $1.3\times10^5$ & $0.028\pm0.006$ & 0.56 & 3.1 & $1.3\times10^5$ & $8\pm5$ \\
+Poisson & $2.0\times10^4$ & $0.062\pm0.035$ & 1 (equal) & -- & $1.35\times10^5$ & 31 \\
+minimum-variance & $2.0\times10^4$ & $\mathbf{0.033\pm0.011}$ & 1 (equal) & -- & $1.32\times10^5$ & $\mathbf{12.7}$ \\
+min.-var. + pop. control ($N_{\max}=4.0\times10^4$) & $2.0\times10^4$ & $0.048\pm0.010$ & 1 (equal) & -- & $\le 4.0\times10^4$ & 17.4 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[t]
+\centering
+\caption{Cost--accuracy comparison in the localized-growth benchmark.  Cost is the integrated particle-step count $\sum_n N_{\rm act}(t_n)$.  At matched cost, minimum-variance branching is more accurate than the tested systematic-resampling baseline.}
+\label{tab:bw_cost}
+\begin{tabular}{l c c c}
+\toprule
+method & initial $N_0$ & particle-steps & rel. $L^2$ error \\
+\midrule
+weighted & $2.0\times10^4$ & $1.0\times10^7$ & $0.269\pm0.041$ \\
+weighted + resample (ESS) & $2.0\times10^4$ & $1.0\times10^7$ & $0.073\pm0.033$ \\
+weighted + resample (ESS) & $3.8\times10^4$ & $1.9\times10^7$ & $0.047\pm0.012$ \\
+weighted + resample (ESS) & $1.3\times10^5$ & $6.6\times10^7$ & $0.028\pm0.006$ \\
+minimum-variance branching & $2.0\times10^4\to1.3\times10^5$ & $\mathbf{1.9\times10^7}$ & $\mathbf{0.033\pm0.011}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figure/snapshots_final.pdf}
+\caption{Localized-growth benchmark at $T=1$.  All stochastic runs use the same initial particles and transport increments.  The weighted reconstruction under-resolves the peak, while both branching reconstructions track the deterministic reference.}
+\label{fig:bw_snap}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figure/ness_vs_t.pdf}
+\caption{Weight-degeneracy and local-resolution diagnostics.  The weighted method loses global and local effective sample size as large weights form in the growth region.  Equal-weight branching keeps nESS $=1$ and increases the local particle count.}
+\label{fig:bw_ess}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.52\linewidth]{figure/l2_vs_t.pdf}
+\caption{Relative $L^2$ error versus time in the localized-growth benchmark.  Branching gives lower error, with the minimum-variance kernel performing best.  The capped run tracks the uncapped minimum-variance curve with a modest loss from enforcing the population ceiling.}
+\label{fig:bw_l2}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.56\linewidth]{figure/boxplot_final_l2.pdf}
+\caption{Final-time relative $L^2$ error over eight seeds.  The seed spread is well separated between the weighted and branching methods, and the minimum-variance advantage is not a single-seed artifact.}
+\label{fig:bw_box}
+\end{figure}
+
+\subsection{Separated growth islands: global ESS is not a local degeneracy diagnostic}
+\label{sec:multi_island}
+
+The single-peak benchmark of Section~\ref{sec:branch_vs_weight} is favorable to a global trigger: with one growth region, a single global effective-sample-size (ESS) statistic and the resampling it triggers are aligned with the only place that matters.  The next experiment is designed to separate two diagnostics that this geometry conflates---the \emph{global} ESS of the ensemble and the \emph{local} resolution of each growth region.  On $\mathbb T^2=[-\pi,\pi]^2$ we solve
+\begin{equation}
+\partial_t u=D\Delta u+r(\mathbf x)u,\quad r(\mathbf x)=\lambda\,G_{\rm multi}(\mathbf x)-\beta,\quad G_{\rm multi}(\mathbf x)=\sum_{m=1}^{M}a_m\exp\!\Bigl(-\frac{d_{\mathbb T}(\mathbf x,\mathbf c_m)^2}{2\sigma^2}\Bigr),
+\label{equ:multi_island}
+\end{equation}
+with $M=16$ separated Gaussian islands on a $4\times4$ grid, mildly varying amplitudes $a_m=1+\tfrac14\sin(2\pi m/M)$, and $\sigma=0.16$, $D=0.01$, $\lambda=12$, $\beta=0.8$, $u_0\equiv1$, $T=0.8$, $\tau=10^{-3}$, $N_0=2\times10^4$, over eight seeds.  The deterministic reference is a Fourier Strang split-step on a $512^2$ grid (the island masses are converged to $0.2\%$ against a $1024^2$ reference).  The diagnostic regions are the disjoint half-height disks of the unit-amplitude island, $B_m=\{\mathbf x:\exp(-d_{\mathbb T}(\mathbf x,\mathbf c_m)^2/2\sigma^2)\ge\tfrac12\}$, and the centers are kept off the periodic seam.  The amplitude spread induces a $52\times$ spread in reference island mass at $T$, so the strong islands dominate the total mass while the weak islands hold a small fraction of it---precisely the regime in which a global weight statistic is uninformative about the weak islands.
+
+The central diagnostic is the per-island mass error
+\begin{equation}
+E_m=\frac{\bigl|\mu_T(B_m)-\int_{B_m}u_{\rm ref}(T,\mathbf x)\,d\mathbf x\bigr|}{\int_{B_m}u_{\rm ref}(T,\mathbf x)\,d\mathbf x},
+\label{equ:Em}
+\end{equation}
+computed directly from the particles (no field reconstruction), together with the local effective sample size $N_{\rm eff}(B_m)=(\sum_{i:X_i\in B_m}w_i)^2/\sum_{i:X_i\in B_m}w_i^2$ for weighted ensembles and the local count $N_B(B_m)=\#\{i:X_i\in B_m\}$ for branching.
+
+The result separates the two diagnostics as intended (Table~\ref{tab:multi_island}, Figs.~\ref{fig:mi_fields}--\ref{fig:mi_zoom}).  Global ESS-triggered systematic resampling restores a healthy \emph{global} ESS, $0.76$, well above the $0.5$ trigger, and a moderate global $L^2$ of $0.25$, yet it still leaves about three of the sixteen islands with $E_m>20\%$ and a worst-island error above $40\%$: resampling draws particles in proportion to the global weight, so it concentrates lineages on the strong islands and starves the weak ones, whose local effective sample size drops to about a hundred particles.  Raw weighted particles are worse still, with a catastrophic global ESS ($\approx0.006$), a max-to-mean weight ratio in the hundreds, and a minimum island-local count near ten.  Equal-weight branching instead converts the growth of \emph{each} island into local particle count: its minimum local count over the sixteen islands is several thousand---one to nearly three orders of magnitude above the weighted methods---so every island, including the weakest, is resolved, and its global $L^2$ ($0.23$--$0.26$) is comparable to the resampled ensemble while requiring no resampling schedule.  Branching relies on no global trigger; the same reaction multiplier that creates mass creates particles at the location of growth.  Its per-island \emph{mass}, however, inherits the variance of a supercritical branching process seeded by the few ancestors initially present in each island, so at this $N_0$ its mean and maximum per-island errors are comparable to the resampled ensemble even though its local resolution never collapses; this is the expected $N_0^{-1/2}$ behavior in the number of local ancestors and is reduced at larger $N_0$.  The conclusion is therefore not that branching minimizes every error column, but that the diagnostic which exposes the failure is local---per-island mass and local effective count---and that a single global ESS, kept healthy by resampling, hides the under-resolution of the weak islands that branching avoids by construction.
+
+\begin{table}[t]
+\centering
+\caption{Separated-growth-island benchmark at $T=0.8$ ($M=16$, eight seeds).  Global $L^2$ and global nESS do not diagnose whether every island is represented.  The island error is~\eqref{equ:Em} with $B_m=\{G_\sigma(\mathbf x;\mathbf c_m)\ge\tfrac12\}$; the columns report the mean and maximum island error (averaged over seeds), the mean number of island errors above $20\%$, and the minimum local effective sample size over the sixteen islands.  Resampling uses the global-nESS trigger $0.5$.}
+\label{tab:multi_island}
+\begin{tabular}{l c c c c c c c}
+\toprule
+method & global $L^2$ & global nESS & max:mean $w$ & $\overline{E_m}$ & $\max_m E_m$ & $\#\{E_m{>}20\%\}$ & $\min_m N_{\rm eff}(B_m)$ \\
+\midrule
+weighted & 1.48 & 0.007 & 610 & 0.185 & 0.470 & 6.1/16 & 10 \\
+weighted + resample (ESS) & 0.246 & 0.755 & 2.4 & $\mathbf{0.141}$ & 0.408 & 3.4/16 & 115 \\
+Poisson branching & $\mathbf{0.231}$ & 1 (equal) & -- & 0.169 & 0.469 & 5.1/16 & 4420 \\
+minimum-variance branching & 0.260 & 1 (equal) & -- & 0.183 & 0.476 & 5.5/16 & $\mathbf{4739}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figure/mi_fields.pdf}
+\caption{Separated-growth-island benchmark at $T=0.8$: final fields (shared color scale, island centers marked).  The raw weighted reconstruction is corrupted by a few large weights; weighted-plus-resampling and minimum-variance branching both recover the island structure, but the per-island accuracy differs (Fig.~\ref{fig:mi_heat}).}
+\label{fig:mi_fields}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figure/mi_island_heatmap.pdf}
+\caption{Seed-mean per-island mass error $E_m$ on the $4\times4$ island grid (shared $0$--$50\%$ scale, $20\%$ contour).  The annotation under each panel is the per-seed number of island failures averaged over seeds, $\langle\#\{E_m>20\%\}\rangle$, as in Table~\ref{tab:multi_island}; note that the seed-\emph{averaged} field smooths out failures that occur at different islands in different seeds, so the per-run failure count is larger than the count of persistently failed islands.  Raw weighted particles fail many islands; resampling reduces but does not eliminate the per-run failures despite a healthy global ESS; branching keeps the local particle count high in every island.}
+\label{fig:mi_heat}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figure/mi_degeneracy_timeseries.pdf}
+\caption{Global versus local degeneracy in time.  The global nESS of the resampled ensemble stays above the $0.5$ trigger, while the minimum island-local effective count of the weighted methods falls to a few tens; equal-weight branching keeps the minimum island-local count orders of magnitude higher, and its maximum island mass error is the smallest.}
+\label{fig:mi_ess}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figure/mi_zoom_worst_island.pdf}
+\caption{Magnified comparison around the island with the largest weighted-plus-resampling error (selected by $\arg\max_m E_m$, not by eye).  The reference and branching agree on the island; the globally resampled ensemble under-resolves it.}
+\label{fig:mi_zoom}
+\end{figure}
+
+\subsection{Switching growth: lineage diversity under a moving source}
+\label{sec:switch}
+
+A fixed growth region is favorable to global resampling because the important region never moves.  We therefore repeat the representation comparison with a growth region that switches from $\mathbf x_A=(-1.2,0)$ to $\mathbf x_B=(1.2,0)$ at mid-time:
+\begin{equation}
+\partial_tu=D\Delta u+r(t,\mathbf x)u,
+\qquad
+r(t,\mathbf x)=\lambda\bigl[(1-s(t))G_\sigma(\mathbf x;\mathbf x_A)+s(t)G_\sigma(\mathbf x;\mathbf x_B)\bigr]-\beta,
+\qquad
+s(t)=\frac12\left(1+\tanh\frac{t-T/2}{\delta}\right).
+\label{equ:switch}
+\end{equation}
+Here $u_0\equiv1$, $D=0.02$, $\lambda=10$, $\beta=0.1$, $\sigma=0.25$, $T=1.2$, $\delta=0.04$, $\tau=10^{-3}$, $K=48$, and $N_0=2\times10^4$.  The reference is a deterministic Fourier split-step computation on a $512^2$ grid.  The code also tracks the ancestor label of each particle, so the number of distinct surviving ancestors at the switch can be measured.
+
+The second-stage region $B_B$ is the discriminating diagnostic.  As shown in Table~\ref{tab:switch}, both branching kernels outperform the tested global resampling baselines globally and in $B_B$.  ESS-triggered resampling is best only in the first-stage region $B_A$, where it has concentrated the fixed particle budget before the switch.  By $t=T/2^-$, global resampling has reduced the number of distinct surviving ancestors to $63$--$68\%$ of $N_0$, while branching retains about $95\%$ and has grown the active population to $4.2\times10^4$.  Thus the failure mode in this test is not only weight variance; it is loss of future-growth lineages.
+
+\begin{table}[t]
+\centering
+\caption{Switching-growth benchmark at $T=1.2$ (eight seeds): relative $L^2$ errors globally and in the first- and second-stage regions, active particle count, and fraction of distinct surviving ancestors at the switch.}
+\label{tab:switch}
+\begin{tabular}{l c c c c c}
+\toprule
+method & global $L^2$ & $B_A$ $L^2$ & $B_B$ $L^2$ & $N_{\rm act}$ & distinct anc. at switch \\
+\midrule
+weighted & $0.900\pm0.048$ & $1.014\pm0.120$ & $0.690\pm0.039$ & $2.0\times10^4$ & 100\% \\
+weighted + resample (ESS) & $0.288\pm0.025$ & $\mathbf{0.162\pm0.027}$ & $0.297\pm0.038$ & $2.0\times10^4$ & 68\% \\
+weighted + resample (every step) & $0.271\pm0.062$ & $0.234\pm0.087$ & $0.226\pm0.107$ & $2.0\times10^4$ & 63\% \\
+Poisson branching & $\mathbf{0.199\pm0.045}$ & $0.183\pm0.063$ & $\mathbf{0.168\pm0.067}$ & $4.2\times10^4$ & 95\% \\
+minimum-variance branching & $0.203\pm0.051$ & $0.170\pm0.136$ & $0.174\pm0.022$ & $4.2\times10^4$ & 95\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figure/switch_snapshots.pdf}
+\caption{Switching-growth benchmark at $T=1.2$, after growth has moved from $\mathbf x_A$ to $\mathbf x_B$.  The weighted reconstruction is dominated by a few large weights; systematic resampling and minimum-variance branching both recover smoother fields, with the smallest second-stage error obtained by branching.}
+\label{fig:switch}
+\end{figure}
+
+\subsection{Two-dimensional Keller--Segel: coupled solver and pre-singular concentration}
+\label{sec:ks}
+
+We next move to Keller--Segel dynamics in physical dimension two.  These experiments test the particle-field coupling and the behavior of the mesh-free representation in concentration-dominated regimes.  They are deliberately interpreted as pre-singular concentration tests, not as convergence through blow-up, because the Fourier reconstruction is bandwidth-limited while the continuum Keller--Segel dynamics may approach singular measures in two dimensions~\cite{herrero1997blow,perthame2007transport,giga2011asymptotic,souplet2019blow,filbet2006finite,chertock2008second,chertock2018high,shen2020unconditionally,chen2022error,liu2018positivity,zhong2024direct,li2017local,epshteyn2009new,epshteyn2019efficient,strehl2013positivity}.
+
+\paragraph{Coupled parabolic--parabolic implementation check.}
+We first solve
+\begin{equation}
+ u_t-\nabla\cdot(\nabla u-u\nabla v)=0,
+ \qquad
+ v_t-\Delta v=u-v,
+ \qquad \mathbf x\in[0,2\pi]^2,
+\label{equ:case1}
+\end{equation}
+with periodic boundary conditions and initial data $u_0(\mathbf x)=\sin^2(x_1)\cos^2(x_2)$ and $v_0(\mathbf x)=\cos x_1+\cos x_2+2$.  Since the cell equation is conservative, $\int u(t,x)dx=\pi^2$, and the chemical mass satisfies
+\[
+M_v'(t)=-M_v(t)+\pi^2,
+\qquad
+M_v(t)=\pi^2+[M_v(0)-\pi^2]e^{-t}.
+\]
+The chemical source $u-v$ is realized by the cross-species injection kernel of Section~\ref{sec:injection} and Eq.~\eqref{equ:injection}, not by a multiplicative rate on chemical particles: each transported chemical particle survives with probability $e^{-\tau}$ and each transported cell particle injects a new chemical particle at its position with mean $(1-e^{-\tau})\omega_u/\omega_v$.  Figure~\ref{fig:total_mass} shows that the computed chemical mass follows the balance identity to sampling accuracy (maximum relative error of $M_v(t)$ against the exact law below $1.4\%$ over the run, with the cell mass conserved exactly).  Figures~\ref{fig:fd_comparison_u}--\ref{fig:fd_comparison_v} compare the particle fields with a finite-difference reference, and Fig.~\ref{fig:convergence_error} shows the expected $N^{-1/2}$ trend against a high-particle reference.  This is an implementation check for the coupled transport, the injection reaction, and the field reconstruction, not the main branching comparison.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.8\linewidth]{figure/total_mass.pdf}
+\caption{Mass-balance test for the conservative Keller--Segel system.  The chemical mass follows the exact balance law to sampling accuracy.}
+\label{fig:total_mass}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{figure/case1_u.pdf}
+\caption{Conservative Keller--Segel test: comparison of the cell field $u$ from the particle method and from a finite-difference reference.}
+\label{fig:fd_comparison_u}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{figure/case1_v.pdf}
+\caption{Conservative Keller--Segel test: comparison of the chemical field $v$ from the particle method and from a finite-difference reference.}
+\label{fig:fd_comparison_v}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.8\linewidth]{figure/case1_err.pdf}
+\caption{Relative $L^2$ error of $u$ and $v$ versus initial particle count.  The reference solution uses $N_0=320{,}000$, and both fields show the expected sampling trend.}
+\label{fig:convergence_error}
+\end{figure}
+
+\paragraph{Supercritical concentration.}
+We then use the concentrated Gaussian data
+\[
+ u_0(\mathbf x)=840\exp[-84(x_1^2+x_2^2)],
+ \qquad
+ v_0(\mathbf x)=420\exp[-42(x_1^2+x_2^2)],
+\]
+whose cell mass is $10\pi$, above the two-dimensional critical mass $8\pi$.  This profile is a standard test in grid-based Keller--Segel studies, including LDG and finite-volume methods~\cite{li2017local,epshteyn2009new,chertock2008second}.  We use it to ask whether the particle cloud tracks the concentrating region without an externally imposed adaptive mesh.  Figures~\ref{fig:case2_u} and~\ref{fig:comparison} show rapid peak formation and compare the particle reconstruction with uniform-grid finite-difference solutions.  The finite-difference peak sharpens with mesh refinement, while the particle reconstruction is stable over the tested particle counts.  This comparison is qualitative; specialized positivity-preserving adaptive grid methods remain the reference for resolving the singular limit.
+
+Rather than fit a blow-up time, we report grid-free concentration diagnostics in Fig.~\ref{fig:ks_concentration_diag}.  The second moment about the cell centroid decreases by about a factor of six, and the local particle count in a fixed ball of radius $0.05$ grows by about $4.5$ times.  The curves overlap for $N=4\times10^4$, $1.6\times10^5$, and $6.4\times10^5$, indicating that the observed concentration is not a sampling artifact.
+
+\begin{figure}
+\centering
+\includegraphics[width=0.8\linewidth]{figure/case2_u.pdf}
+\caption{Pre-singular concentration test: particle approximation of $u$ at early times.  The cell density concentrates rapidly while remaining stable over the tested particle counts.}
+\label{fig:case2_u}
+\end{figure}
+
+\begin{figure}
+\centering
+\includegraphics[width=0.85\linewidth]{figure/comparison.pdf}
+\caption{Pre-singular concentration test at $t=5\times10^{-5}$: particle approximation compared with finite-difference approximations on three uniform grids.  The particle peak is stable across particle counts; the uniform-grid solution sharpens with mesh refinement.}
+\label{fig:comparison}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figure/ks_concentration_diag.pdf}
+\caption{Grid-free concentration diagnostics.  Left: the second moment of the cell cloud decreases by about a factor of six.  Right: the local particle count in a fixed ball of radius $0.05$ about the centroid grows by about $4.5\times$.  These diagnostics measure approach toward concentration, not a blow-up time.}
+\label{fig:ks_concentration_diag}
+\end{figure}
+
+\paragraph{Core-local resolution diagnostics.}
+For a more resolution-sensitive diagnostic, we also run the parabolic--elliptic reduction $-\Delta v+v=u$ on a core-adaptive Fourier window, using the same concentrated initial profile.  We track the reconstructed peak $P_{K,N}(t)=\|P_K\mu_t^N\|_\infty$, the reconstructed norm $S_{K,N}(t)=\|P_K\mu_t^N\|_{L^2}$, and reconstruction-free core radii $R_q(t)$.  Snapshots are recorded at $t=5\times10^{-5}$, $10^{-4}$, $1.5\times10^{-4}$, $5\times10^{-4}$, $10^{-3}$, $2\times10^{-3}$, and $4\times10^{-3}$.
+
+Figures~\ref{fig:ldg_snapshots}--\ref{fig:ldg_curves} show that the inner half-mass radius decreases from about $0.091$ to about $0.06$ by $t=4\times10^{-3}$.  The reconstructed peak grows with bandwidth, approximately $1.7\times10^3$ for $K=5$ and $2.8\times10^3$ for $K=10$, so the peak itself is not treated as a converged blow-up diagnostic.  To quantify the onset of under-resolution we report
+\[
+ t_{\rm gap}(N,K)=\inf\{t:S_{2K,4N}(t)/S_{K,N}(t)\ge\theta\}.
+\]
+Table~\ref{tab:ldg_tgap} should be read exactly as this definition states: it marks when the reconstructed $L^2$ norm becomes sensitive to resolution, not when the PDE blows up.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figure/ldg_snapshots.pdf}
+\caption{Core-adaptive parabolic--elliptic Keller--Segel diagnostics: reconstructed contours of $u$ over the reporting times.  The field sharpens into a concentrating peak, consistent with the grid-based concentration literature.}
+\label{fig:ldg_snapshots}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figure/ldg_curves.pdf}
+\caption{Resolution diagnostics for the refined $(N,K)=(6.4\times10^5,10)$ run: reconstructed $L^2$ norm, reconstructed peak, and squared core radii.  The core radius collapse is reconstruction-free; the peak remains bandwidth-sensitive.}
+\label{fig:ldg_curves}
+\end{figure}
+
+\begin{table}[t]
+\centering
+\caption{Resolution-gap focusing indicator $t_{\rm gap}(N,K)=\inf\{t:S_{2K,4N}(t)/S_{K,N}(t)\ge\theta\}$ for two refinement pairs.  The indicator marks the onset of under-resolution, not a blow-up time.}
+\label{tab:ldg_tgap}
+\begin{tabular}{c c c c c}
+\toprule
+base $(N,K)$ & refined $(4N,2K)$ & $t_{\rm gap}(\theta=1.05)$ & $t_{\rm gap}(\theta=1.10)$ & $\max_t S_{2K,4N}/S_{K,N}$ \\
+\midrule
+$(4\times10^4,5)$ & $(1.6\times10^5,10)$ & $3.0\times10^{-3}$ & -- & 1.08 \\
+$(1.6\times10^5,5)$ & $(6.4\times10^5,10)$ & $2.5\times10^{-3}$ & $3.8\times10^{-3}$ & 1.11 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{LDG-aligned parabolic--parabolic comparison.}
+To align the concentration test with the local discontinuous Galerkin (LDG) study of Li, Shu, and Yang~\cite{li2017local}, we repeat it for the \emph{full} parabolic--parabolic system~\eqref{equ:case1}, with the dynamic chemical carried by its own particle cloud and produced by the injection kernel of Section~\ref{sec:injection}, using the same concentrated initial condition $u_0=840\exp[-84|\mathbf x|^2]$, $v_0=420\exp[-42|\mathbf x|^2]$ and the same reporting times $t=6\times10^{-5},\,1.2\times10^{-4},\,2.0\times10^{-4}$ as that study.  This is a particle-field, resolution-diagnostic comparison, not a claim of singular blow-up-time convergence: our periodic, core-adaptive Fourier reconstruction differs from the homogeneous-Neumann LDG discretization, but over these very short reporting times the Gaussian core remains far from the window boundary, so the boundary mismatch is negligible.  The cell mass is conserved exactly and the chemical mass follows the injection balance $M_v(t)=M_u(0)+[M_v(0)-M_u(0)]e^{-t}$ to a maximum relative error below $10^{-4}$.  A base run $(N,K)=(2\times10^4,5)$ and a refined run $(8\times10^4,10)$ give a resolution-gap focusing time $t_{\rm gap}(\theta=1.05)\approx8\times10^{-6}$ and $t_{\rm gap}(\theta=1.10)\approx1.2\times10^{-5}$, so the gap opens before the first reported snapshot, consistent with the strongly supercritical mass; as in the parabolic--elliptic case the reconstruction-free core radii $R_{0.5},R_{0.8}$ collapse and stabilize while the reconstructed peak keeps rising with bandwidth and is treated as bandwidth-sensitive.
+
+\subsection{Local reconstruction diagnostics: spectrum for the background, residuals for the core}
+\label{sec:hybrid_recon}
+
+The branching mechanism adapts the particle measure, but reconstructing a concentrating measure is a separate approximation problem.  The concentration tests above already show its signature: the reconstruction-free core radius is stable while the reconstructed peak and $L^2$ norm remain bandwidth-sensitive.  A uniform increase of the global Fourier bandwidth is inefficient---it spends degrees of freedom over the whole domain, while the bandwidth sensitivity is localized near the particle core or growth islands.  We therefore test two diagnostic reconstructions on \emph{saved} particle snapshots, with the local window inferred from the particle cloud (weighted centroid and quantile radii), not from the reference field.  The first keeps a low global spectrum $P_{K_g}\mu$ and adds, only inside the detected window and only as a residual over that global low field, either a high-resolution local spectral window or a local Gaussian blob.  The second view retains the residual particles that the global spectrum fails to explain, with an explicit acceptance probability and a Horvitz--Thompson correction; the resulting accept rate is an objective indicator of where reconstruction resolution is needed, and it is an enrichment rate, not a particle-dynamics resampling step.
+
+On a concentrated Keller--Segel core---an exact Gaussian profile of mass $10\pi$ and width $a=84$, for which the peak, $L^2$ norm, and radii are known analytically---a global bandwidth $K_g=8$ under-resolves the peak by $13\%$, while a global $K=40$ reconstruction and the hybrid local-window reconstruction both recover it to about $1\%$; the hybrid keeps the \emph{global} bandwidth at $K_g=8$ and spends the high resolution only on the particle-detected window.  The half-mass and $80\%$ core radii are reconstruction-free and match the analytic values to three digits.  On the separated growth islands, reconstructing the island mass by integrating a low-$K$ global Fourier field over $B_m$ is catastrophic for the sharp islands---$E_m$ approaches unity because the low-$K$ field smears each island far beyond $B_m$---whereas particle counting is reconstruction-free and accurate, and a local spectral window recovers counting accuracy.  These diagnostics are not a new adaptive solver; they separate two forms of adaptivity---branching adapts the measure where mass is created, while local reconstruction adapts the field representation where the particle cloud indicates unresolved concentration---and they suggest that a hybrid Monte Carlo / deterministic-function-approximation strategy is the natural scalable direction, whose analysis is beyond the scope of this paper.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figure/hybrid_reconstruction.pdf}
+\caption{Local reconstruction diagnostics on a concentrated Keller--Segel core.  Panels: global low-$K_g$ reconstruction; the hybrid reconstruction (low global spectrum plus a local spectral window); the core line profile (low-$K$, high-$K$, hybrid, and exact); retained residual particles in the particle-detected window; and the reconstruction cost (global modes) versus the reconstructed-peak error.  The hybrid recovers the high-$K$ core accuracy while keeping the global bandwidth low.}
+\label{fig:hybrid_recon}
+\end{figure}
+
+\subsection{Three-dimensional Keller--Segel focusing}
+\label{sec:ks3d}
+
+The three-dimensional Keller--Segel experiment is a conservative particle-field focusing test.  It exercises the mesh-free transport and the three-dimensional screened-Poisson field solve, but it is not used to claim a universal critical mass or a singular blow-up time.  On $[-L/2,L/2]^3$ with $L=12$, we solve
+\begin{equation}
+\partial_t\rho=\Delta\rho-\chi\nabla\cdot(\rho\nabla c),
+\qquad
+-\Delta c+\kappa^2c=\rho-\bar\rho,
+\qquad
+\chi=1,
+\qquad
+\kappa=0.1 .
+\label{equ:ks3d}
+\end{equation}
+The particle dynamics are $dX=\chi\nabla c\,dt+\sqrt{2}\,dW$, and $c$ is reconstructed by a three-dimensional spectral screened-Poisson solve with zero mean.  Unless otherwise stated, $\tau=5\times10^{-4}$, $T=1$, and the field bandwidth is $H=16$.
+
+We first sweep the radial Gaussian family
+\[
+ \rho_0^M(\mathbf x)=M(2\pi\sigma^2)^{-3/2}\exp[-|\mathbf x|^2/(2\sigma^2)],
+ \qquad
+ \sigma=0.45,
+ \qquad
+ M\in\{20,40,60,80,100\}.
+\]
+The low-mass cases disperse, while the higher-mass cases focus.  The final half-mass radius is $2.07$ for $M=20$ and $1.71$ for $M=40$, but about $0.103$, $0.084$, and $0.074$ for $M=60$, $80$, and $100$, respectively (Fig.~\ref{fig:ks3d_core_radii}).  Thus the transition in this family lies between $M=40$ and $M=60$.  The core-density surrogate in Fig.~\ref{fig:ks3d_rho_core} grows rapidly for the focusing cases, but its absolute value is bandwidth- and time-step-sensitive and should be read only as a focusing indicator.
+
+At $M=80$, the half-mass radius is stable under particle-number refinement: $N=10^5$, $2\times10^5$, and $4\times10^5$ all give $R_{0.5}\approx0.084$ at final time (Fig.~\ref{fig:ks3d_selfconv}).  The reconstructed peak still grows with bandwidth, so the radius is the reliable diagnostic here.  A nonradial four-cluster datum at the vertices of a tetrahedron gives the expected mutual attraction: the minimum inter-cluster distance decreases from $2.83$ to $2.12$ over $[0,1]$ (Fig.~\ref{fig:ks3d_tetra}).
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figure/ks3d_core_radii.pdf}
+\caption{Three-dimensional Keller--Segel focusing.  Core radii $R_{0.5}$ and $R_{0.9}$ for the radial mass sweep.  Low masses disperse, while higher masses focus, with a transition between $M=40$ and $M=60$ for this family.}
+\label{fig:ks3d_core_radii}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.8\linewidth]{figure/ks3d_rho_core.pdf}
+\caption{Core-density surrogate for the three-dimensional mass sweep.  Absolute peak values are bandwidth- and time-step-limited and are used only as qualitative focusing indicators.}
+\label{fig:ks3d_rho_core}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figure/ks3d_selfconv.pdf}
+\caption{Self-convergence at $M=80$.  The core radius is stable under particle-number refinement, while the reconstructed peak still grows with bandwidth $H$.}
+\label{fig:ks3d_selfconv}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.8\linewidth]{figure/ks3d_tetra.pdf}
+\caption{Nonradial four-cluster datum at the vertices of a tetrahedron.  The cluster centroids mutually attract, and the minimum inter-cluster distance decreases from $2.83$ to $2.12$.}
+\label{fig:ks3d_tetra}
+\end{figure}
+
+\subsection{Six-dimensional field-coupled kinetic Keller--Segel}
+\label{sec:kinetic_ks}
+
+After the two- and three-dimensional Keller--Segel tests, we turn to a phase-space problem.  The purpose is not to assemble or converge a dense six-dimensional density.  Instead, the test shows that the reaction step is unchanged in six-dimensional phase space when the nonlocal field depends only on the three-dimensional spatial marginal.  Let $(\mathbf x,\mathbf v)\in\mathbb T^3\times\mathbb R^3$ and $\rho(t,\mathbf x)=\int f(t,\mathbf x,\mathbf v)\,d\mathbf v$.  The chemical field solves
+\begin{equation}
+ -\Delta_{\mathbf x}c+\kappa^2c=\rho-\bar\rho,
+ \qquad
+ \bar\rho=|\mathbb T^3|^{-1}\int_{\mathbb T^3}\rho\,d\mathbf x,
+\label{equ:kinetic_ks_poisson}
+\end{equation}
+with zero mean, and the kinetic equation is
+\begin{equation}
+\partial_t f+\mathbf v\cdot\nabla_{\mathbf x}f
+=\gamma_v\nabla_{\mathbf v}\cdot\bigl[(\mathbf v-\chi\nabla_{\mathbf x}c)f\bigr]
++D_v\Delta_{\mathbf v}f
++r[\rho,c](\mathbf x)f .
+\label{equ:kinetic_ks}
+\end{equation}
+The associated particle dynamics are
+\begin{equation}
+ d\mathbf X=\mathbf V\,dt,
+ \qquad
+ d\mathbf V=-\gamma_v(\mathbf V-\chi\nabla_{\mathbf x}c)\,dt+\sqrt{2D_v}\,d\mathbf W,
+\label{equ:kinetic_ks_sde}
+\end{equation}
+with an exact Ornstein--Uhlenbeck velocity update over one step.  The reaction rate is
+\begin{equation}
+ r[\rho,c]=\lambda_g S_c(c)-\alpha_\rho S_\rho(\rho)-\beta,
+ \qquad
+ S_c(c)=\frac12\left(1+\tanh\frac{c-c_0}{\delta_c}\right),
+ \qquad
+ S_\rho(\rho)=\frac{\rho_+}{\rho_+ + \rho_0}.
+\label{equ:kinetic_ks_rate}
+\end{equation}
+Only $\rho(\mathbf x)$ and $c(\mathbf x)$ are reconstructed, using spatial bandwidth $K_x=5$; no six-dimensional tensor grid is used.
+
+The parameters are $\gamma_v=3$, $D_v=0.6$, $\chi=3$, $\kappa=0.5$, $\lambda_g=4$, $\alpha_\rho=3$, $\beta=0.4$, $c_0=0.05$, $\delta_c=0.05$, $\rho_0=0.2$, $T=2$, $\tau=2\times10^{-3}$, and $N_0=1.2\times10^4$.  The initial distribution is a single Gaussian blob in space with Maxwellian velocities at temperature $D_v/\gamma_v=0.2$.
+
+The cloud focuses and grows in a bounded manner.  The half-mass radius decreases from $0.768$ to about $0.575$, the reconstructed $\|\rho\|_\infty$ increases from $0.46$ to about $11.8$, and the total mass grows by roughly a factor of eight (Fig.~\ref{fig:kinetic_ks_field}).  The reaction is genuinely field-coupled: the rate is positively correlated with $c$ and $\rho$ during activation and becomes anti-correlated at late times when the crowding term dominates (Fig.~\ref{fig:kinetic_ks_coupling}).  Global observables are similar across reaction representations, so this is not a global-accuracy benchmark.  The discriminating quantity is local resolution: the weighted method ends with nESS $0.66$ and max-to-mean weight $6.5$, whereas branching keeps equal weights and grows the active population to about $9.5\times10^4$.  In the concentration region, weighted particles provide a local effective count of about $3.3\times10^3$, while branching supplies about $2.0\times10^4$ equal-weight particles (Table~\ref{tab:kinetic_ks} and Fig.~\ref{fig:kinetic_ks_repr}).
+
+\begin{table}[t]
+\centering
+\caption{Six-dimensional field-coupled kinetic Keller--Segel test at $T=2$ (two-seed representation demonstration).  For the weighted method, nESS and max:mean weight measure degeneracy and local $N_B$ is local effective sample size; for branching, all weights are equal and local $N_B$ is local particle count.}
+\label{tab:kinetic_ks}
+\begin{tabular}{l c c c c}
+\toprule
+method & final nESS & max:mean $w$ & $N_{\rm act}$ & local $N_B$ \\
+\midrule
+weighted & 0.66 & 6.5 & $1.2\times10^4$ & $3.3\times10^3$ \\
+equal-weight branching & 1 (equal) & -- & $9.5\times10^4$ & $2.0\times10^4$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figure/kinetic_ks_field.pdf}
+\caption{Six-dimensional field-coupled kinetic Keller--Segel test.  Total mass, $\|c\|_\infty$, $\|\rho\|_\infty$, and spatial-marginal core radii versus time.  The cloud concentrates while the mass grows in a bounded, self-limited manner.}
+\label{fig:kinetic_ks_field}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figure/kinetic_ks_repr.pdf}
+\caption{Representation diagnostics for the kinetic test.  Weighted particles develop moderate degeneracy; branching keeps nESS $=1$ and supplies roughly sixfold more local resolution in the concentration region.}
+\label{fig:kinetic_ks_repr}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figure/kinetic_ks_coupling.pdf}
+\caption{Field coupling of the reaction in the kinetic test: correlations of the per-particle rate with $c$ and $\rho$, and the mean activation $\langle S_c\rangle$.  The sign change of the correlations reflects the transition from chemical activation to crowding-limited growth.}
+\label{fig:kinetic_ks_coupling}
+\end{figure}
+
+The dense four- and six-dimensional reconstruction experiment is therefore moved out of the main numerical story and kept as Appendix~\ref{app:highdim}.  It shows that dense Fourier reconstruction has the expected $N^{-1/2}$ sampling slope at fixed bandwidth, but that its constant grows rapidly with the number of modes.  This is precisely why the kinetic experiment reconstructs only low-dimensional fields and why high-dimensional extensions should use marginal, adaptive, or low-rank reconstructions rather than dense tensor-product grids.
+\section{Discussion and conclusions}
+\label{sec:discussion}
+We have developed an equal-weight stochastic branching particle method for non-conservative
+transport--reaction--diffusion equations. The evolution is split into an SDE transport step and a particle-level
+reaction step, and the central observation is that the reaction term can be represented in two qualitatively
+different ways: as a growing scalar weight, or as a growing integer particle count. The weighted update is exact
+in expectation but lets the local effective sample size collapse where mass is created; equal-weight branching
+instead converts mass creation into particle creation, so the local resolution increases exactly where it is
+needed. We placed the weighted update and two branching kernels -- a Poisson birth--death kernel and a
+minimum-variance integer kernel -- in a common framework, showed that all three are unbiased for the reaction
+multiplier while differing in conditional variance (Proposition~\ref{prop:stochastic_branch}), and gave a short
+error decomposition into Monte-Carlo, time-splitting, and reconstruction contributions
+(Theorem~\ref{thm:abstract_error} proves the continuous-time Monte-Carlo and reconstruction rates, with proofs
+in~\ref{app:convergence}; the time-splitting term is treated in a companion paper).
+
+The numerical study supports a measured set of conclusions, in the order of the experiments.  First, the
+manufactured-solution test confirms the Monte-Carlo $N^{-1/2}$ rate cleanly and exposes the first-order
+time-splitting term through a lineage-coupled refinement; on this smooth benchmark the reconstruction term lies
+below the Monte-Carlo floor.  Second, the controlled stationary localized-growth comparison isolates the effect of
+the reaction representation and shows, under shared transport and randomness, that branching maintains the local
+effective sample size and local particle count where the raw weighted scheme degenerates, that adding global
+particles does not cure the local degeneracy, and that branching is more accurate than the tested global
+systematic-resampling baseline at equal integrated particle-step work, with no resampling schedule to tune.
+Third, the switching-growth test exhibits a structural failure mode of global resampling: collapsing lineage
+diversity onto the first-stage region leaves it unable to rebuild the second-stage region, so the discriminating
+quantity is lineage diversity rather than weight variance alone.  Fourth, a six-dimensional, field-coupled
+kinetic Keller--Segel model -- nonlinear and nonlocal through a self-consistent chemical field, yet requiring only
+a three-dimensional field solve -- shows that the branching step transfers unchanged to high-dimensional phase
+space without assembling a dense grid; this is a nonlinear high-dimensional representation test, not a full
+convergence study of the six-dimensional density.  Finally, Keller--Segel serves as a concentration-dominated
+stress test in which the mesh-free representation tracks the pre-blow-up concentration without externally imposed
+mesh refinement, in two dimensions and in a self-contained three-dimensional focusing family; these are focusing
+and concentration stress tests, and we make no singular-blow-up-time or universal-critical-mass claim.
+
+The separated-growth-island and switching-growth experiments together clarify the limitation of global resampling.  Resampling based on a single global ESS can equalize weights while still failing to allocate enough independent lineages to every local growth region: in the island benchmark its global ESS stays above the trigger while individual weak islands lose local resolution and mass, and in the switching benchmark it concentrates lineages on the stale region.  Branching is local by construction---the same reaction multiplier that creates mass also creates particles at the location of growth---so it separates particle-resolution adaptation from any global resampling schedule.  This does not remove the need for reconstruction resolution.  The concentration and island tests indicate that such refinement should be applied to the reconstruction, not uniformly to the full domain: a natural multiscale reconstruction is a coarse global spectrum for the smooth background plus a local residual blob, local residual spectrum, or retained residual particles in particle-detected cores and growth islands.  In this view the Monte-Carlo particles carry and branch the finite measure, while deterministic quadrature or function approximation is used selectively where the global spectrum becomes resolution-sensitive; our hybrid-reconstruction diagnostics (Section~\ref{sec:hybrid_recon}) make this localization explicit but stop short of feeding it back into the solver, which we leave to future work.
+
+Several limitations frame the scope of these conclusions and point to future work. The analysis is carried out
+for the projected, regularized dynamics under regularity and localization assumptions and before the singular
+blow-up time; we therefore do not claim to capture the singular profile itself, and a sharp analysis of the
+coupled multi-species system remains open. The reconstruction is the only step that uses smoothness and, in its
+present dense Fourier form, scales as $K^d$; scaling to genuinely high dimensions calls for low-rank or adaptive
+reconstructions~\cite{TangYing2025FHT,tang2025solving,Peng_Yang_tensor_arxiv_2024,novikov2021tensor,sheng2025approximation},
+which we deliberately leave to future work rather than claim here. Our weighted baselines include systematic
+resampling (ESS-triggered and every-step) on one benchmark; broader resampling variants (residual, stratified,
+local splitting/merging) and other growth regimes remain to be compared. The cross-species injection kernel of
+Section~\ref{sec:injection} already handles sources not proportional to the local field, such as the chemical
+production in the parabolic--parabolic Keller--Segel system; a rigorous unbiasedness and convergence analysis of
+the coupled multi-species injection dynamics remains open. Extending the particle dynamics to general
+boundary conditions (through stochastic killing, reflection, or mixed rules); feeding the local
+hybrid reconstruction back into the time stepping as a true adaptive solver; and exploring
+score-based or generative corrections, full radiative-transfer and Vlasov--Poisson kinetic models, and a rigorous
+blow-up theory, are natural further directions. The contribution of the present paper is narrower and, we believe,
+useful on its own: that branching is a controllable, equal-weight numerical representation of non-conservative
+mass creation, and a practical alternative to weighted particles when resolution must follow the growth.
+
+% The framework presented here offers a fresh particle-based approach to solving reaction--diffusion--advection equations. Unlike traditional particle or Lagrangian schemes, our method is not restricted to conservation laws and is able to capture aggregation and focusing phenomena in the density variable with high fidelity. This highlights its potential as a useful tool for studying a broad class of nonlinear transport and interaction problems.
+
+% From the theoretical perspective, the current work provides heuristic intuition primarily in the linear case. Developing a rigorous convergence theory in more general nonlinear settings remains a challenging but exciting direction for future research. On the numerical side, while the interpolation of measures poses difficulties in high-dimensional problems, this limitation also points to promising avenues for methodological innovation. In particular, Fourier interpolation combined with low-rank approximations~\cite{tang2025solving} could provide a powerful mechanism for scaling the algorithm efficiently to higher dimensions.
+
+
+\section*{Acknowledgments}
+The work is supported in part by the National Science Foundation under Grant DMS-2143739 and the ACCESS program through allocation MTH210005.
+The authors also acknowledge the support from the Institute for Cyber-Enabled Research at Michigan State University.
+
+\section*{Declaration of competing interest}
+The authors declare that they have no known competing financial interests or personal relationships that could
+have appeared to influence the work reported in this paper.
+
+\section*{Data availability}
+The configuration files and scripts that reproduce every figure and table in this paper will be made publicly
+available upon publication.
+
+\appendix
+
+\section{Proofs of the continuous-time error estimates}
+\label{app:convergence}
+This appendix proves Propositions~\ref{prop:u_u_K} and~\ref{prop:u_K_mu} and
+Theorem~\ref{thm:abstract_error}. Throughout, $\langle\cdot,\cdot\rangle$ is the
+$L^2(\mathbb T^d)$ pairing, $\|\cdot\|_{H^\sigma}$ the periodic Sobolev norm with
+$(I-\Delta)^{\sigma/2}$ as Fourier multiplier, and all boundary terms in
+integration by parts vanish by periodicity.
+
+\begin{proof}[Proof of Proposition~\ref{prop:u_u_K}]
+Let $e_K=u-u_K$ and $\eta(t)=\tfrac12\|e_K(t)\|_{L^2}^2$. Subtracting
+\eqref{equ:projected} from \eqref{equ:reaction-diffusion} and testing against $e_K$,
+\[
+\eta'(t)=\underbrace{-\!\int_{\mathbb T^d}\!\nabla e_K\!\cdot\!\bigl(a(u)u-a(\mathcal P_K u_K)u_K\bigr)\intd\bx}_{E_1}
++\underbrace{D\!\int_{\mathbb T^d}\! e_K\,\Delta e_K\intd\bx}_{E_2}
++\underbrace{\int_{\mathbb T^d}\! e_K\bigl(r(u)u-r(\mathcal P_K u_K)u_K\bigr)\intd\bx}_{E_3}.
+\]
+By $m>d/2+1$ and $H^m\hookrightarrow L^\infty$, set
+$C_u':=\sup_{t\le T}\|u(t)\|_{L^\infty}<\infty$. By the spectral accuracy of
+$\mathcal P_K$ and the triangle inequality,
+\begin{equation}\label{eq:app-uuK-proj}
+\|u-\mathcal P_K u_K\|_{L^2}
+\le\|(I-\mathcal P_K)u\|_{L^2}+\|\mathcal P_K(u-u_K)\|_{L^2}
+\le C\,K^{-m}\|u\|_{H^m}+\|e_K\|_{L^2}.
+\end{equation}
+
+\emph{Diffusion.} Integration by parts gives
+$E_2=-D\|\nabla e_K\|_{L^2}^2$.
+
+\emph{Advection.} Splitting
+$a(u)u-a(\mathcal P_K u_K)u_K=(a(u)-a(\mathcal P_K u_K))u+a(\mathcal P_K u_K)(u-u_K)$,
+\[
+\begin{aligned}
+E_1
+&=-\!\int\!\nabla e_K\!\cdot\!\bigl(a(u)-a(\mathcal P_K u_K)\bigr)u
+  -\!\int\!\nabla e_K\!\cdot\! a(\mathcal P_K u_K)\,e_K
+=:E_{11}+E_{12}.
+\end{aligned}
+\]
+For $E_{11}$, using $|a(u)-a(\mathcal P_K u_K)|\le C_{b,\mathrm{lip}}|u-\mathcal P_K u_K|$,
+the bound $\|u\|_{L^\infty}\le C_u'$, Cauchy--Schwarz, and Young's inequality with
+$\epsilon>0$,
+\[
+E_{11}\le \|\nabla e_K\|_{L^2}\,C_{b,\mathrm{lip}}C_u'\,\|u-\mathcal P_K u_K\|_{L^2}
+\le \tfrac{\epsilon}{2}C_{b,\mathrm{lip}}C_u'\|\nabla e_K\|_{L^2}^2
++\tfrac{1}{2\epsilon}C_{b,\mathrm{lip}}C_u'\|u-\mathcal P_K u_K\|_{L^2}^2 .
+\]
+For $E_{12}$, using $\|a(\mathcal P_K u_K)\|_{L^\infty}\le C_{b,\mathrm{lip}}$,
+\[
+E_{12}\le C_{b,\mathrm{lip}}\|\nabla e_K\|_{L^2}\|e_K\|_{L^2}
+\le \tfrac{\epsilon}{2}C_{b,\mathrm{lip}}\|\nabla e_K\|_{L^2}^2
++\tfrac{1}{2\epsilon}C_{b,\mathrm{lip}}\|e_K\|_{L^2}^2 .
+\]
+Inserting \eqref{eq:app-uuK-proj} and $(p+q)^2\le2p^2+2q^2$ into $E_{11}$,
+\[
+E_1\le \tfrac{\epsilon}{2}C_{b,\mathrm{lip}}(C_u'+1)\,\|\nabla e_K\|_{L^2}^2
++C_1\bigl(\|e_K\|_{L^2}^2+K^{-2m}\|u\|_{H^m}^2\bigr),
+\]
+where $C_1$ depends only on $C_{b,\mathrm{lip}},C_u',\epsilon$.
+
+\emph{Reaction.} Splitting
+$r(u)u-r(\mathcal P_K u_K)u_K=(r(u)-r(\mathcal P_K u_K))u+r(\mathcal P_K u_K)(u-u_K)$
+and using $|r(u)-r(\mathcal P_K u_K)|\le C_{b,\mathrm{lip}}|u-\mathcal P_K u_K|$,
+$\|r(\mathcal P_K u_K)\|_{L^\infty}\le C_{b,\mathrm{lip}}$, Young's inequality, and
+\eqref{eq:app-uuK-proj},
+\[
+E_3\le C_{b,\mathrm{lip}}C_u'\|e_K\|_{L^2}\|u-\mathcal P_K u_K\|_{L^2}
++C_{b,\mathrm{lip}}\|e_K\|_{L^2}^2
+\le C_3\bigl(\|e_K\|_{L^2}^2+K^{-2m}\|u\|_{H^m}^2\bigr),
+\]
+with $C_3$ depending only on $C_{b,\mathrm{lip}},C_u'$.
+
+\emph{Conclusion.} Summing and using $E_2=-D\|\nabla e_K\|_{L^2}^2$,
+\[
+\eta'(t)\le\Bigl(\tfrac{\epsilon}{2}C_{b,\mathrm{lip}}(C_u'+1)-D\Bigr)\|\nabla e_K\|_{L^2}^2
++(C_1+C_3)\|e_K\|_{L^2}^2+(C_1+C_3)K^{-2m}\|u\|_{H^m}^2 .
+\]
+Choosing $\epsilon=D/\bigl(C_{b,\mathrm{lip}}(C_u'+1)\bigr)$ makes the first
+bracket $\le0$, so with $C_4:=2(C_1+C_3)$ and $\|e_K\|_{L^2}^2=2\eta$,
+\[
+\eta'(t)\le C_4\,\eta(t)+C_4\,K^{-2m}\|u\|_{H^m}^2 .
+\]
+Gr\"onwall's inequality gives
+$\eta(t)\le e^{C_4 t}\eta(0)+\int_0^t e^{C_4(t-\sigma)}C_4 K^{-2m}\|u(\sigma)\|_{H^m}^2\intd\sigma$,
+hence, with $C_T:=2e^{C_4 T}\max\{1,C_4\}$,
+\[
+\|e_K(t)\|_{L^2}^2=2\eta(t)\le C_T\Bigl(\|e_K(0)\|_{L^2}^2+K^{-2m}\|u\|_{L^2(0,t;H^m)}^2\Bigr),
+\]
+which is \eqref{eq:prop-uuK-bound}.
+\end{proof}
+
+\begin{proof}[Proof of Proposition~\ref{prop:u_K_mu}]
+Recall the birth/death counts of rate $c^\pm=r^\pm(\mathcal P_K\mu^N)$ entering
+\eqref{eq:weak-form},
+\[
+\mathcal R^{\pm,N}_i(t)=Q^{\pm,N}_i\!\Bigl(\int_0^t\mathbf 1_{\mathcal I(N,\tau)}(i)\,
+c^\pm(\bX^N_{i,K})\intd\tau\Bigr),\quad
+\widetilde{\mathcal R}^{\pm,N}_i(t)=\mathcal R^{\pm,N}_i(t)
+-\int_0^t\mathbf 1_{\mathcal I(N,\tau)}(i)\,c^\pm(\bX^N_{i,K}(\tau))\intd\tau,
+\]
+with $Q^{\pm,N}_i$ independent unit-rate Poisson processes; the net compensator
+$c^+-c^-=r$ reproduces the reaction drift in \eqref{eq:weak-form}, and the
+predictable quadratic variation of each compensated count is
+$\langle\widetilde{\mathcal R}^{\pm,N}_i\rangle_t=\int_0^t\mathbf 1_{\mathcal I(N,\tau)}(i)\,c^\pm(\bX^N_{i,K})\intd\tau$.
+
+Write $\hat e_K=u_K-\mu^N$, $E_K(t)=\tfrac12\|\hat e_K\|_{H^{-s}}^2
+=\tfrac12\langle\hat e_K,(I-\Delta)^{-s}\hat e_K\rangle$, and
+$\phi_K=(I-\Delta)^{-s}\hat e_K$, so that
+\begin{equation}\label{eq:app-phi-id}
+\|\phi_K\|_{H^s}^2=\langle(I-\Delta)^{-s}\hat e_K,\hat e_K\rangle=\|\hat e_K\|_{H^{-s}}^2=2E_K(t).
+\end{equation}
+The process $u_K$ is deterministic and $\mu^N$ is the semimartingale
+\eqref{eq:weak-form}. Applying It\^o's formula to the quadratic functional $E_K$,
+the time derivative of $\mathbb EE_K$ is the sum of the drift terms and the
+predictable quadratic variations of the Brownian and compensated-Poisson
+martingales:
+\[
+\begin{aligned}
+\frac{d}{dt}\mathbb EE_K(t)
+&=\mathbb E\bigl\langle\nabla\phi_K,\,a(\mathcal P_K\mu^N)\mu^N-a(\mathcal P_K u_K)u_K\bigr\rangle
+ +\mathbb E\bigl\langle\Delta\phi_K,\,D(u_K-\mu^N)\bigr\rangle\\
+&\quad+\mathbb E\bigl\langle\phi_K,\,r(\mathcal P_K u_K)u_K-r(\mathcal P_K\mu^N)\mu^N\bigr\rangle
+ +\mathbb E\Bigl[\frac{D}{N^2}\!\sum_{i\in\mathcal I(N,t)}\!\bigl\|\nabla(I-\Delta)^{-s/2}\delta_{\bX^N_{i,K}}\bigr\|_{L^2}^2\Bigr]\\
+&\quad+\mathbb E\Bigl[\frac{1}{2N^2}\!\sum_{i\in\mathcal I(N,t)}\!\bigl\|\delta_{\bX^N_{i,K}}\bigr\|_{H^{-s}}^2\,\bigl|r(\mathcal P_K\mu^N(\bX^N_{i,K}))\bigr|\Bigr]
+=\sum_{j=1}^5\mathbb E[I_j].
+\end{aligned}
+\]
+The two quadratic-variation terms $I_4,I_5$ use that a birth or death of particle
+$i$ shifts $\hat e_K$ by $\mp\tfrac1N\delta_{\bX^N_{i,K}}$, and that the total
+jump rate is $c^++c^-=|r|$.
+
+We use two fixed-$K$ facts.
+\emph{(M) Multiplier bound:} a $W^{\lceil s\rceil,\infty}$ function is a pointwise
+multiplier on $H^\sigma$ for every $|\sigma|\le s$, with
+$\|fg\|_{H^\sigma}\le C_{s,d}\|f\|_{W^{\lceil s\rceil,\infty}}\|g\|_{H^\sigma}$ (by
+duality for $\sigma<0$); hence by \eqref{eq:prop2-coeff},
+$\|a(\mathcal P_K\mu^N)g\|_{H^\sigma}+\|r(\mathcal P_K\mu^N)g\|_{H^\sigma}+\|u_K g\|_{H^\sigma}\le C_{T,K}\|g\|_{H^\sigma}$
+for $|\sigma|\le s$. (An $L^\infty$ bound alone does not suffice for $s>1$, as
+$L^\infty$ is not an $H^{s-1}$ multiplier.)
+\emph{(I) Inverse estimate:} for $g$ band-limited to $|\mathbf k|_\infty\le K$ and
+$\alpha\le\beta$, $\|g\|_{H^\beta}\le C_{T,K}\|g\|_{H^\alpha}$; in particular
+$\|\mathcal P_K\hat e_K\|_{L^2}\le C_{T,K}\|\hat e_K\|_{H^{-s}}$ (the projection is an
+$H^{-s}$-contraction).
+
+\emph{Term $I_1$ (advection).} Split
+$I_1=\langle\nabla\phi_K,a(\mathcal P_K\mu^N)(\mu^N-u_K)\rangle
++\langle\nabla\phi_K,(a(\mathcal P_K\mu^N)-a(\mathcal P_K u_K))u_K\rangle=I_{11}+I_{12}$.
+For $I_{11}$, by the duality $\langle H^{s-1},H^{-s+1}\rangle$, (M) with $\sigma=s-1$,
+$\|\nabla\phi_K\|_{H^{s-1}}\le\|\phi_K\|_{H^s}$, \eqref{eq:app-phi-id}, and Young,
+\[
+I_{11}\le\|a(\mathcal P_K\mu^N)\nabla\phi_K\|_{H^{s-1}}\|u_K-\mu^N\|_{H^{-s+1}}
+\le\frac{C_{T,K}}{2\epsilon}\|\phi_K\|_{H^s}^2+\frac{C_{T,K}\epsilon}{2}\|\hat e_K\|_{H^{-s+1}}^2
+=\frac{C_{T,K}}{\epsilon}E_K+\frac{C_{T,K}\epsilon}{2}\|\hat e_K\|_{H^{-s+1}}^2 .
+\]
+For $I_{12}$, by (M) for $u_K$, the Lipschitz bound on $a$, and (I),
+\[
+I_{12}\le\|u_K\nabla\phi_K\|_{H^{s-1}}\bigl\|a(\mathcal P_K\mu^N)-a(\mathcal P_K u_K)\bigr\|_{H^{-s+1}}
+\le C_{T,K}\|\phi_K\|_{H^s}\,C_{b,\mathrm{lip}}\|\mathcal P_K\hat e_K\|_{L^2}
+\le\frac{C_{T,K}}{2\epsilon}E_K+\frac{C_{T,K}\epsilon}{2}\|\hat e_K\|_{H^{-s+1}}^2 .
+\]
+Hence $I_1\le\frac{C_{T,K}}{\epsilon}E_K+\frac{C_{T,K}\epsilon}{2}\|\hat e_K\|_{H^{-s+1}}^2$.
+
+\emph{Term $I_2$ (diffusion).} Since $\Delta\phi_K=\phi_K-(I-\Delta)\phi_K$,
+\[
+I_2=D\langle\Delta\phi_K,\hat e_K\rangle
+=D\langle\phi_K,\hat e_K\rangle-D\langle(I-\Delta)^{-s+1}\hat e_K,\hat e_K\rangle
+=2D\,E_K-D\|\hat e_K\|_{H^{-s+1}}^2 .
+\]
+
+\emph{Term $I_3$ (reaction).} As for $I_1$, with (M) for $u_K$ and
+$r(\mathcal P_K\mu^N)$, the Lipschitz bound on $r$, (I), and \eqref{eq:app-phi-id},
+\[
+\begin{aligned}
+I_3&=\langle\phi_K,(r(\mathcal P_K u_K)-r(\mathcal P_K\mu^N))u_K\rangle
++\langle\phi_K,r(\mathcal P_K\mu^N)(u_K-\mu^N)\rangle\\
+&\le C_{T,K}\|\phi_K\|_{H^s}\,C_{b,\mathrm{lip}}\|\mathcal P_K\hat e_K\|_{L^2}
++C_{T,K}\|\phi_K\|_{H^s}\|\hat e_K\|_{H^{-s}}
+\le C_{T,K}\|\phi_K\|_{H^s}\|\hat e_K\|_{H^{-s}}\le C_{T,K}E_K .
+\end{aligned}
+\]
+
+\emph{Term $I_4$ (diffusion quadratic variation).} As
+$(I-\Delta)^{-s/2}\delta_{\bx}$ has Fourier coefficients
+$(1+|\mathbf k|^2)^{-s/2}e^{-i\mathbf k\cdot\bx}$,
+\[
+\bigl\|\nabla(I-\Delta)^{-s/2}\delta_{\bx}\bigr\|_{L^2}^2
+=\sum_{\mathbf k}|\mathbf k|^2(1+|\mathbf k|^2)^{-s}=:C_s'<\infty,
+\]
+finite precisely because $s>d/2+1$ (the summand decays like $|\mathbf k|^{2-2s}$) and
+independent of $\bx$. Hence by $|\mathcal I(N,t)|\le C_N N$,
+$I_4=\frac{D}{N^2}\sum_{i\in\mathcal I(N,t)}C_s'\le\frac{D C_N C_s'}{N}=:\frac{C_4}{N}$.
+
+\emph{Term $I_5$ (branching quadratic variation).} Likewise additive: the It\^o
+correction contracts each jump $\mp\tfrac1N\delta_{\bX^N_{i,K}}$ with itself, and
+\[
+\|\delta_{\bx}\|_{H^{-s}}^2=\sum_{\mathbf k}(1+|\mathbf k|^2)^{-s}=:C_s<\infty\qquad(s>d/2),
+\]
+is independent of $\bx$, so with $\|r\|_{L^\infty}\le C_{b,\mathrm{lip}}$,
+$I_5=\frac{1}{2N^2}\sum_{i\in\mathcal I(N,t)}\|\delta_{\bX^N_{i,K}}\|_{H^{-s}}^2\,|r(\mathcal P_K\mu^N(\bX^N_{i,K}))|
+\le\frac{C_N C_{b,\mathrm{lip}}C_s}{2N}=:\frac{C_5}{N}$.
+
+\emph{Conclusion.} The terms $I_4,I_5$ are the only ones not proportional to $E_K$
+and supply the additive forcing $(C_4+C_5)/N$. Collecting,
+\[
+\frac{d}{dt}\mathbb EE_K(t)\le\Bigl(\frac{C_{T,K}}{\epsilon}+2D+C_{T,K}\Bigr)\mathbb EE_K(t)
++\frac{C_4+C_5}{N}+\Bigl(\frac{C_{T,K}\epsilon}{2}-D\Bigr)\mathbb E\|\hat e_K\|_{H^{-s+1}}^2 .
+\]
+Since $D>0$, choosing $\epsilon=D/C_{T,K}$ makes the last term nonpositive, leaving,
+with a single $N$-independent constant $C=C_{T,K}$,
+\[
+\frac{d}{dt}\mathbb EE_K(t)\le C\,\mathbb EE_K(t)+\frac{C}{N},
+\]
+which is \eqref{eq:prop-uKmu-diff}. Gr\"onwall with constant forcing gives
+\eqref{eq:prop-uKmu-bound}; if $\mathbb EE_K(0)\le C_s/N$ then
+$\mathbb E\|u_K(t)-\mu^N(t)\|_{H^{-s}}^2\le C_{T,K}/N$ for all $t\le T$.
+\end{proof}
+
+\begin{proof}[Proof of Theorem~\ref{thm:abstract_error}]
+By the triangle inequality and $(p+q)^2\le 2p^2+2q^2$,
+\[
+\mathbb E\|u(t_n)-\mu^N(t_n)\|_{H^{-s}}^2
+\le 2\|u(t_n)-u_K(t_n)\|_{H^{-s}}^2+2\,\mathbb E\|u_K(t_n)-\mu^N(t_n)\|_{H^{-s}}^2 .
+\]
+For the first term, $s\ge0$ gives the embedding $\|\cdot\|_{H^{-s}}\le\|\cdot\|_{L^2}$,
+and Proposition~\ref{prop:u_u_K} with $e_K(0)=u(0)-u_K(0)=0$ yields
+$\|u(t_n)-u_K(t_n)\|_{H^{-s}}^2\le\|u(t_n)-u_K(t_n)\|_{L^2}^2\le C_T K^{-2m}\|u\|_{L^2(0,t_n;H^m)}^2$.
+For the second term, the initialization gives
+$\mathbb EE_K(0)=\tfrac12\mathbb E\|u(0)-\mu^N(0)\|_{H^{-s}}^2\le C_s/(2N)$, so
+Proposition~\ref{prop:u_K_mu} (in the form \eqref{eq:prop-uKmu-bound}) yields
+$\mathbb E\|u_K(t_n)-\mu^N(t_n)\|_{H^{-s}}^2=2\,\mathbb EE_K(t_n)\le C_{T,K}/N$. Adding
+the two bounds gives \eqref{eq:u-muN-cont}.
+\end{proof}
+
+\begin{remark}
+The continuous-time analysis above is identical for the Poisson and
+minimum-variance kernels (Remark~\ref{rem:rate}). Turning the present estimate into
+a sharp, $N$-uniform \emph{fully discrete} bound -- coupling the continuous- and
+discrete-time flows on a single probability space by the Harris graphical
+construction~\cite{harris1972nearest,bansaye2015stochastic} in the
+measure-valued/SDE form of~\cite{fournier2004microscopic,hauray2009wasserstein,chaintron2021propagation},
+and extending it to a two-field treatment of the Keller--Segel system up to a
+stopping time before concentration -- is carried out in the companion paper
+described in Section~\ref{sec:theory}.
+\end{remark}
+
+
+\section{Harris-coupled time-refinement for the splitting rate}
+\label{app:harris}
+On the manufactured-solution benchmark the first-order time-splitting error is much smaller than the
+Monte-Carlo error at every affordable $N$, so it cannot be read off the error against the exact solution
+(Figure~\ref{fig:mms}, right, blue). This appendix describes how the splitting rate in Figure~\ref{fig:mms}
+(orange) and the mode-resolved agreement in Table~\ref{tab:mms_modes} are measured directly on the branching
+scheme.
+
+\paragraph{Spectral splitting-bias field.}
+By Proposition~\ref{prop:stochastic_branch} the weighted update and the two branching kernels share the one-step
+conditional mean $e^{c(\bx)\tau}$, so the \emph{expected} measure of the scheme evolves, independently of the
+kernel, under the deterministic split operator
+\begin{equation}\label{equ:Qtau}
+Q_\tau = T_\tau\circ M_\tau,\qquad (M_\tau u)(\bx)=e^{r(\bx)\tau}\,u(\bx),
+\end{equation}
+where $T_\tau$ is the transport (drift--diffusion) sub-step.  In the released particle code the prescribed rate
+$r$ is evaluated at the pre-transport position of each particle and the multiplier is applied to its transported
+copy, so the mean operator is the first-order splitting $Q_\tau=T_\tau\circ M_\tau$; the spectral solve below
+uses the same ordering, so $\varphi$ is exactly the mean of the branching paired difference. Because $\mb b$ and $D$ are constant, the
+Euler--Maruyama transport step samples the exact transition law, so $T_\tau$ is the exact semigroup, diagonal in
+Fourier, $\widehat{(T_\tau u)}_{\mb k}=e^{-\mathrm i\,\mb b\cdot\mb k\,\tau-D|\mb k|^2\tau}\,\widehat u_{\mb k}$.
+Integrating \eqref{equ:Qtau} from $u_0=u_{\mathrm{ex}}(0,\cdot)$ to $T$ by a Fourier pseudo-spectral method (no
+particles, hence no Monte-Carlo noise) and forming the band-limited successive difference gives the exact mean
+splitting-bias field
+\begin{equation}\label{equ:phi}
+\varphi(\tau)=\mathcal P_K\big[\,Q_\tau^{\,T/\tau}u_0-Q_{\tau/2}^{\,2T/\tau}u_0\,\big]
+=\mathbb E\big[\,u^{N,\tau}-u^{N,\tau/2}\,\big],
+\end{equation}
+with $\mathcal P_K$ the Fourier projection of Section~\ref{sec:interpolation}. For a first-order method
+$\varphi(\tau)=\tfrac12 C\tau+O(\tau^2)$; on this benchmark $\|\varphi(\tau)\|$ halves with each halving of
+$\tau$ to machine precision (fitted slope $1.000$), and $C$ matches the analytic splitting commutator to about
+two percent.
+
+\paragraph{Lineage-coupled (Harris) paired runs.}
+To verify that the \emph{stochastic} branching scheme realizes this mean, we run paired simulations at steps
+$\tau$ and $\tau/2$ coupled on a single probability space by a Harris (Ulam--Harris) labelling of the branching
+tree~\cite{harris1963branching,harris1972nearest}: every individual carries a persistent random key, and all of
+its randomness---transport increment, birth indicator, and the keys of its children---is derived from that key by
+namespaced hashing. The two members read the same streams. The coarse transport increment over a window is the
+sum of the two fine increments it contains (the same Brownian path on nested grids, so a non-branching particle
+has identical positions in both members at the shared times). The coarse birth indicator is calibrated,
+$\{U_{2s}<e^{r\tau/2}-1\}\cup\{U_{2s+1}<\theta'\}$ with
+$\theta'=(e^{r\tau}-e^{r\tau/2})/(2-e^{r\tau/2})$, so that its marginal birth probability is exactly
+$e^{r\tau}-1$, the minimum-variance kernel at step $\tau$ in the pure-birth regime $1<e^{r\tau}<2$; matched
+births assign the child the same key in both members. The residual coupling noise $d_s-\varphi(\tau)$ (with
+$d_s$ the paired difference defined below) therefore arises only from imperfect coupling---chiefly children born
+at a half-step in the fine member, which drift an extra $O(\sqrt\tau)$---and is mean-zero.
+
+\paragraph{Estimators.}
+Let $d_s=u^{N,\tau}_s-u^{N,\tau/2}_s$ be the paired difference field for seed $s$, so $\mathbb E[d_s]=\varphi(\tau)$.
+Its per-seed magnitude is dominated by the mean-zero de-correlation noise, so a norm such as $\|d_s\|$ (or a
+particle-level distance) measures that noise rather than the bias. We instead use the matched-filter projection
+onto the known direction $\varphi$,
+\begin{equation}\label{equ:rho}
+\rho=\frac{\langle d_s,\varphi\rangle}{\langle\varphi,\varphi\rangle},\qquad \mathbb E[\rho]=1,
+\end{equation}
+averaged over $64$ seeds; the magnitude plotted in Figure~\ref{fig:mms} is $P(\tau)=\bar\rho\,\|\varphi(\tau)\|$,
+with standard error from the seed spread. The projection reduces the noise from the full reconstruction space to
+a single direction. The mode-resolved version (Table~\ref{tab:mms_modes}) replaces $\varphi$ by each dominant
+Fourier basis function $b_k$ and tracks the branching coefficient $a_k(\tau)=\overline{\langle
+d_s,b_k\rangle}/\langle b_k,b_k\rangle$ across $\tau$, fitting its log--log slope; the branching coefficients
+converge at first order mode by mode, matching the exact spectral rate of $\varphi_k(\tau)$ (slope one). For the
+aggregate projection we obtain $\bar\rho=1.07\pm0.07$, $1.14\pm0.09$, and $1.12\pm0.14$ at
+$\tau=10^{-1},5\times10^{-2},2.5\times10^{-2}$, all consistent with unity, and $P(\tau)$ scales as $\tau^{0.97}$.
+The stochastic branching scheme therefore reproduces the deterministic first-order splitting bias predicted by
+the spectral mean-field operator.
+
+\section{Allen--Cahn sanity check}
+\label{app:allencahn}
+As an additional check on a different nonlinearity, we apply the scalar scheme of Section~\ref{sec:method} to the
+Allen--Cahn (AC) equation, a standard phase-separation model with a non-monotone reaction. The reaction is
+sign-changing but bounded, so it does not produce the localized growth that motivates branching; we include it
+only to confirm that the method reproduces the expected interfacial dynamics. The governing equation is
+\begin{equation} \label{eq:ac_pde}
+    u_t = D\Delta u + u - u^3, \quad \bx \in \Omega,\ t > 0,
+\end{equation}
+with diffusion coefficient $D=0.01$ on $\Omega = [0, 2\pi]^2$ with periodic boundary conditions, and initial
+condition
+\begin{equation} \label{eq:ac_ic}
+    u_0(\bx) = \sin^2(x_1) \cos^2(x_2), \quad \bx = (x_1, x_2) \in \Omega.
+\end{equation}
+We use Fourier projection $K=10$ and $N=400{,}000$ particles up to $T=0.8$. Figure~\ref{fig:ac_solution}
+compares the particle solution with a finite-difference reference; the two agree on the phase-separation
+dynamics, confirming that the scheme handles a sign-changing reaction correctly.
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.8\linewidth]{figure/case_allen_cahn.pdf}
+    \caption{Allen--Cahn equation \eqref{eq:ac_pde} at $t=0, 0.2, 0.4, 0.6, 0.8$. Top: finite-difference reference; bottom: the present particle method.}
+    \label{fig:ac_solution}
+\end{figure}
+
+\section{Coupled-system checks: non-conservative logistic Keller--Segel}
+\label{app:coupled}
+As an additional coupled-system check we consider a non-conservative Keller--Segel variant with logistic cell
+growth,
+\begin{equation}
+\label{equ:nonlinear}
+\begin{aligned}
+&u_t - \nabla \cdot \left(\nabla u - \frac{4u}{1 + u^2} \nabla v \right) = u(1 - u), & \quad \bx \in \Omega, t > 0, \\
+&v_t - \Delta v = u - v, & \quad \bx \in \Omega, t > 0.
+\end{aligned}
+\end{equation}
+The corresponding well-posedness theory is discussed in~\cite{osaki2002exponential, wang2007classical, wrzosek2004global}.  The initial data are
+\[
+    \begin{aligned}
+        u_0(\bx) =&  \exp\!\left( -(x_1 - 0.5\pi)^2 - (x_2 - 0.5\pi)^2 \right)
+        + \exp\!\left( -(x_1 - \pi)^2 - (x_2 - \pi)^2 \right) \\
+        &+ \exp\!\left( -(x_1 - 1.5\pi)^2 - (x_2 - 1.5\pi)^2 \right), \\
+        v_0(\bx) =&  \exp\!\left( -(x_1 - 0.4\pi)^2 - (x_2 - 0.4\pi)^2 \right)
+        + \exp\!\left( -(x_1 - 0.8\pi)^2 - (x_2 - 0.8\pi)^2 \right) \\
+        &+ \exp\!\left( -(x_1 - 1.2\pi)^2 - (x_2 - 1.2\pi)^2 \right)
+        + \exp\!\left( -(x_1 - 1.6\pi)^2 - (x_2 - 1.6\pi)^2 \right).
+    \end{aligned}
+\]
+Here the cell equation contains genuine birth and death through $u(1-u)$.  The reaction step represents this term by the local rate $f_u/u=1-u$ wherever the reconstructed density is positive.  The run uses periodic reconstruction with $K=10$ and $\tau=10^{-3}$.  Figures~\ref{fig:case3_u} and~\ref{fig:case3_v} compare the particle and finite-difference solutions for $u$ and $v$ at $t=0,0.1,0.2,0.3,0.4$.
+
+\begin{figure}
+\centering
+\includegraphics[width=0.8\linewidth]{figure/case3_u.pdf}
+\caption{Logistic Keller--Segel test: particle and finite-difference approximations of $u$ at $t=0,0.1,0.2,0.3,0.4$; the particle method reproduces the finite-difference cell field under genuine birth/death, validating the non-conservative coupled implementation.}
+\label{fig:case3_u}
+\end{figure}
+
+\begin{figure}
+\centering
+\includegraphics[width=0.8\linewidth]{figure/case3_v.pdf}
+\caption{Logistic Keller--Segel test: particle and finite-difference approximations of $v$ at $t=0,0.1,0.2,0.3,0.4$; the chemical field likewise agrees with the finite-difference reference.}
+\label{fig:case3_v}
+\end{figure}
+
+\section{Dense high-dimensional reconstruction check}
+\label{app:highdim}
+The kinetic Keller--Segel test of Section~\ref{sec:kinetic_ks} is the primary high-dimensional representation test
+and avoids reconstructing a dense density.  This appendix is supporting material: it validates the dense
+reconstruction's Monte-Carlo scaling alone, against a known reference, using a manufactured solution on
+$\mathbb T^d$ ($d=4,6$) for $\partial_t u = D\,\Delta u + r(\bz)\,u$ with the separable, strictly positive exact
+solution
+\begin{equation}\label{equ:highdim_mms}
+u_{\mathrm{ex}}(t,\bz)=e^{\gamma t}\prod_{j=1}^d\big(1+a\cos z_j\big),
+\qquad
+r(\bz)=\gamma+D\,a\sum_{j=1}^d\frac{\cos z_j}{1+a\cos z_j}.
+\end{equation}
+We run the minimum-variance branching scheme ($D=0.05$, $a=0.5$, $\gamma=0.2$, $T=0.3$, four seeds) and evaluate
+the error by Parseval's identity directly from the empirical Fourier coefficients, so no dense tensor-product grid
+is ever assembled.
+
+At the matched cutoff ($k_{\max}=1$, the $3$ modes $\{0,\pm1\}$ per coordinate), the relative $L^2$ error of the
+full reconstructed density decays at $N^{-1/2}$: from $0.17$ to $0.029$ in $d=4$ and from $0.44$ to $0.11$ in
+$d=6$ as $N$ increases to $6.4\times10^4$ ($3.2\times10^4$ in $d=6$), with fitted slopes $-0.50$ and $-0.49$
+(Figure~\ref{fig:highdim_mms}).  The cost is not dimension-free: over-resolving to $k_{\max}=7$ ($15$ modes per
+coordinate) raises the mode count from $3^d$ to $15^d$ and inflates the error constant by
+$\approx\sqrt{(15/3)^d}=5^{d/2}$ -- about $25\times$ in $d=4$ and $120\times$ in $d=6$, to $0.70$ and above $10$,
+at the same $N^{-1/2}$ slope.  This is the variance side of the reconstruction term in
+Theorem~\ref{thm:abstract_error}, and the quantitative reason the high-dimensional evidence relies on the
+field-coupled kinetic test and grid-free diagnostics rather than a dense product reconstruction.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figure/highdim_mms_convergence.pdf}
+\caption{High-dimensional manufactured-solution density reconstruction.  Relative $L^2$ error of the
+reconstructed density versus particle number $N$ for $d=4$ (left) and $d=6$ (right), at the matched
+frequency cutoff $k_{\max}=1$ (green, $3$ modes per coordinate) and the over-resolved $k_{\max}=7$ (red, $15$ modes
+per coordinate).  Both converge at the Monte-Carlo rate $N^{-1/2}$ (fitted slopes shown); the over-resolved error
+is larger by a factor that grows as $\sqrt{(2k_{\max}+1)^d}$, illustrating that dense Fourier reconstruction is
+convergent but not dimension-free.  Bars are one standard deviation over four seeds.}
+\label{fig:highdim_mms}
+\end{figure}
+
+The reconstruction also recovers the right \emph{shape}, not only the global rate.  For a $d=6$ run at
+$N=6.4\times10^4$ (cutoff $k_{\max}=1$), all six one-dimensional coordinate marginals coincide with the exact
+normalized marginal $(1+a\cos z)/2\pi$, and the two-dimensional marginals of $(z_1,z_2)$ are visually
+indistinguishable from the exact ones (Figure~\ref{fig:highdim_mms_marg}): the mean one-dimensional $L^1$ marginal
+error is $5.0\times10^{-3}$ and the two-dimensional relative $L^2$ marginal error is $1.1\times10^{-2}$
+($4.0\times10^{-3}$ and $8.0\times10^{-3}$ in $d=4$).
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figure/highdim_mms_marginals_d6.pdf}
+\caption{Marginals of the reconstructed density for the $d=6$ manufactured-solution run ($N=6.4\times10^4$, cutoff
+$k_{\max}=1$).  Left: the reconstructed one-dimensional marginal of each of the six coordinates (grey) against the
+exact marginal $(1+a\cos z)/2\pi$ (dashed).  Middle and right: the reconstructed and exact two-dimensional
+marginals of $(z_1,z_2)$, on a common colour scale.}
+\label{fig:highdim_mms_marg}
+\end{figure}
+
+\printcredits
+
+\bibliographystyle{elsarticle-num}
+\bibliography{main.bib}
+\end{document}
