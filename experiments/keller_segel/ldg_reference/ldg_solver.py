@@ -174,15 +174,22 @@ class LDGSolver:
         Ix, Iy = self._cell_int_prod(U, rx, ry)
         out[..., 1] += (2.0 / m.dx) * Ix
         out[..., 2] += (2.0 / m.dy) * Iy
-        # x-face LF flux
+        # x-face LF flux.  _lf_face_x already folds the basis FACE VALUE into each
+        # component (integ uses xival for phi1=xi and s for phi2=eta), so the only
+        # edge sign left to apply is n_x = +1 (right) / -1 (left): uniformly R - L
+        # for EVERY mode.  (Previous code used fxR[1]+fxL[1] for the xi mode -- a
+        # double-counted sign; the cell-average (phi0) test did not catch it.)
         fxR, fxL = self._lf_face_x(U, rx, alpha)
         out[..., 0] -= (fxR[0] - fxL[0])
-        out[..., 1] -= (fxR[1] + fxL[1])
+        out[..., 1] -= (fxR[1] - fxL[1])
         out[..., 2] -= (fxR[2] - fxL[2])
+        # y-face LF flux.  Component order is [phi0, phi1=xi, phi2=eta]; n_y = +1
+        # (top) / -1 (bottom).  Update out[...,m] with component m (no xi<->eta
+        # swap), uniformly T - B.
         fyT, fyB = self._lf_face_y(U, ry, alpha)
         out[..., 0] -= (fyT[0] - fyB[0])
-        out[..., 2] -= (fyT[1] + fyB[1])
-        out[..., 1] -= (fyT[2] - fyB[2])
+        out[..., 1] -= (fyT[1] - fyB[1])
+        out[..., 2] -= (fyT[2] - fyB[2])
         return out
 
     def _cell_int_prod(self, U, rx, ry):

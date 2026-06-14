@@ -1,0 +1,35 @@
+{
+  "kind": "direct LDG reference (Li-Shu-Yang) for KS Example 5.2 -- FIXED chemotaxis flux",
+  "git_hash": "b41f6d4",
+  "date": "2026-06-14",
+  "supersedes": "the earlier ldg_<...>_ldg run (record-only; had a conv_rhs slope-mode bug)",
+  "bugfix": "conv_rhs x-face xi-mode sign (+ -> -) and y-face xi/eta modal swap; see LDG_DEBUG_REPORT.md",
+  "verification": {
+    "diffusion_order": [
+      2.0,
+      2.03
+    ],
+    "full_KS_selfconv_order": [
+      2.11,
+      2.46
+    ],
+    "permutation_symmetry": "1.9e-15 (was FAIL)",
+    "constant_v_zero": "1.3e-35",
+    "radial": "m_xx=m_yy exactly, center~3e-6"
+  },
+  "S_L2_at_2e-4": {
+    "80": 874,
+    "160": 1604,
+    "320": 3159
+  },
+  "S_L2_at_6e-5": {
+    "160": 655,
+    "320": 660
+  },
+  "tb_1_05": {
+    "80->160": 5.95e-05,
+    "160->320": 8.43e-05
+  },
+  "reference_blowup_time": 0.000121,
+  "note": "FIXED tb(1.05) increases with refinement (5.95e-5 -> 8.43e-5) toward the reference 1.21e-4 (the buggy run was frozen at 7.36e-6). Same scale as the FVM baseline. Still a uniform-mesh resolution-gap indicator, not a converged continuum blow-up time."
+}
