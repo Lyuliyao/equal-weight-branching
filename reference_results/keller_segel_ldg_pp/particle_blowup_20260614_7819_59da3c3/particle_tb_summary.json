@@ -1,0 +1,176 @@
+{
+  "ldg_ref": {
+    "80->160": 5.953e-05,
+    "160->320": 8.428e-05
+  },
+  "rows": [
+    {
+      "version": "A_dg_cross",
+      "kind": "main",
+      "theta": 1.05,
+      "low": "(20000,S_dg_cross_40)",
+      "high": "(80000,S_dg_cross_80)",
+      "ppc_low": 12.5,
+      "tb": 7e-06,
+      "ci_low": 7e-06,
+      "ci_high": 7e-06,
+      "ratio_max": 2.4881258340719414
+    },
+    {
+      "version": "A_dg_cross",
+      "kind": "main",
+      "theta": 1.1,
+      "low": "(20000,S_dg_cross_40)",
+      "high": "(80000,S_dg_cross_80)",
+      "ppc_low": 12.5,
+      "tb": 1.2e-05,
+      "ci_low": 1.1e-05,
+      "ci_high": 1.2e-05,
+      "ratio_max": 2.4881258340719414
+    },
+    {
+      "version": "A_dg_cross",
+      "kind": "main",
+      "theta": 1.05,
+      "low": "(80000,S_dg_cross_80)",
+      "high": "(320000,S_dg_cross_160)",
+      "ppc_low": 12.5,
+      "tb": 9.2e-05,
+      "ci_low": 6.195e-05,
+      "ci_high": 0.00011929999999999971,
+      "ratio_max": 1.4790731172041667
+    },
+    {
+      "version": "A_dg_cross",
+      "kind": "main",
+      "theta": 1.1,
+      "low": "(80000,S_dg_cross_80)",
+      "high": "(320000,S_dg_cross_160)",
+      "ppc_low": 12.5,
+      "tb": 9.3e-05,
+      "ci_low": 7.3e-05,
+      "ci_high": 0.000128,
+      "ratio_max": 1.4790731172041667
+    },
+    {
+      "version": "A_dg_cross",
+      "kind": "sampling",
+      "theta": 1.05,
+      "low": "(20000,S_dg_cross_80)",
+      "high": "(80000,S_dg_cross_80)",
+      "ppc_low": 3.1,
+      "tb": 7e-06,
+      "ci_low": 7e-06,
+      "ci_high": 7e-06,
+      "ratio_max": 2.4540733243943116
+    },
+    {
+      "version": "A_dg_cross",
+      "kind": "sampling",
+      "theta": 1.1,
+      "low": "(20000,S_dg_cross_80)",
+      "high": "(80000,S_dg_cross_80)",
+      "ppc_low": 3.1,
+      "tb": 1.2e-05,
+      "ci_low": 1.2e-05,
+      "ci_high": 1.2e-05,
+      "ratio_max": 2.4540733243943116
+    },
+    {
+      "version": "A_dg_cross",
+      "kind": "recon",
+      "theta": 1.05,
+      "low": "(80000,S_dg_cross_80)",
+      "high": "(80000,S_dg_cross_160)",
+      "ppc_low": 12.5,
+      "tb": 4.8e-05,
+      "ci_low": 3.6e-05,
+      "ci_high": 8.099999999999999e-05,
+      "ratio_max": 1.5611502648830546
+    },
+    {
+      "version": "A_dg_cross",
+      "kind": "recon",
+      "theta": 1.1,
+      "low": "(80000,S_dg_cross_80)",
+      "high": "(80000,S_dg_cross_160)",
+      "ppc_low": 12.5,
+      "tb": 5.1e-05,
+      "ci_low": 4.2e-05,
+      "ci_high": 9.175e-05,
+      "ratio_max": 1.5611502648830546
+    },
+    {
+      "version": "A_dg_raw",
+      "kind": "main",
+      "theta": 1.05,
+      "low": "(20000,S_dg_raw_40)",
+      "high": "(80000,S_dg_raw_80)",
+      "ppc_low": 12.5,
+      "tb": 7e-06,
+      "ci_low": 7e-06,
+      "ci_high": 7e-06,
+      "ratio_max": 2.486689058608177
+    },
+    {
+      "version": "A_dg_raw",
+      "kind": "main",
+      "theta": 1.1,
+      "low": "(20000,S_dg_raw_40)",
+      "high": "(80000,S_dg_raw_80)",
+      "ppc_low": 12.5,
+      "tb": 1.2e-05,
+      "ci_low": 1.2e-05,
+      "ci_high": 1.2e-05,
+      "ratio_max": 2.486689058608177
+    },
+    {
+      "version": "B_fourier",
+      "kind": "main",
+      "theta": 1.05,
+      "low": "(20000,S_L2_u)",
+      "high": "(80000,S_L2_u)",
+      "ppc_low": "",
+      "tb": 7e-06,
+      "ci_low": 7e-06,
+      "ci_high": 7e-06,
+      "ratio_max": 2.1721498844716667
+    },
+    {
+      "version": "B_fourier",
+      "kind": "main",
+      "theta": 1.1,
+      "low": "(20000,S_L2_u)",
+      "high": "(80000,S_L2_u)",
+      "ppc_low": "",
+      "tb": 1.2e-05,
+      "ci_low": 1.1e-05,
+      "ci_high": 1.2e-05,
+      "ratio_max": 2.1721498844716667
+    },
+    {
+      "version": "B_fourier",
+      "kind": "main",
+      "theta": 1.05,
+      "low": "(80000,S_L2_u)",
+      "high": "(320000,S_L2_u)",
+      "ppc_low": "",
+      "tb": 0.000129,
+      "ci_low": 6.2e-05,
+      "ci_high": 0.00013,
+      "ratio_max": 1.1922118154880197
+    },
+    {
+      "version": "B_fourier",
+      "kind": "main",
+      "theta": 1.1,
+      "low": "(80000,S_L2_u)",
+      "high": "(320000,S_L2_u)",
+      "ppc_low": "",
+      "tb": 0.00013,
+      "ci_low": 7.22e-05,
+      "ci_high": 0.00013099999999999999,
+      "ratio_max": 1.1922118154880197
+    }
+  ]
+}

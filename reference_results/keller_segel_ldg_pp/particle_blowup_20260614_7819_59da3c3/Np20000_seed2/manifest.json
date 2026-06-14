@@ -1,0 +1,81 @@
+{
+  "git_commit": "59da3c3cfb0f344f1eef10fcaaa3d8f4cc318c3f",
+  "command_line": "experiments/keller_segel/ldg_comparison/simulation.py --N 20000 --K 5 --tau 1e-6 --n_steps 200 --seed 2 --report_times 6e-5 1.2e-4 2e-4 --dg_readout_n 40 80 160 --diag_every 1 --outdir reference_results/keller_segel_ldg_pp/particle_blowup_20260614_7819_59da3c3/Np20000_seed2",
+  "argv": [
+    "experiments/keller_segel/ldg_comparison/simulation.py",
+    "--N",
+    "20000",
+    "--K",
+    "5",
+    "--tau",
+    "1e-6",
+    "--n_steps",
+    "200",
+    "--seed",
+    "2",
+    "--report_times",
+    "6e-5",
+    "1.2e-4",
+    "2e-4",
+    "--dg_readout_n",
+    "40",
+    "80",
+    "160",
+    "--diag_every",
+    "1",
+    "--outdir",
+    "reference_results/keller_segel_ldg_pp/particle_blowup_20260614_7819_59da3c3/Np20000_seed2"
+  ],
+  "python_version": "3.12.7",
+  "package_versions": {
+    "numpy": "2.4.4",
+    "jax": "0.10.0",
+    "matplotlib": "3.10.8"
+  },
+  "resolved_args": {
+    "N": 20000,
+    "K": 5,
+    "tau": 1e-06,
+    "n_steps": 200,
+    "diag_every": 1,
+    "seed": 2,
+    "chi": 1.0,
+    "gamma": 3.0,
+    "gamma_diff": 6.0,
+    "D": 1.0,
+    "L_min": 0.001,
+    "q_window": 0.8,
+    "dg_readout_n": [
+      40,
+      80,
+      160
+    ],
+    "a_u": 84.0,
+    "a_v": 42.0,
+    "diag_grid": 65,
+    "snap_grid": 129,
+    "report_times": [
+      6e-05,
+      0.00012,
+      0.0002
+    ],
+    "filter_s": 0.5,
+    "mask_v_outside": true,
+    "cfl_abort": 5.0,
+    "outdir": "reference_results/keller_segel_ldg_pp/particle_blowup_20260614_7819_59da3c3/Np20000_seed2",
+    "save_cloud_snapshots": false,
+    "verbose": false,
+    "smoke": false
+  },
+  "seed": 2,
+  "outdir": "/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching/reference_results/keller_segel_ldg_pp/particle_blowup_20260614_7819_59da3c3/Np20000_seed2",
+  "datetime": "2026-06-14T13:55:54.840177",
+  "population_control": "none (equal-weight clouds; v-cloud births/deaths from the unbiased injection kernel, no cap)",
+  "deterministic_reference": "particle-field LDG-STYLE: core-adaptive window Fourier reconstruction (periodic/window), NOT FD/LDG/Neumann solver",
+  "tag": "N20000_K5_tau1e-06_q0.8_seed2",
+  "report_times": [
+    6e-05,
+    0.00012,
+    0.0002
+  ]
+}

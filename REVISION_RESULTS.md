@@ -85,6 +85,14 @@ System (all of §3): `u_t − div(∇u − u∇v) = 0`, `v_t = Δv + u − v`, �
 
 ---
 
+### 3.7 🟢/🟡 LDG-style particle blow-up proxy (reconstruction-operator sweep)
+- **Purpose:** define a particle analogue of the LDG `L²`-resolution-gap blow-up indicator tied to an **explicit** reconstruction operator (not a final-time image), and compare to the fixed-flux LDG `tb`.
+- **Method:** project the particle cloud onto the **same P¹ DG space and mass-matrix norm as the LDG solver** (Version A; verified — the cross/split estimator converges to the LDG `field_L2`=114.88), plus the Fourier readout (Version B). Three gaps: main `(N_p,n)→(4N_p,2n)`, sampling `(N_p,n)→(4N_p,n)`, recon `(N_p,n)→(N_p,2n)`. Ensemble over seeds + bootstrap CI + persistence rule. Runs: `N_p∈{2e4,8e4,3.2e5}`, 2–4 seeds.
+- **Positive:** at **adequate particle counts** the LDG-matched DG main gap `(8e4,80)→(3.2e5,160)` gives `tb=9.2×10⁻⁵` [CI 6.2–11.9e-5] — **on the LDG scale** (5.95–8.43e-5); the same-cloud recon gap is `4.8×10⁻⁵`, near LDG `80→160`. So the particle method reproduces the LDG resolution-gap scale.
+- **🔴 negative/caveat:** at **low `N_p`** the metric is **shot-noise limited** — the `2e4`-particle readout opens a spurious gap at `7×10⁻⁶` from early times (the cross estimator cannot fully repair `ppc≲3`). The three-gap decomposition exposes this: a naive low-`N_p` particle "blow-up gap" looks ~10× too early. Fourier (Version B) behaves similarly (`1.3×10⁻⁴` at adequate `N_p`, `7×10⁻⁶` at low). The 8e4/3.2e5 runs hit the drift-CFL guard at `t≈1.5e-4` (curves end early; CIs wide with 2–4 seeds).
+- **Decision (Scenario 1/2):** use Version A as the LDG-comparable metric **at adequate ppc with the cross estimator and the stated shot-noise limitation**; Fourier as a reconstruction-sensitivity diagnostic. **Not** a continuum blow-up time. Pair with reconstruction-free radii.
+- **Data:** `experiments/keller_segel/ldg_comparison/{particle_dg_readout,analyze_particle_blowup_metric,plot_particle_blowup}.py`, `reference_results/keller_segel_ldg_pp/particle_blowup_<run_id>/` (`particle_tb_summary.csv`, README, figure). **Not in paper.**
+
 ## 4. Other Keller–Segel / high-dim (unchanged this revision)
 
 - ⚪ **Parabolic–elliptic core-adaptive `t_gap` diagnostics** — moved to **appendix (record only)**; the main KS benchmark is the fully-pp system. `experiments/keller_segel/concentration_ldg/`.

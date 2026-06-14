@@ -182,29 +182,42 @@ def _f(x):
 
 
 def _decision(rows):
-    def get(v, k):
-        m = [r for r in rows if r["version"] == v and r["kind"] == k and r["theta"] == 1.05]
-        return m[0]["tb"] if m and m[0]["tb"] == m[0]["tb"] else None
-    A = get("A_dg_cross", "main"); B = get("B_fourier", "main")
-    print("\n=== DECISION (vs LDG 5.95e-5..8.43e-5) ===")
-    if A is None:
-        print("  Version A main gap not available yet (need both Np runs).")
-        return
+    def highest_main(v):
+        # main gaps for version v, theta=1.05, with a finite tb; pick the one whose
+        # low side has the most particles (least shot noise) = highest low_Np.
+        m = [r for r in rows if r["version"] == v and r["kind"] == "main"
+             and r["theta"] == 1.05 and r["tb"] == r["tb"]]
+        if not m:
+            return None, None
+        m.sort(key=lambda r: int(r["low"].strip("(").split(",")[0]))
+        return m[-1]["tb"], m[-1]["low"]
+    A, A_pair = highest_main("A_dg_cross")
+    B, B_pair = highest_main("B_fourier")
+    recon = [r for r in rows if r["version"] == "A_dg_cross" and r["kind"] == "recon"
+             and r["theta"] == 1.05 and r["tb"] == r["tb"]]
+    R = recon[-1]["tb"] if recon else None
+    low_A = [r for r in rows if r["version"] == "A_dg_cross" and r["kind"] == "main"
+             and r["theta"] == 1.05 and r["tb"] == r["tb"]]
     onscale = lambda x: x is not None and 3e-5 <= x <= 2e-4
-    note = []
-    note.append(f"Version A (LDG-matched DG) main tb={A:.2e} -- "
-                + ("ON the LDG scale" if onscale(A) else "OFF the LDG scale"))
+    print("\n=== DECISION (vs LDG fixed-flux tb(1.05) = 5.95e-5 .. 8.43e-5) ===")
+    if A is not None:
+        print(f"  Version A (LDG-matched DG) main, highest-Np pair {A_pair}: tb={A:.2e} -- "
+              + ("ON the LDG scale" if onscale(A) else "OFF the LDG scale"))
+    if R is not None:
+        print(f"  Version A same-cloud recon gap: tb={R:.2e} -- "
+              + ("ON the LDG scale" if onscale(R) else "OFF the LDG scale"))
+    if len(low_A) > 1:
+        lows = sorted(low_A, key=lambda r: int(r["low"].strip("(").split(",")[0]))
+        print(f"  (low-Np pair {lows[0]['low']} tb={float(lows[0]['tb']):.2e}: shot-noise "
+              "limited -- the metric needs adequate particles-per-cell.)")
     if B is not None:
-        note.append(f"Version B (Fourier) main tb={B:.2e} -- "
-                    + ("earlier than A" if B < 0.7 * A else "comparable to A"))
-    for n in note:
-        print("  " + n)
-    if onscale(A):
-        print("  => Recommend Version A as the LDG-comparable metric; Fourier as a "
-              "reconstruction-sensitivity diagnostic (Scenario 1/2).")
+        print(f"  Version B (Fourier) main, highest-Np pair {B_pair}: tb={B:.2e}")
+    if onscale(A) or onscale(R):
+        print("  => SCENARIO 1/2: at adequate particle counts the LDG-matched DG gap is on the "
+              "LDG scale. Use Version A (DG) as the LDG-comparable metric; report the low-Np "
+              "shot-noise limitation; Fourier as a reconstruction-sensitivity diagnostic.")
     else:
-        print("  => Version A off-scale; check ppc/shot noise. Possibly Scenario 4 "
-              "(report concentration + radii only, no particle tb).")
+        print("  => SCENARIO 4: no on-scale particle gap; report concentration + radii only.")
 
 
 if __name__ == "__main__":

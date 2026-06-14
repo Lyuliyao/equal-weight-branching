@@ -44,3 +44,7 @@ reference_results/keller_segel_ldg_pp/ldg_*/N320/snapshots.npz
 # keep small LDG N80/N160 snapshots (figure regeneration); N320 stays ignored above
 !reference_results/keller_segel_ldg_pp/ldg_*/N80/snapshots.npz
 !reference_results/keller_segel_ldg_pp/ldg_*/N160/snapshots.npz
+# particle blow-up metric: keep diag CSVs + summary + README; drop per-run snapshots/logs
+reference_results/keller_segel_ldg_pp/particle_blowup_*/Np*/snapshots/
+reference_results/keller_segel_ldg_pp/particle_blowup_*/*.log
+reference_results/keller_segel_ldg_pp/particle_blowup_*/Np*/run.log
