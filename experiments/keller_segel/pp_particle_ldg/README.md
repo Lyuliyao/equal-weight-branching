@@ -1,5 +1,7 @@
 # Particle method on the fully parabolic–parabolic LDG benchmark (§5.4)
 
+> **Blocker / superseding note (2026-06-14):** the current §5.4 workflow is not sufficient for the manuscript.  It compares the particle method mainly against a finite-volume grid baseline, while the desired experiment is a **direct LDG comparison**.  It also reports a particle `(N,K)->(4N,2K)` gap that mixes particle-number refinement with Fourier-bandwidth refinement.  Before §5.4 is used in the paper, follow `LDG_DIRECT_RECONSTRUCTION_TODO.md`: implement or compare directly with LDG, and add particle-adaptive local reconstruction driven by the particle cloud.
+
 The particle method run **on the same equation** as the grid baseline
 (`../ldg_pp_baseline/`) for the §5.4 comparison. The solver is **not duplicated
 here**; it is `experiments/keller_segel/ldg_comparison/simulation.py`, which already
@@ -16,7 +18,7 @@ implements exactly the algorithm the revision plan requires:
   `6e-5, 1.2e-4, 2e-4`, on a core-adaptive periodic Fourier window (LDG-aligned, **not**
   strict Neumann — disclosed; the core stays far from the window boundary).
 
-## How the §5.4 particle results are produced
+## How the current §5.4 particle results are produced
 
 ```bash
 cd ../ldg_comparison
@@ -32,7 +34,7 @@ The archived production run used in the paper is
 its base/refined diagnostics are copied (for §5.4/§5.5 traceability) into
 `reference_results/keller_segel_ldg_pp/particle_<run_id>/`.
 
-## Comparison to the grid baseline (§5.4)
+## Current comparison to the grid baseline (§5.4) — not final
 
 `../ldg_pp_baseline/plot_baseline.py` overlays the particle `S_L2(t)`, peak, and
 `R_0.8(t)` on the grid refinements. Findings (honest scope):
@@ -48,3 +50,12 @@ its base/refined diagnostics are copied (for §5.4/§5.5 traceability) into
   **reconstruction-bandwidth** gap (the pair changes both particle number `N` **and**
   Fourier bandwidth `K=5→10`), so it is *not* the same indicator as the grid `t_b`
   and is reported separately.
+
+## What must be done before this becomes main-text §5.4
+
+1. Do **not** present the finite-volume baseline as the direct LDG comparator.
+2. Add `experiments/keller_segel/ldg_direct/` or an explicitly sourced published-LDG comparison.
+3. Add particle-adaptive reconstruction post-processing for the saved particle clouds:
+   global coarse Fourier background plus a particle-detected local residual reconstruction in the core window.
+4. Recompute `S_L2`, peak, and gap-time diagnostics using the adaptive reconstruction, and compare them to the direct LDG result.
+5. Move the finite-volume baseline to appendix/sanity-check status unless it is explicitly labelled as FVM.
