@@ -1,0 +1,25 @@
+#!/bin/bash
+#SBATCH --job-name=staged_mi
+#SBATCH --array=0-7
+#SBATCH --time=02:30:00
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=32G
+#SBATCH --partition=general-short
+#SBATCH --output=%x_seed_%a_%A.out
+#
+# Staged separated growth-island production (paper Sec. 5.2): one seed per task.
+# Tuned parameters are passed via --config (see config_staged_multi_island.json).
+# Merge the per-seed dirs afterwards with merge_multi_island.py.
+#
+#   RUNDIR=.../reference_results/staged_multi_island/<run_id> \
+#   CFG=.../config_staged_multi_island.json sbatch run_staged_multi_island.sb
+#
+PY=/mnt/home/lyuliyao/.conda/envs/heat/bin/python
+EXPDIR=/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching/experiments/branch_vs_weighted
+cd "$EXPDIR"
+: "${RUNDIR:?set RUNDIR to the reference_results/staged_multi_island/<run_id> path}"
+: "${CFG:=$EXPDIR/config_staged_multi_island.json}"
+
+$PY staged_multi_island.py --config "$CFG" \
+  --seeds ${SLURM_ARRAY_TASK_ID} \
+  --out_dir "${RUNDIR}/seed_${SLURM_ARRAY_TASK_ID}"

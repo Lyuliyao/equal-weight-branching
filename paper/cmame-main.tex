@@ -1012,69 +1012,6 @@ minimum-variance branching & $2.0\times10^4\to1.3\times10^5$ & $\mathbf{1.9\time
 \label{fig:bw_box}
 \end{figure}
 
-\subsection{Separated growth islands: global ESS is not a local degeneracy diagnostic}
-\label{sec:multi_island}
-
-The single-peak benchmark of Section~\ref{sec:branch_vs_weight} is favorable to a global trigger: with one growth region, a single global effective-sample-size (ESS) statistic and the resampling it triggers are aligned with the only place that matters.  The next experiment is designed to separate two diagnostics that this geometry conflates---the \emph{global} ESS of the ensemble and the \emph{local} resolution of each growth region.  On $\mathbb T^2=[-\pi,\pi]^2$ we solve
-\begin{equation}
-\partial_t u=D\Delta u+r(\mathbf x)u,\quad r(\mathbf x)=\lambda\,G_{\rm multi}(\mathbf x)-\beta,\quad G_{\rm multi}(\mathbf x)=\sum_{m=1}^{M}a_m\exp\!\Bigl(-\frac{d_{\mathbb T}(\mathbf x,\mathbf c_m)^2}{2\sigma^2}\Bigr),
-\label{equ:multi_island}
-\end{equation}
-with $M=16$ separated Gaussian islands on a $4\times4$ grid, mildly varying amplitudes $a_m=1+\tfrac14\sin(2\pi m/M)$, and $\sigma=0.16$, $D=0.01$, $\lambda=12$, $\beta=0.8$, $u_0\equiv1$, $T=0.8$, $\tau=10^{-3}$, $N_0=2\times10^4$, over eight seeds.  The deterministic reference is a Fourier Strang split-step on a $512^2$ grid (the island masses are converged to $0.2\%$ against a $1024^2$ reference).  The diagnostic regions are the disjoint half-height disks of the unit-amplitude island, $B_m=\{\mathbf x:\exp(-d_{\mathbb T}(\mathbf x,\mathbf c_m)^2/2\sigma^2)\ge\tfrac12\}$, and the centers are kept off the periodic seam.  The amplitude spread induces a $52\times$ spread in reference island mass at $T$, so the strong islands dominate the total mass while the weak islands hold a small fraction of it---precisely the regime in which a global weight statistic is uninformative about the weak islands.
-
-The central diagnostic is the per-island mass error
-\begin{equation}
-E_m=\frac{\bigl|\mu_T(B_m)-\int_{B_m}u_{\rm ref}(T,\mathbf x)\,d\mathbf x\bigr|}{\int_{B_m}u_{\rm ref}(T,\mathbf x)\,d\mathbf x},
-\label{equ:Em}
-\end{equation}
-computed directly from the particles (no field reconstruction), together with the local effective sample size $N_{\rm eff}(B_m)=(\sum_{i:X_i\in B_m}w_i)^2/\sum_{i:X_i\in B_m}w_i^2$ for weighted ensembles and the local count $N_B(B_m)=\#\{i:X_i\in B_m\}$ for branching.
-
-The result separates the two diagnostics as intended (Table~\ref{tab:multi_island}, Figs.~\ref{fig:mi_fields}--\ref{fig:mi_zoom}).  Global ESS-triggered systematic resampling restores a healthy \emph{global} ESS, $0.76$, well above the $0.5$ trigger, and a moderate global $L^2$ of $0.25$, yet it still leaves about three of the sixteen islands with $E_m>20\%$ and a worst-island error above $40\%$: resampling draws particles in proportion to the global weight, so it concentrates lineages on the strong islands and starves the weak ones, whose local effective sample size drops to about a hundred particles.  Raw weighted particles are worse still, with a catastrophic global ESS ($\approx0.006$), a max-to-mean weight ratio in the hundreds, and a minimum island-local count near ten.  Equal-weight branching instead converts the growth of \emph{each} island into local particle count: its minimum local count over the sixteen islands is several thousand---one to nearly three orders of magnitude above the weighted methods---so every island, including the weakest, is resolved, and its global $L^2$ ($0.23$--$0.26$) is comparable to the resampled ensemble while requiring no resampling schedule.  Branching relies on no global trigger; the same reaction multiplier that creates mass creates particles at the location of growth.  Its per-island \emph{mass}, however, inherits the variance of a supercritical branching process seeded by the few ancestors initially present in each island, so at this $N_0$ its mean and maximum per-island errors are comparable to the resampled ensemble even though its local resolution never collapses; this is the expected $N_0^{-1/2}$ behavior in the number of local ancestors and is reduced at larger $N_0$.  The conclusion is therefore not that branching minimizes every error column, but that the diagnostic which exposes the failure is local---per-island mass and local effective count---and that a single global ESS, kept healthy by resampling, hides the under-resolution of the weak islands that branching avoids by construction.
-
-\begin{table}[t]
-\centering
-\caption{Separated-growth-island benchmark at $T=0.8$ ($M=16$, eight seeds).  Global $L^2$ and global nESS do not diagnose whether every island is represented.  The island error is~\eqref{equ:Em} with $B_m=\{G_\sigma(\mathbf x;\mathbf c_m)\ge\tfrac12\}$; the columns report the mean and maximum island error (averaged over seeds), the mean number of island errors above $20\%$, and the minimum local effective sample size over the sixteen islands.  Resampling uses the global-nESS trigger $0.5$.}
-\label{tab:multi_island}
-\begin{tabular}{l c c c c c c c}
-\toprule
-method & global $L^2$ & global nESS & max:mean $w$ & $\overline{E_m}$ & $\max_m E_m$ & $\#\{E_m{>}20\%\}$ & $\min_m N_{\rm eff}(B_m)$ \\
-\midrule
-weighted & 1.48 & 0.007 & 610 & 0.185 & 0.470 & 6.1/16 & 10 \\
-weighted + resample (ESS) & 0.246 & 0.755 & 2.4 & $\mathbf{0.141}$ & 0.408 & 3.4/16 & 115 \\
-Poisson branching & $\mathbf{0.231}$ & 1 (equal) & -- & 0.169 & 0.469 & 5.1/16 & 4420 \\
-minimum-variance branching & 0.260 & 1 (equal) & -- & 0.183 & 0.476 & 5.5/16 & $\mathbf{4739}$ \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{figure/mi_fields.pdf}
-\caption{Separated-growth-island benchmark at $T=0.8$: final fields (shared color scale, island centers marked).  The raw weighted reconstruction is corrupted by a few large weights; weighted-plus-resampling and minimum-variance branching both recover the island structure, but the per-island accuracy differs (Fig.~\ref{fig:mi_heat}).}
-\label{fig:mi_fields}
-\end{figure}
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{figure/mi_island_heatmap.pdf}
-\caption{Seed-mean per-island mass error $E_m$ on the $4\times4$ island grid (shared $0$--$50\%$ scale, $20\%$ contour).  The annotation under each panel is the per-seed number of island failures averaged over seeds, $\langle\#\{E_m>20\%\}\rangle$, as in Table~\ref{tab:multi_island}; note that the seed-\emph{averaged} field smooths out failures that occur at different islands in different seeds, so the per-run failure count is larger than the count of persistently failed islands.  Raw weighted particles fail many islands; resampling reduces but does not eliminate the per-run failures despite a healthy global ESS; branching keeps the local particle count high in every island.}
-\label{fig:mi_heat}
-\end{figure}
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{figure/mi_degeneracy_timeseries.pdf}
-\caption{Global versus local degeneracy in time.  The global nESS of the resampled ensemble stays above the $0.5$ trigger, while the minimum island-local effective count of the weighted methods falls to a few tens; equal-weight branching keeps the minimum island-local count orders of magnitude higher, and its maximum island mass error is the smallest.}
-\label{fig:mi_ess}
-\end{figure}
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{figure/mi_zoom_worst_island.pdf}
-\caption{Magnified comparison around the island with the largest weighted-plus-resampling error (selected by $\arg\max_m E_m$, not by eye).  The reference and branching agree on the island; the globally resampled ensemble under-resolves it.}
-\label{fig:mi_zoom}
-\end{figure}
-
 \subsection{Switching growth: lineage diversity under a moving source}
 \label{sec:switch}
 
@@ -1242,7 +1179,7 @@ To align the concentration test with the local discontinuous Galerkin (LDG) stud
 
 The branching mechanism adapts the particle measure, but reconstructing a concentrating measure is a separate approximation problem.  The concentration tests above already show its signature: the reconstruction-free core radius is stable while the reconstructed peak and $L^2$ norm remain bandwidth-sensitive.  A uniform increase of the global Fourier bandwidth is inefficient---it spends degrees of freedom over the whole domain, while the bandwidth sensitivity is localized near the particle core or growth islands.  We therefore test two diagnostic reconstructions on \emph{saved} particle snapshots, with the local window inferred from the particle cloud (weighted centroid and quantile radii), not from the reference field.  The first keeps a low global spectrum $P_{K_g}\mu$ and adds, only inside the detected window and only as a residual over that global low field, either a high-resolution local spectral window or a local Gaussian blob.  The second view retains the residual particles that the global spectrum fails to explain, with an explicit acceptance probability and a Horvitz--Thompson correction; the resulting accept rate is an objective indicator of where reconstruction resolution is needed, and it is an enrichment rate, not a particle-dynamics resampling step.
 
-On a concentrated Keller--Segel core---an exact Gaussian profile of mass $10\pi$ and width $a=84$, for which the peak, $L^2$ norm, and radii are known analytically---a global bandwidth $K_g=8$ under-resolves the peak by $13\%$, while a global $K=40$ reconstruction and the hybrid local-window reconstruction both recover it to about $1\%$; the hybrid keeps the \emph{global} bandwidth at $K_g=8$ and spends the high resolution only on the particle-detected window.  The half-mass and $80\%$ core radii are reconstruction-free and match the analytic values to three digits.  On the separated growth islands, reconstructing the island mass by integrating a low-$K$ global Fourier field over $B_m$ is catastrophic for the sharp islands---$E_m$ approaches unity because the low-$K$ field smears each island far beyond $B_m$---whereas particle counting is reconstruction-free and accurate, and a local spectral window recovers counting accuracy.  These diagnostics are not a new adaptive solver; they separate two forms of adaptivity---branching adapts the measure where mass is created, while local reconstruction adapts the field representation where the particle cloud indicates unresolved concentration---and they suggest that a hybrid Monte Carlo / deterministic-function-approximation strategy is the natural scalable direction, whose analysis is beyond the scope of this paper.
+On a concentrated Keller--Segel core---an exact Gaussian profile of mass $10\pi$ and width $a=84$, for which the peak, $L^2$ norm, and radii are known analytically---a global bandwidth $K_g=8$ under-resolves the peak by $13\%$, while a global $K=40$ reconstruction and the hybrid local-window reconstruction both recover it to about $1\%$; the hybrid keeps the \emph{global} bandwidth at $K_g=8$ and spends the high resolution only on the particle-detected window.  The half-mass and $80\%$ core radii are reconstruction-free and match the analytic values to three digits.  On a saved cloud of separated Gaussian growth islands (released with the code), reconstructing the mass inside a half-height island disk by integrating a low-$K$ global Fourier field over that disk is catastrophic for the sharp islands---the relative island-mass error approaches unity because the low-$K$ field smears each island far beyond the disk---whereas particle counting is reconstruction-free and accurate, and a local spectral window recovers counting accuracy.  These diagnostics are not a new adaptive solver; they separate two forms of adaptivity---branching adapts the measure where mass is created, while local reconstruction adapts the field representation where the particle cloud indicates unresolved concentration---and they suggest that a hybrid Monte Carlo / deterministic-function-approximation strategy is the natural scalable direction, whose analysis is beyond the scope of this paper.
 
 \begin{figure}[t]
 \centering
@@ -1417,7 +1354,7 @@ stress test in which the mesh-free representation tracks the pre-blow-up concent
 mesh refinement, in two dimensions and in a self-contained three-dimensional focusing family; these are focusing
 and concentration stress tests, and we make no singular-blow-up-time or universal-critical-mass claim.
 
-The separated-growth-island and switching-growth experiments together clarify the limitation of global resampling.  Resampling based on a single global ESS can equalize weights while still failing to allocate enough independent lineages to every local growth region: in the island benchmark its global ESS stays above the trigger while individual weak islands lose local resolution and mass, and in the switching benchmark it concentrates lineages on the stale region.  Branching is local by construction---the same reaction multiplier that creates mass also creates particles at the location of growth---so it separates particle-resolution adaptation from any global resampling schedule.  This does not remove the need for reconstruction resolution.  The concentration and island tests indicate that such refinement should be applied to the reconstruction, not uniformly to the full domain: a natural multiscale reconstruction is a coarse global spectrum for the smooth background plus a local residual blob, local residual spectrum, or retained residual particles in particle-detected cores and growth islands.  In this view the Monte-Carlo particles carry and branch the finite measure, while deterministic quadrature or function approximation is used selectively where the global spectrum becomes resolution-sensitive; our hybrid-reconstruction diagnostics (Section~\ref{sec:hybrid_recon}) make this localization explicit but stop short of feeding it back into the solver, which we leave to future work.
+The switching-growth experiment clarifies the limitation of global resampling.  Resampling based on a single global ESS can equalize weights while still failing to allocate enough independent lineages to every local growth region: it concentrates lineages on the stale region and loses accuracy in the region that becomes important later, while branching, which is local by construction, allocates particles directly where the source turns on.  The same reaction multiplier that creates mass also creates particles at the location of growth, so branching separates particle-resolution adaptation from any global resampling schedule and gives the lowest global $L^2$ at matched particle-step cost.  This does not remove the need for reconstruction resolution.  The concentration and island tests indicate that such refinement should be applied to the reconstruction, not uniformly to the full domain: a natural multiscale reconstruction is a coarse global spectrum for the smooth background plus a local residual blob, local residual spectrum, or retained residual particles in particle-detected cores and growth islands.  In this view the Monte-Carlo particles carry and branch the finite measure, while deterministic quadrature or function approximation is used selectively where the global spectrum becomes resolution-sensitive; our hybrid-reconstruction diagnostics (Section~\ref{sec:hybrid_recon}) make this localization explicit but stop short of feeding it back into the solver, which we leave to future work.
 
 Several limitations frame the scope of these conclusions and point to future work. The analysis is carried out
 for the projected, regularized dynamics under regularity and localization assumptions and before the singular
