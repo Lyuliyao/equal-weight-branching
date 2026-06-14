@@ -1,0 +1,19 @@
+{
+  "kind": "particle-adaptive reconstruction audit (post-processing)",
+  "git_hash": "e531cef",
+  "date": "2026-06-14",
+  "plan": "blocker TODO \u00a72 item 3 + solver-hybrid plan \u00a73",
+  "result": "MIXED/limited: hybrid recovers core (peak/S_L2 -> near FVM anchor) at low global Kg where global Fourier under-resolves; caveats: local-Kl sensitivity, ~19% mass deficit, signed-residual negativity (blob least)",
+  "methods": [
+    "global_fourier Kg=5,8,16,32",
+    "hybrid_spectrum Kg8+Kl24/32/40",
+    "hybrid_blob Kg8"
+  ],
+  "clouds": "ldg_comparison base N=2e4/K5 (3 report times) + refined N=8e4/K10 (2 report times; drift-CFL abort at t~1.66e-4)",
+  "not_done": [
+    "direct LDG reference (plan \u00a76)",
+    "online solver-level hybrid entering drift (plan \u00a74)",
+    "\u00a75.4 manuscript rewrite"
+  ],
+  "reuse": "experiments/resolution_hybrid/reconstructors.py (verified signed-residual hybrid)"
+}

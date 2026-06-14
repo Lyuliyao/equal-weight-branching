@@ -321,6 +321,19 @@ def run(args):
                 peak_v = float(np.max(np.asarray(field_v)))
                 fname = os.path.join(args.outdir, "snapshots",
                                      f"snap_u_t{rt:.4e}_seed{args.seed}.npz")
+                extra = {}
+                if getattr(args, "save_cloud_snapshots", False):
+                    # raw particle clouds for residual / adaptive reconstruction
+                    # (CLAUDE.md solver-hybrid plan §8.3); start-of-step clouds,
+                    # consistent with the reconstructed field saved alongside.
+                    Xu = np.asarray(X1); Xv = np.asarray(X2)
+                    extra = dict(
+                        X_u=Xu.astype(np.float32), X_v=Xv.astype(np.float32),
+                        N_u=int(Xu.shape[0]), N_v=int(Xv.shape[0]),
+                        mass_u_total=float(MASS), mass_v_total=float(M_v_eff),
+                        mass_per_particle_u=float(MASS / N0),
+                        mass_per_particle_v=(float(M_v_eff / Xv.shape[0])
+                                             if Xv.shape[0] else 0.0))
                 np.savez(fname,
                          t=t, report_time=rt, seed=args.seed, K=args.K, N=N0,
                          x_c=np.asarray(x_c), L=float(L), M_u=float(M_u),
@@ -329,7 +342,7 @@ def run(args):
                          u_field=np.asarray(field),
                          v_field=np.asarray(field_v),
                          peak_PK_u=float(np.max(np.asarray(field))),
-                         peak_PK_v=peak_v)
+                         peak_PK_v=peak_v, **extra)
                 saved_report.add(rt)
                 if args.verbose:
                     print(f"  [snapshot] wrote {fname} (t={t:.4e} ~ report {rt})",
@@ -453,6 +466,9 @@ def build_parser():
     p.add_argument("--cfl_abort", type=float, default=5.0,
                    help="stop the loop gracefully if drift_cfl exceeds this")
     p.add_argument("--outdir", type=str, default="results")
+    p.add_argument("--save_cloud_snapshots", action="store_true",
+                   help="also save raw particle clouds X_u,X_v at report times "
+                        "(for residual/adaptive reconstruction post-processing)")
     p.add_argument("--verbose", action="store_true")
     p.add_argument("--smoke", action="store_true",
                    help="tiny smoke run: small N, few steps, still hits >=1 report "

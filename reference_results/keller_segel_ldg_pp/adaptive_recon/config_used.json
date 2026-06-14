@@ -1,0 +1,27 @@
+{
+  "clouds_dir": "/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching/reference_results/keller_segel_ldg_pp/clouds_run/refined",
+  "tag": "refined",
+  "fvm_baseline": "reference_results/keller_segel_ldg_pp/baseline_20260614_8994_9e7f44c_pp_ldg",
+  "out_dir": "reference_results/keller_segel_ldg_pp/adaptive_recon",
+  "box_half": 0.5,
+  "ngrid": 1025,
+  "Kg_list": [
+    5,
+    8,
+    16,
+    32
+  ],
+  "Kg_hybrid": 8,
+  "Kl_list": [
+    24,
+    32,
+    40
+  ],
+  "alpha": 3.0,
+  "alpha_pad": 4.5,
+  "reports": [
+    6e-05,
+    0.00012,
+    0.0002
+  ]
+}

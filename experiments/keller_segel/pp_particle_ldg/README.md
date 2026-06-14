@@ -51,6 +51,11 @@ its base/refined diagnostics are copied (for §5.4/§5.5 traceability) into
   Fourier bandwidth `K=5→10`), so it is *not* the same indicator as the grid `t_b`
   and is reported separately.
 
+## Status (2026-06-14)
+
+- **Done — item 3 (post-processing adaptive reconstruction).** The solver now saves raw clouds (`--save_cloud_snapshots`); `adaptive_reconstruct.py` compares global Fourier vs particle-adaptive hybrid (local spectrum/blob, signed residual). Result is **mixed/limited**: the hybrid recovers the concentrating core that global Fourier under-resolves at any feasible global `Kg` (peak/`S_L2` reach the FVM-anchor scale at low global bandwidth — acceptance criterion 3), but trades global- for local-`Kl` bandwidth sensitivity and the signed residual is only ~mass-conserving with Gibbs negativity (blob least). Full write-up: `reference_results/keller_segel_ldg_pp/adaptive_recon/README.md`.
+- **Not done — items 1, 2, 4 and the §5.4 rewrite.** A direct LDG reference and the *online* solver-level hybrid (hybrid field into the drift, plan §4) remain to be implemented and verified; the FVM baseline stays a deterministic sanity anchor only, not the LDG comparator.
+
 ## What must be done before this becomes main-text §5.4
 
 1. Do **not** present the finite-volume baseline as the direct LDG comparator.

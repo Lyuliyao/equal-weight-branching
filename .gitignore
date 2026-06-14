@@ -32,6 +32,8 @@ staged_mi_seed_*.out
 !reference_results/staged_multi_island/**/fields_ref.npz
 !reference_results/staged_multi_island/**/fields_seed0.npz
 !reference_results/staged_multi_island/**/clouds/cloud_*_seed0.npz
+# refined pp-KS raw clouds are large + regenerable (base clouds kept for the adaptive demo)
+reference_results/keller_segel_ldg_pp/clouds_run/refined/
 # large raw per-seed intermediates of the multi-island productions are NOT committed
 reference_results/multi_island/**/seed_*/
 reference_results/multi_island/**/fields_seed[1-9]*.npz
