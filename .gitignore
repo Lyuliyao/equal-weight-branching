@@ -48,3 +48,7 @@ reference_results/keller_segel_ldg_pp/ldg_*/N320/snapshots.npz
 reference_results/keller_segel_ldg_pp/particle_blowup_*/Np*/snapshots/
 reference_results/keller_segel_ldg_pp/particle_blowup_*/*.log
 reference_results/keller_segel_ldg_pp/particle_blowup_*/Np*/run.log
+# solver-field sweep: keep diag CSVs + README + compare json; drop snapshots/logs
+reference_results/keller_segel_ldg_pp/solver_field_sweep_*/*/snapshots/
+reference_results/keller_segel_ldg_pp/solver_field_sweep_*/*.log
+reference_results/keller_segel_ldg_pp/solver_field_sweep_*/*/run.log
