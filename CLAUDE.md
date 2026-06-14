@@ -342,15 +342,222 @@ This definition should be stated once, near the start of the numerical section. 
 
 ---
 
-## 7. Manuscript policy
+## 7. Optional appendix audit: Fourier bandwidth and KDE-smoothed errors
 
-### 7.1 Main paper should not mention failed multi-island unless necessary
+This is the next optional robustness task after Figure 6. It should be considered for an appendix only. Do not use it to replace the main tables unless the result produces a scientifically important reversal.
+
+### 7.1 Purpose
+
+The concern is that the reported Fourier-reconstructed \(L^2\) errors might be affected by the chosen reconstruction bandwidth \(K\). If \(K\) is too large, high-frequency Monte-Carlo coefficient noise can dominate, and the error may depend strongly on the effective particle count. This is not automatically a flaw — the paper is about reconstructed-field accuracy under weight degeneracy — but we should audit whether the comparison is an artifact of a single \(K\).
+
+The audit should answer:
+
+```text
+Is the method ordering in §5.2 and §5.3 stable over a reasonable Fourier-K range?
+Does a common KDE / Gaussian smoothing scale change the conclusion?
+Are there any surprising reversals, e.g. a method that looked better under Fourier error but worse under KDE, or vice versa?
+```
+
+If there is no surprising reversal, put the audit in an appendix or supplementary note. The main paper can contain at most one sentence saying the ordering is robust to a reconstruction-scale audit. If there is a surprising reversal, stop and report it before changing the manuscript.
+
+### 7.2 Do not replace the main error definition
+
+The main tables should continue to report the relative \(L^2\) error of the solver output \(P_K\mu^N\), because the implemented method uses Fourier reconstruction. KDE is a robustness audit, not the main solver output.
+
+Do not write:
+
+```text
+We replace the Fourier error by KDE error.
+```
+
+Use:
+
+```text
+The main tables report the relative \(L^2\) error of the reconstructed physical field \(P_K\mu^N\). As a reconstruction-scale robustness check, we also recompute errors under several Fourier bandwidths and after applying the same periodic Gaussian smoothing to both the particle measure and the deterministic reference.
+```
+
+### 7.3 Fourier audit definitions
+
+For a fixed bandwidth \(K\), compute:
+
+\[
+E_{\rm total}(K)=
+\frac{\|P_K\mu_T^N-u_{\rm ref}(T)\|_{L^2}}
+{\|u_{\rm ref}(T)\|_{L^2}},
+\]
+
+\[
+E_{\rm particle}(K)=
+\frac{\|P_K\mu_T^N-P_Ku_{\rm ref}(T)\|_{L^2}}
+{\|P_Ku_{\rm ref}(T)\|_{L^2}},
+\]
+
+\[
+E_{\rm proj}(K)=
+\frac{\|P_Ku_{\rm ref}(T)-u_{\rm ref}(T)\|_{L^2}}
+{\|u_{\rm ref}(T)\|_{L^2}}.
+\]
+
+Interpretation:
+
+```text
+E_proj large     => K is too small / under-resolved.
+E_particle grows strongly with K => MC reconstruction noise is becoming dominant.
+A stable method ordering over moderate K supports the main comparison.
+```
+
+Use fixed bandwidths:
+
+```text
+§5.2 localized growth: K = 8, 12, 16, 24
+§5.3 switching growth: K = 32, 48, 64
+```
+
+For §5.3, report both global and local \(B_A,B_B\) errors.
+
+### 7.4 KDE-smoothed audit definitions
+
+Use periodic Gaussian smoothing with the same bandwidth \(h\) for all methods and for the reference. Do not use method-dependent bandwidths.
+
+For particles:
+
+\[
+u_h^N = \eta_h^{\rm per} * \mu_T^N.
+\]
+
+For the deterministic reference:
+
+\[
+u_{{\rm ref},h}=\eta_h^{\rm per}*u_{\rm ref}(T).
+\]
+
+Report the smoothed representation error:
+
+\[
+E_{\rm KDE}^{\rm rep}(h)=
+\frac{\|u_h^N-u_{{\rm ref},h}\|_{L^2}}
+{\|u_{{\rm ref},h}\|_{L^2}},
+\]
+
+and the deterministic smoothing bias:
+
+\[
+E_{\rm bias}(h)=
+\frac{\|u_{{\rm ref},h}-u_{\rm ref}\|_{L^2}}
+{\|u_{\rm ref}\|_{L^2}}.
+\]
+
+The bias must be reported. If \(E_{\rm bias}(h)\) is large, the smoothing scale is too coarse to support an accuracy claim.
+
+Use fixed smoothing scales:
+
+```text
+§5.2 localized growth: h = 0.10, 0.15, 0.20, 0.25
+§5.3 switching growth: h = 0.06, 0.10, 0.15
+```
+
+For §5.3, also report local KDE errors in \(B_A\) and \(B_B\). The key robustness question is whether the old-region/new-region mechanism remains visible:
+
+```text
+ESS resampling best or near-best in B_A;
+branching better in B_B;
+branching preserves lineage diversity independently of reconstruction.
+```
+
+### 7.5 Implementation requirements
+
+Create a focused audit script, for example:
+
+```text
+experiments/branch_vs_weighted/reconstruction_audit.py
+```
+
+Preferred implementation:
+
+1. Use saved final particle clouds if available.
+2. If final particles are not saved for the needed methods, rerun only the minimum necessary seeds with the existing solver and save final particle states. Do not rerun a large production job unless explicitly approved.
+3. Use the same initial particles and Brownian streams as the original experiments when rerunning.
+4. For KDE, use an FFT-based periodic Gaussian convolution:
+   - deposit weighted particles to the grid using the same deposition rule for all methods;
+   - FFT the deposited field;
+   - multiply by \(\exp(-h^2|k|^2/2)\);
+   - inverse FFT;
+   - apply the same smoothing to the reference field.
+5. A simple histogram deposit is acceptable for a first audit if documented, but CIC is preferable. Do not use adaptive or method-specific KDE bandwidths.
+6. The audit must run on saved/rerun data and write reproducibility files; plot scripts must not rerun the solver.
+
+### 7.6 Outputs
+
+Write to:
+
+```text
+reference_results/reconstruction_audit/<run_id>/
+```
+
+Include:
+
+```text
+config.json
+manifest.json
+summary.md
+metrics_fourier_K.csv
+metrics_kde_h.csv
+projection_bias.csv
+particle_clouds/ or clear pointers to source particle files
+plot_data/*.npz
+figures/*.pdf
+figures/*.png
+```
+
+At minimum, the summary must answer:
+
+```text
+1. Does the §5.2 method ordering survive K = 8,12,16,24?
+2. Does the §5.2 method ordering survive KDE h = 0.10,0.15,0.20,0.25?
+3. Does the §5.3 B_A/B_B mechanism survive K = 32,48,64?
+4. Does the §5.3 B_A/B_B mechanism survive KDE h = 0.06,0.10,0.15?
+5. Are there surprising reversals?
+6. Should this remain appendix robustness, or does it require a main-text change?
+```
+
+### 7.7 Decision rules
+
+If the audit shows no surprising reversal:
+
+```text
+Keep it in the appendix or supplementary repository record.
+Do not expand the main numerical section.
+Add at most one sentence in §5.2/§5.3 or the appendix: the ordering is robust over the tested reconstruction scales.
+```
+
+If KDE or K-sweep weakens the branching claim:
+
+```text
+Do not hide it.
+Narrow the main-text claim to the scale where it is supported.
+Report that coarse smoothing reduces method differences, if that is what happens.
+```
+
+If KDE or K-sweep strengthens branching in an unexpected way, for example a baseline that looked comparable under Fourier error becomes worse under KDE, or branching becomes clearly better at moderate smoothing scales:
+
+```text
+Stop and report the result before rewriting the manuscript.
+This may justify an appendix figure or a small main-text sentence, but not an uncontrolled expansion of the paper.
+```
+
+Do not let this audit become another large experiment. It is a reconstruction-scale sanity check.
+
+---
+
+## 8. Manuscript policy
+
+### 8.1 Main paper should not mention failed multi-island unless necessary
 
 Do not add a paragraph explaining the static/staged/compressive multi-island failures in the main paper. It is not needed and weakens the story.
 
 The repository can keep the negative records. The manuscript should only report experiments that support the paper claims.
 
-### 7.2 Narrow the “outperforms weighted particles” claim
+### 8.2 Narrow the “outperforms weighted particles” claim
 
 Avoid universal wording such as:
 
@@ -368,7 +575,7 @@ at matched particle-step work.
 
 This is more accurate and safer.
 
-### 7.3 Current main numerical story
+### 8.3 Current main numerical story
 
 Keep the numerical section organized as:
 
@@ -379,12 +586,12 @@ Keep the numerical section organized as:
 5.4 2D Keller-Segel: coupled solver + pre-singular concentration
 5.5 3D Keller-Segel focusing
 5.6 6D kinetic Keller-Segel
-Appendix: Allen-Cahn, logistic KS, high-dimensional dense reconstruction, negative multi-island records
+Appendix: Allen-Cahn, logistic KS, high-dimensional dense reconstruction, optional KDE/bandwidth audit, negative multi-island records
 ```
 
 Do not insert multi-island into the main story.
 
-### 7.4 Keller–Segel language
+### 8.4 Keller–Segel language
 
 Do not claim a blow-up time from reconstructed peaks or reconstructed \(L^2\).
 
@@ -406,7 +613,7 @@ we resolve the singularity
 the peak convergence determines blow-up
 ```
 
-### 7.5 Cross-species injection
+### 8.5 Cross-species injection
 
 For parabolic–parabolic Keller–Segel with
 
@@ -435,15 +642,15 @@ at their own locations.
 
 ---
 
-## 8. Repository hygiene tasks
+## 9. Repository hygiene tasks
 
-### 8.1 CLAUDE.md
+### 9.1 CLAUDE.md
 
 Keep this file specific to `Lyuliyao/equal-weight-branching`.
 
 Do not overwrite it with instructions from unrelated repositories.
 
-### 8.2 Multi-island files
+### 9.2 Multi-island files
 
 Ensure static, staged, and compressive multi-island README / parameter logs say:
 
@@ -454,16 +661,17 @@ not used in the main paper
 
 Remove any claim that they replace §5.2 or prove branching is better.
 
-### 8.3 Root README
+### 9.3 Root README
 
 Update the root README so that:
 
 - paper reproduction commands match the current manuscript;
 - static/staged/compressive multi-island are listed as `not in paper / diagnostic record`;
 - `pp_injection`, `ldg_comparison`, and any `resolution_hybrid` directory are correctly categorized;
-- section numbers match the final manuscript.
+- section numbers match the final manuscript;
+- if the KDE/bandwidth audit is run, add it under appendix / robustness, not main paper.
 
-### 8.4 Data traceability
+### 9.4 Data traceability
 
 Every number in a main-text table must have a corresponding committed or documented CSV in `reference_results/`.
 
@@ -473,7 +681,7 @@ The localized-growth cost-matched row must remain traceable:
 weighted + resample (ESS), N0 = 3.8e4, particle-steps = 1.9e7
 ```
 
-### 8.5 Figures
+### 9.5 Figures
 
 Every main figure must be regenerable from saved data only:
 
@@ -490,7 +698,7 @@ Plot scripts must not rerun the solver.
 
 ---
 
-## 9. Working protocol for Claude Code
+## 10. Working protocol for Claude Code
 
 Before running any expensive job:
 
@@ -501,7 +709,9 @@ Before running any expensive job:
 5. Run a 1-seed pilot.
 6. Only then run 4-seed or 8-seed production.
 
-For the current Figure 6 task, no expensive job is needed; use saved switching-growth data only.
+For the Figure 6 task, no expensive job is needed; use saved switching-growth data only.
+
+For the KDE/bandwidth audit, use saved particle clouds if possible; otherwise rerun only the minimum necessary seeds and save final particle clouds. This is an appendix robustness audit, not a new main experiment.
 
 After every run or figure-generation change:
 
@@ -513,12 +723,14 @@ After every run or figure-generation change:
 
 ---
 
-## 10. Guardrails
+## 11. Guardrails
 
 - Do not continue multi-island.
 - Do not add experiments that do not strengthen the paper.
 - Do not claim branching wins a metric unless the table says so.
 - Do not use per-island mass `E_m` as the main argument for branching.
+- Do not replace the main Fourier reconstructed-field error with KDE error; KDE is a robustness audit.
+- Do not use method-dependent KDE bandwidths.
 - Do not claim blow-up time from reconstructed peak or \(L^2\).
 - Do not introduce variable diffusion without writing the correct Fokker–Planck / Itô form.
 - Do not hide cost; always report particle-steps and active counts.
