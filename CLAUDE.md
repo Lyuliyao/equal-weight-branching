@@ -1,619 +1,266 @@
-# CLAUDE.md — rg_com conservative-force repair plan
+# CLAUDE.md — revision priorities for the branching-particle paper
 
-Repository: `Lyuliyao/rg_com`  
-Current focus: fix the conservative free energy `A_theta(C,s)` before further memory/friction work.
+This repository is being revised for the paper. Every code change, experiment, figure, table, and paragraph should serve the paper's main contribution:
 
-This file is the next-run instruction for Claude Code. It supersedes older branching-particle / unrelated instructions if present in this repository.
+> Equal-weight branching is a better reaction representation than weighted particles when localized reaction creates mass, because resolution follows local mass creation rather than a global fixed-weight budget.
 
----
+Do not add experiments merely because they are interesting. If a result does not strengthen this story, demote it to appendix/supporting notes or remove it from the main manuscript.
 
-## 0. Current project status
+## Current highest-priority task: replace the static multi-island benchmark by a staged multi-island benchmark that shows branching is better
 
-We are building a CGMD / GLE model for a neutral star-polymer melt. The molecule-level CG variables are
+The current static separated-island result shows a useful diagnostic fact: global ESS can look healthy while some local islands are under-resolved. However, it does **not** show that branching has smaller per-island mass error than ESS resampling. Therefore it should not be used as a main-paper benchmark in its current form.
 
-\[
-q_i=(C_i,s_i),\qquad s_i=\log(R_{g,i}/R_0),
-\]
+The main-paper multi-island experiment must be redesigned to prove the paper-level claim:
 
-where \(C_i\in\mathbb T^3\) is the molecular center of mass and \(s_i\) is the log-radius label.
+> When separated growth regions become important at different times, global ESS-triggered resampling can keep a healthy global ESS but lose local lineages in later regions. Equal-weight branching creates particles where the source turns on and gives smaller late-island mass/local-field errors at comparable particle-step cost.
 
-The current learned conservative free energy is a DeePCG-style many-body scalar energy
+### Do not optimize for a diagnostic-only story
 
-\[
-A_\theta(C,s),
-\]
+Avoid a main-text claim of the form:
 
-with forces obtained only by autograd:
+```text
+global ESS is not a sufficient local diagnostic
+```
 
-\[
-F_{C_i}^\theta=-\nabla_{C_i}A_\theta(C,s),
-\qquad
-F_{s_i}^\theta=-\partial_{s_i}A_\theta(C,s).
-\]
+unless it is paired with a quantitative accuracy win for branching. The paper needs:
 
-Stage M4 structure validation showed:
+```text
+branching beats weighted and ESS-resampled weighted particles on the quantities that matter.
+```
 
-- \(p(s)\), \(p(R_g)\), and \(g_{CC}(r)\) are roughly reasonable;
-- the many-body / three-body packing observable is wrong:
-  \[
-  O_3^{CG}=0.095,\qquad O_3^{ref}=0.067,
-  \]
-  i.e. about \(+42\%\) over-packing;
-- the runtime soft COM core and \(s\)-wall are almost inactive, so the error is genuinely in \(A_\theta\), not in the safety wall/core.
+A diagnostic-only static island example can remain in `reference_results/` or appendix notes, but it should not occupy main-paper space unless branching is also better on the key error columns.
 
-Therefore the next priority is **not** more memory structure. The next priority is to repair the conservative free energy and validate its equilibrium structure.
+## Staged multi-island PDE design
 
----
-
-## 1. Key architectural problem to fix
-
-The old / current local coordinate row has the form
+Use a time-dependent separated-growth-island reaction:
 
 \[
-\widetilde C_i[j,:]=f_c(r_{ij})\Delta C_{ij}^T.
-\]
-
-This is problematic because when two CG particles overlap,
-
-\[
-r_{ij}\to0,
-\qquad
-\Delta C_{ij}\to0,
-\]
-
-so the descriptor can vanish instead of becoming singular. Thus the network may not see overlap as an extreme forbidden event. This can allow nonphysical COM overlap or distorted packing.
-
-The other issue is cutoff behavior: if the descriptor or energy does not smoothly vanish at the cutoff, the equilibrium distribution can be biased.
-
-The fix is to use **DeePCG-style inverse-distance descriptors** together with a smooth switching function and an explicit analytic hard-core prior.
-
-The 2018 DeePCG paper uses descriptors of the form
-
-\[
-\left\{\frac1{R_{ij}},\frac{x_{ij}}{R_{ij}^2},\frac{y_{ij}}{R_{ij}^2},\frac{z_{ij}}{R_{ij}^2}\right\}
-\]
-
-for near neighbors and radial \(1/R_{ij}\) information for farther neighbors. This is the right short-distance behavior: as \(r\to0\), the descriptor becomes singular rather than disappearing. The paper also validates DeePCG by sampling the CG model and comparing RDF, ADF, and higher-order local order statistics, not merely force MSE.
-
----
-
-## 2. New conservative free-energy form
-
-Implement the conservative energy as
-
-\[
-\boxed{
-A_\theta(C,s)
-=
-A_{\rm core}(C,s)
-+
-A_{\rm one}(s)
-+
-A_{\rm MB,\theta}(C,s).
-}
-\]
-
-The many-body neural part is
-
-\[
-\boxed{
-A_{\rm MB,\theta}(C,s)
-=
-\sum_i \widetilde U_\theta(D_i,s_i).
-}
-\]
-
-The analytic core enforces no-overlap physics. The neural many-body residual learns the remaining PMF: RDF, ADF, \(S(k)\), \(R_g\)-density coupling, and higher-order packing.
-
-Forces must always come from the total scalar energy:
-
-\[
-F_C=-\partial_C A_\theta,
-\qquad
-F_s=-\partial_s A_\theta.
-\]
-
-Do not add a direct force head.
-
-Do not add a runtime force patch that is not part of the scalar energy.
-
----
-
-## 3. Smooth switching function
-
-Use a smooth switch
-
-\[
-S(r)=
-\begin{cases}
-1, & r<r_{\rm in},\\[3pt]
-\frac12+\frac12\cos\!\left(\pi\frac{r-r_{\rm in}}{r_{\rm out}-r_{\rm in}}\right),
-& r_{\rm in}\le r<r_{\rm out},\\[3pt]
-0, & r\ge r_{\rm out}.
-\end{cases}
-\]
-
-This gives
-
-\[
-S(r_{\rm out})=0,
-\qquad
-S'(r_{\rm out})=0.
-\]
-
-Use separate cutoffs:
-
-- \(r_{\rm core}\): analytic hard-core cutoff;
-- \(r_{\rm out}\): neural descriptor cutoff.
-
-Typically
-
-\[
-r_{\rm core}<r_{\rm out}.
-\]
-
-The neural cutoff must not be used as a substitute for the hard core.
-
----
-
-## 4. DeePCG-style inverse-distance descriptor
-
-For molecule \(i\), define the periodic minimum-image displacement
-
-\[
-\Delta C_{ij}=C_j-C_i,
-\qquad
-r_{ij}=|\Delta C_{ij}|_{\rm per}.
-\]
-
-For each neighbor \(j\in\mathcal N_i\), define the row
-
-\[
-\boxed{
-X_i[j,:]
-=
-\left(
-\frac{S(r_{ij})}{r_{ij}},
-\frac{S(r_{ij})\Delta C_{ij,x}}{r_{ij}^2},
-\frac{S(r_{ij})\Delta C_{ij,y}}{r_{ij}^2},
-\frac{S(r_{ij})\Delta C_{ij,z}}{r_{ij}^2}
-\right).
-}
-\]
-
-Use a small numerical guard in code, e.g.
-
-\[
-r_{ij}\leftarrow \max(r_{ij},r_{\epsilon})
-\]
-
-only to avoid NaNs. The analytic core should prevent actual overlap in sampled configurations.
-
-As \(r_{ij}\to0\), \(X_i[j,:]\) becomes large. As \(r_{ij}\to r_{\rm out}\), \(X_i[j,:]\to0\) smoothly.
-
----
-
-## 5. Eq. (13)-style invariant construction
-
-Keep the Eq. (13)-style invariant structure from the 2409.11519 model, but replace the old coordinate row with \(X_i\).
-
-Let
-
-\[
-G_{1,i}\in\mathbb R^{m_i\times h},
-\qquad
-G_{2,i}\in\mathbb R^{m_i\times h}.
-\]
-
-Rows are produced by embedding networks:
-
-\[
-G_{1,i}[j,:]
-=
-g_{1,\theta}(r_{ij},S(r_{ij}),s_i,s_j),
+\partial_t u = D\Delta u + r(t,x)u,
 \]
 
 \[
-G_{2,i}[j,:]
-=
-g_{2,\theta}(r_{ij},S(r_{ij}),s_i,s_j).
+r(t,x)=\lambda\sum_{g=1}^G s_g(t)\sum_{m\in\mathcal G_g} a_m
+\exp\!\left(-\frac{d_{\mathbb T}(x,c_m)^2}{2\sigma^2}\right)-\beta.
 \]
 
-No \(b_{ij}\) label is needed in this one-site-per-molecule model.
+Use `M=16` centers on a `4 x 4` grid. Split the islands into `G=4` activation groups. Prefer groups that are spatially separated, e.g. checkerboard-like or column/row groups, but ensure each stage activates separated regions rather than one contiguous block.
 
-No explicit \(s_j-s_i\) feature is required, because \(g_1,g_2\) already receive \(s_i,s_j\).
-
-Define
+Use smooth window functions:
 
 \[
-\boxed{
-D_i=G_{1,i}^T X_iX_i^T G_{2,i}.
-}
+s_g(t)=\frac12\left[\tanh\frac{t-t_{g,on}}{\delta}-\tanh\frac{t-t_{g,off}}{\delta}\right].
 \]
 
-Then
+A good initial schedule to test:
 
-\[
-a_i=\widetilde U_\theta(D_i,s_i),
-\]
+```text
+T = 1.2
+windows = [0.00,0.35], [0.25,0.60], [0.50,0.90], [0.80,1.20]
+delta = 0.03
+sigma = 0.16
+D = 0.01
+tau = 1e-3
+N0 = 2e4
+K = 64
+lambda in [8,10]
+beta in [0.5,1.0]
+```
 
-and
+The schedule can be tuned, but the tuning must be logged in `parameter_log.md` with short reasons. Do not hide failed pilots.
 
-\[
-A_{\rm MB,\theta}(C,s)=\sum_i a_i.
-\]
+## Initial condition: use stratified uniform particles
 
-This remains translation-, rotation-, and permutation-invariant. It is many-body because \(D_i\) depends on all neighbors of \(i\), and \(\widetilde U_\theta\) is nonlinear.
+The previous static experiment was dominated by initial local-ancestor noise. That is not the paper's target. The comparison should isolate the reaction representation.
 
----
+Use `u0 == 1` on the torus but sample it using a stratified uniform initial cloud:
 
-## 6. Analytic hard-core prior
-
-Add an explicit hard-core energy:
-
-\[
-A_{\rm core}(C,s)=\sum_{i<j}u_{\rm core}(r_{ij};s_i,s_j).
-\]
-
-First implementation: use a fixed core radius, independent of \(s_i,s_j\):
-
-\[
-\boxed{
-u_{\rm core}(r)
-=
-\begin{cases}
-\epsilon_{\rm core}\left[
-\left(\frac{r_{\rm core}}{r}\right)^{12}
--2\left(\frac{r_{\rm core}}{r}\right)^6
-+1
-\right],
-& 0<r<r_{\rm core},\\[6pt]
-0,& r\ge r_{\rm core}.
-\end{cases}
-}
-\]
-
-Use the notation `u_core` in code; the displayed symbol above is the core pair potential.
-
-This satisfies
-
-\[
-\lim_{r\to0^+}u_{\rm core}(r)=+\infty,
-\]
-
-\[
-u_{\rm core}(r_{\rm core})=0,
-\]
-
-\[
-u_{\rm core}'(r_{\rm core})=0.
-\]
-
-This fixes the old problem: finite energy at \(r=0\) and nonzero force/energy at cutoff.
-
-### Optional later extension
-
-If fixed-core is insufficient, use a size-dependent core radius:
-
-\[
-r_{{\rm core},ij}=r_{{\rm core},0}\exp\!\left(\eta\frac{s_i+s_j}{2}\right),
-\qquad 0\le \eta\le1.
-\]
-
-Do not implement this in the first repair unless validation shows it is needed.
-
----
-
-## 7. One-body \(s\) prior
-
-Include an optional one-body prior
-
-\[
-A_{\rm one}(s)=\sum_i u_s(s_i).
-\]
-
-Purpose: stabilize \(s\)-range and encode the main \(p(s)\) marginal if helpful.
-
-Acceptable forms:
-
-1. weak quadratic / quartic around \(s=0\);
-2. spline fitted to reference \(p(s)\):
+1. Divide the torus according to the `4 x 4` island cells.
+2. Within each island cell, stratify the diagnostic disk
    \[
-   u_s(s)=-\beta^{-1}\log p_{\rm ref}(s)+\text{smooth regularization}.
+   B_m = \{x: \exp(-d_{\mathbb T}(x,c_m)^2/(2\sigma^2)) \ge 1/2\}
    \]
+   and its complement.
+3. Assign deterministic quotas proportional to area, so every island starts with the same number of particles inside `B_m` up to rounding.
+4. Fill the background uniformly by stratified quotas.
+5. Use exactly the same stratified initial particles for all methods.
 
-If used, the neural network should learn the residual coupling beyond the one-body \(p(s)\).
+This is not biasing the solution. It is a lower-variance discretization of the same uniform initial measure and removes an irrelevant source of random imbalance.
 
-Do not let \(A_{\rm one}\) mask a bad \(A_{\rm MB,\theta}\). Always validate \(\mathbb E[s\mid\rho]\) and \(O_3\).
-
----
-
-## 8. How to choose \(r_{\rm core}\)
-
-Do not choose \(r_{\rm core}\) by copying the old runtime soft-core radius.
-
-Determine \(r_{\rm core}\) from the atomistic mapped COM RDF:
-
-\[
-r_{\rm core}=\min\{r:g_{CC}^{\rm ref}(r)>\delta_g\},
-\]
-
-with
-
-\[
-\delta_g=10^{-3}\text{ to }10^{-2}.
-\]
-
-Alternative robust rule:
-
-\[
-r_{\rm core}=Q_{0.001}(r_{ij}^{\rm ref})-\Delta.
-\]
-
-The core should only exclude configurations that are essentially absent in the reference. It should not distort the normal first-shell structure.
-
-Report the chosen \(r_{\rm core}\), \(\epsilon_{\rm core}\), and the reference RDF criterion used.
-
----
-
-## 9. Training strategy
-
-Use the current checkpoint as pretraining if compatible.
-
-If the descriptor changes shape incompatibly, initialize a new model but keep the same training/validation protocol.
-
-### 9.1 Force-matching pretraining
-
-Train the total scalar energy:
-
-\[
-A_\theta=A_{\rm core}+A_{\rm one}+A_{\rm MB,\theta}.
-\]
-
-Use whole-snapshot training. A data item is a full window/snapshot:
+The manuscript should say:
 
 ```text
-C:   (Nmol, 3)
-s:   (Nmol,)
-F_C: (Nmol, 3)
-F_s: (Nmol,)
+We use a stratified uniform initial cloud to remove irrelevant initial-island sampling imbalance and isolate the effect of the reaction representation. All methods use the same stratified initial positions and Brownian increments.
 ```
 
-A batch is:
+## Methods to compare
+
+Keep the main benchmark small and clean. Use only:
+
+1. `weighted`: raw weighted particles.
+2. `weighted_ess_resample`: systematic resampling triggered by global normalized ESS below 0.5.
+3. `weighted_ess_resample_costmatched`: same resampling baseline with initial particle count chosen so that integrated particle-steps match branching.
+4. `minvar_branch`: equal-weight minimum-variance branching.
+
+Do **not** put Poisson in the main table unless it adds clarity. It can remain in appendix or `reference_results`.
+
+### Cost matching
+
+Report integrated particle-steps:
+
+\[
+C = \sum_n N_{act}(t_n).
+\]
+
+If branching has cost `C_branch`, choose the cost-matched weighted+ESS particle count as
+
+\[
+N_0^{cm}=\left\lfloor \frac{C_{branch}}{T/\tau}\right\rceil.
+\]
+
+The staged benchmark is only paper-strong if `minvar_branch` beats both ESS baselines, including the cost-matched one, on the late-island metrics.
+
+## Primary metrics
+
+Do not let this experiment become another large report. The main-paper table should contain at most the following columns:
 
 ```text
-C:   (B, Nmol, 3)
-s:   (B, Nmol)
-F_C: (B, Nmol, 3)
-F_s: (B, Nmol)
+method
+particle-steps
+global L2
+mean_all E_m
+max_all E_m
+# all islands with E_m > 20%
+mean_late E_m
+max_late E_m
+# late islands with E_m > 20%
+max_late local L2(B_m)
+min_m local effective count
+final / mean active count
 ```
 
-For each snapshot, compute total scalar energy and all forces by autograd:
+Definitions:
 
 \[
-F_C^\theta=-\partial_C A_\theta,
-\qquad
-F_s^\theta=-\partial_s A_\theta.
+E_m = \frac{|\mu_T(B_m)-\int_{B_m}u_{ref}(T,x)dx|}
+           {\int_{B_m}u_{ref}(T,x)dx}.
 \]
 
-Force-matching loss:
+For weighted methods, local effective count in `B_m` is
 
 \[
-\mathcal L_{\rm FM}
-=
-\sum_\ell
-\left[
-\frac{\|F_C^\theta(C^\ell,s^\ell)-F_C^\ell\|^2}{\sigma_C^2}
-+
-\lambda_s
-\frac{\|F_s^\theta(C^\ell,s^\ell)-F_s^\ell\|^2}{\sigma_s^2}
-\right].
+N_{eff}(B_m)=\frac{(\sum_{i:X_i\in B_m}w_i)^2}{\sum_{i:X_i\in B_m}w_i^2}.
 \]
 
-Project out global COM force noise in labels before training:
+For branching, local effective count is the equal-weight particle count in `B_m`.
 
-\[
-F_{C_i}^\ell\leftarrow F_{C_i}^\ell-\frac1N\sum_jF_{C_j}^\ell.
-\]
+The late group is the islands whose activation window includes the final stage, e.g. group 4. These are the discriminating islands.
 
-### 9.2 Structure fine-tuning
+## Success criteria
 
-After force pretraining, do cheap CG Langevin sampling and compare structure distributions.
-
-If \(O_3\), ADF, \(S(k)\), or \(g(r)\) remain wrong, fine-tune by relative entropy:
-
-\[
-D_{\rm KL}(\mu_{\rm ref}\Vert \mu_\theta)
-=
-\mathbb E_{\rm ref}[\beta A_\theta(q)]
-+
-\log Z_\theta
-+\text{const}.
-\]
-
-Gradient:
-
-\[
-\boxed{
-\nabla_\theta D_{\rm KL}
-=
-\beta
-\left(
-\mathbb E_{\rm ref}[\nabla_\theta A_\theta]
--
-\mathbb E_{\theta}[\nabla_\theta A_\theta]
-\right).
-}
-\]
-
-Here \(\mathbb E_\theta\) is estimated from the cheap CG Langevin sampler.
-
-Do not use differentiable histogram losses as the first choice. Use structure metrics for validation and early stopping. Relative entropy is the cleaner thermodynamic objective.
-
----
-
-## 10. Validation: follow DeePCG spirit
-
-DeePCG validates the learned CG potential by running CG NVT and comparing structural distributions, including RDF, ADF, and higher-order local order parameters. Use the same philosophy here.
-
-Validation must include:
-
-\[
-g_{CC}(r),
-\]
-
-\[
-S(k),
-\]
-
-\[
-p(s),
-\]
-
-\[
-p(R_g),
-\]
-
-\[
-\mathbb E[s_i\mid\rho_i],
-\]
-
-\[
-P(\theta_{ijk})\quad\text{COM ADF},
-\]
-
-\[
-O_3=\frac1N\sum_i\sum_{j<k}w(r_{ij})w(r_{ik}).
-\]
-
-Also report:
+Before running production, run pilots and tune `lambda`, `beta`, and activation windows so the following target behavior is achieved:
 
 ```text
-core_active_fraction
-wall_active_fraction
-min_pair_distance_distribution
-small-r RDF hole
+1. weighted_ess_resample final global nESS >= 0.5
+   The global diagnostic looks healthy.
+
+2. weighted_ess_resample late-group min local ESS <= 100--300
+   Local degeneracy remains in the late islands.
+
+3. minvar_branch late-group min local count >= 2000
+   Branching keeps local resolution where the late source turns on.
+
+4. minvar_branch beats raw weighted, weighted_ess_resample, and cost-matched weighted_ess_resample
+   in late-group mean E_m, late-group max E_m, and late-group local L2(B_m).
+
+5. minvar_branch does not require an extreme particle explosion.
+   Aim for final N_act about 4--8 times N0, not 50--100 times N0.
+
+6. All methods share initial particles and Brownian increments.
 ```
 
-The current failure is \(O_3^{CG}/O_3^{ref}\approx1.42\). The repaired model should reduce this significantly.
+If these criteria fail after reasonable tuning, do **not** force the result into the main paper. Keep the existing single-peak and switching-growth results as the main evidence, and demote the multi-island experiment to appendix or a negative diagnostic note.
 
----
+## Figure design
 
-## 11. Success criteria
+The main text should have one multi-island figure and one compact table.
 
-The repaired conservative model passes if:
-
-1. no COM overlap occurs in cheap Langevin sampling;
-2. the small-\(r\) RDF hole matches reference;
-3. \(p(s)\) and \(p(R_g)\) do not degrade;
-4. \(g_{CC}(r)\) stays at least as good as current;
-5. \(O_3^{CG}/O_3^{ref}\) moves from \(1.42\) toward \(1\), preferably within \(0.9\)--\(1.1\), or at least improves substantially;
-6. ADF/triplet statistics improve relative to the current checkpoint;
-7. the runtime soft core is removed or becomes identical to the analytic \(A_{\rm core}\) already included in scalar energy;
-8. all forces come from autograd of total scalar energy.
-
-Only after these criteria are met should we revisit memory / GLE hydrodynamics.
-
----
-
-## 12. Implementation tasks
-
-### C5A: implement descriptor and core
-
-1. Add a new conservative model type, e.g. `mb_deepcg_inv`.
-2. Implement smooth switch `S(r)`.
-3. Implement inverse-distance rows:
-   ```text
-   [S/r, S*dx/r^2, S*dy/r^2, S*dz/r^2]
-   ```
-4. Implement Eq. (13)-style invariant:
-   ```text
-   D_i = G1_i^T X_i X_i^T G2_i
-   ```
-5. Add analytic `A_core` to total scalar energy.
-6. Add optional `A_one(s)`.
-7. Ensure `conservative_forces` differentiates the total scalar energy.
-
-### C5B: train / fine-tune
-
-1. Train with force matching on existing dense N512 instantaneous dataset.
-2. If feasible, initialize from current checkpoint where compatible; otherwise train new.
-3. Run cheap Langevin structure sampler.
-4. Evaluate RDF / ADF / \(S(k)\) / \(p(s)\) / \(p(R_g)\) / \(O_3\).
-5. If needed, run relative-entropy fine-tuning using CG samples.
-
-### C5C: compare to current model
-
-Compare the new model against `inst_N512_mb_rc10`:
+Preferred figure panels:
 
 ```text
-current A_theta
-new inverse-descriptor + hard-core A_theta
+reference
+weighted+ESS
+cost-matched weighted+ESS
+minvar branching
 ```
 
-Use the same sampler length, temperature, box, and analysis scripts.
+Use one diagnostic-selected inset / magnifier around the worst late island of the cost-matched ESS baseline:
 
----
+\[
+m_* = \arg\max_{m \in \mathcal G_{late}} E_m^{weighted+ESS,costmatched}.
+\]
 
-## 13. Files to produce
+Do not choose the inset by eye. The caption should say it is selected by the metric.
 
-Required outputs:
+Use shared color scale. Mark late-stage islands. Do not include many auxiliary panels in the main text.
+
+## Manuscript text target
+
+The staged multi-island section should support this paragraph:
 
 ```text
-outputs/stageC5_conservative_fix/config.yaml
-outputs/stageC5_conservative_fix/checkpoint_best.pt
-outputs/stageC5_conservative_fix/training_metrics.json
-outputs/stageC5_conservative_fix/structure_metrics.json
-outputs/stageC5_conservative_fix/g_CC.svg
-outputs/stageC5_conservative_fix/S_k.svg
-outputs/stageC5_conservative_fix/p_s_Rg.svg
-outputs/stageC5_conservative_fix/ADF_triplet.svg
-outputs/stageC5_conservative_fix/O3_comparison.svg
-outputs/stageC5_conservative_fix/stageC5_summary.md
+The single-peak benchmark shows that branching is more accurate than weighted particles and ESS resampling at matched work. The staged multi-island benchmark then shows that this advantage is not limited to one peak. When growth appears in separated regions at different times, global ESS-triggered resampling can keep a healthy global ESS while losing local lineages in the later regions. Equal-weight branching creates particles directly where the source turns on and gives smaller late-island mass and local-field errors at comparable particle-step work.
 ```
 
-Also update:
+Remove or rewrite any sentence claiming that the existing static multi-island branching run has the smallest `max E_m`. That statement is false for the current archived static result.
+
+## Repository / reproducibility requirements
+
+When implementing the staged benchmark, write outputs under a new directory, do not overwrite the existing static run:
 
 ```text
-results/STAGE_C5_SUMMARY.md
+experiments/branch_vs_weighted/staged_multi_island.py
+experiments/branch_vs_weighted/plot_staged_multi_island.py
+experiments/branch_vs_weighted/run_staged_multi_island.sb
+reference_results/staged_multi_island/<run_id>/
 ```
 
----
+The run directory must include:
 
-## 14. Codex cold-review requirements
+```text
+config.json
+manifest.json
+parameter_log.md
+metrics_summary.csv
+per_seed_metrics.csv
+time_series.csv
+island_masses.csv
+island_local_ess.csv
+late_group_metrics.csv
+fields_ref.npz
+fields_seed0.npz
+plot_data/*.npz
+figures/*.pdf
+figures/*.png
+README.md
+```
 
-Before expensive runs, ask Codex to cold-review:
+Figures must regenerate from saved CSV/NPZ only. Plot scripts must not rerun the solver.
 
-1. Does \(u_{\rm core}(r)\to\infty\) as \(r\to0\)?
-2. Does \(u_{\rm core}(r_{\rm core})=0\) and \(u_{\rm core}'(r_{\rm core})=0\)?
-3. Does \(S(r_{\rm out})=S'(r_{\rm out})=0\)?
-4. Does the inverse descriptor avoid vanishing at overlap?
-5. Are all forces from scalar-energy autograd?
-6. Is training whole-snapshot, not per-molecule independent?
-7. Are validation metrics structure-based, not only force-MSE?
+## Root README and paper updates
 
-After results, ask Codex to cold-review the interpretation before updating any headline.
+After a successful staged run:
 
----
+1. Update the root `README.md` experiment map and reproduction commands.
+2. Update `paper/cmame-main.tex` and rebuild `paper/cmame-main.pdf`.
+3. The numerical-section introduction must mention `sec:multi_island` if the section stays in the main paper.
+4. The main text must report particle-steps whenever comparing against resampling.
+5. The conclusion should emphasize the paper-level point: branching is a controlled equal-weight representation of non-conservative mass creation and a practical alternative to weighted particles when resolution must follow growth.
 
-## 15. Do not do in this stage
+## Guardrails
 
-Do not change memory / friction in this stage.
-
-Do not add non-Markovian \(\tau\)-learning in this stage.
-
-Do not run larger-box hydro validation until the conservative structure issue is addressed.
-
-Do not claim the hydro deficit is memory-related or cage-related until the repaired \(A_\theta\) has been tested.
-
----
-
-## 16. Final desired answer from this stage
-
-At the end of Stage C5, answer:
-
-1. Does the inverse-distance descriptor + hard-core prior remove overlap and fix the small-\(r\) RDF hole?
-2. Does it reduce \(O_3\) over-packing from the current \(+42\%\)?
-3. Does it preserve \(p(s)\), \(p(R_g)\), and \(g_{CC}(r)\)?
-4. Does relative-entropy fine-tuning help beyond force matching?
-5. Is the repaired conservative model good enough to re-run COM hydro tests?
+- Do not claim a blow-up time from reconstructed peaks or reconstructed L2 norms.
+- Do not over-emphasize diagnostic-only details that do not strengthen the main story.
+- Do not hide cost: always report particle-steps and active counts.
+- Do not hide failed pilots: log them briefly in `parameter_log.md`.
+- Do not use a result in the main text if the table does not support the claim.
+- Keep the main paper concise. Appendix/supporting folders can hold diagnostic details.
