@@ -1,0 +1,113 @@
+# Revision results log — equal-weight branching paper
+
+A single honest record of every experiment in the numerical-section revision,
+**positive and negative**. Each entry states the purpose, what was run, the key
+numbers, whether it is positive / mixed / negative, where the data live, and
+whether it is in the manuscript. Negative and limited results are kept here
+deliberately, even when they are not used in the paper.
+
+Status legend: ✅ positive & in paper · 🟢 positive & verified (not yet in paper) ·
+🟡 mixed / limited · 🔴 negative (record only) · ⚪ infrastructure / check.
+
+Last updated: 2026-06-14.
+
+---
+
+## 1. Branching vs weighted particles (the core paper claim)
+
+### 1.1 ✅ Stationary localized growth (§5.2)
+- **Purpose:** the main branch-vs-weighted comparison under localized multiplicative growth.
+- **Result (positive):** weighted develops weight degeneracy (global nESS 0.021, max:mean weight 133). Relative L² error at T=1: **weighted 0.269±0.041, Poisson 0.062±0.035, minimum-variance 0.033±0.011**. At matched particle-step cost (1.9×10⁷), ESS-triggered resampling gives 0.047±0.012 vs minvar 0.033±0.011 — **branching wins reconstructed-field accuracy at matched work**.
+- **Data:** `reference_results/branch_vs_weighted/` (+ `cost_match_resample/`). **In paper (Tables 4–5, Figs 2–5).**
+
+### 1.2 ✅ Switching growth (§5.3)
+- **Purpose:** structural failure of global resampling when the growth region moves.
+- **Result (positive):** at T=1.2, global L² weighted 0.900 / ESS-resample 0.288 / minvar 0.203. In the **new** region `B_B`: ESS 0.297 vs branching 0.174; in the **old** region `B_A`: ESS 0.162 (best) ≈ branching 0.170. Branching keeps ~95% distinct ancestors at the switch vs 63–68% for resampling. **ESS competitive in the old region, branching better in the new region.**
+- **Data:** `reference_results/switch/`. **In paper (Table 6, Fig 6).**
+
+### 1.3 ✅ Fourier-bandwidth & KDE robustness audit (Appendix F)
+- **Purpose:** check the §5.2/§5.3 ordering is not an artifact of one reconstruction bandwidth.
+- **Result (positive):** re-ran the exact production dynamics (validated **byte-faithful**: per-seed E_total reproduces the archived metrics to 2×10⁻¹⁷ for §5.2, 1×10⁻¹⁶ for §5.3). minvar beats weighted at every K∈{8,12,16,24} and h∈{0.10–0.25}; the §5.3 old/new-region mechanism is stable across K∈{32,48,64} and h∈{0.06,0.10,0.15}. No reversal.
+- **Data:** `reference_results/reconstruction_audit/`. **In paper (Appendix F, Figs 29–30).**
+
+---
+
+## 2. Multi-island (🔴 negative — records only, NOT in paper)
+
+- **Purpose:** show global ESS can look healthy while local islands fail, and that branching wins per-island mass.
+- **Result (negative):** static, staged, and compressive-readout variants were all tested (up to 8 seeds). Branching achieves the lowest **global** L² and by far the largest late-island particle count, **but at matched particle-step cost a cost-matched ESS-resampling baseline attains lower per-island *mass* error** (mass integrals favor weighted particles' continuous weights). The compressive κ=12 reference also under-resolves the core.
+- **Conclusion:** "local particle-count advantage ≠ lower per-island-mass error." Did **not** meet the "branching wins the local metric" bar.
+- **Data + parameter logs:** `experiments/branch_vs_weighted/{multi_island,staged_multi_island,compressive_multi_island}.py` and `reference_results/{multi_island,staged_multi_island}/`. **Excluded from the paper by design.**
+
+---
+
+## 3. Keller–Segel: fully parabolic–parabolic concentration benchmark (§5.4–§5.5)
+
+System (all of §3): `u_t − div(∇u − u∇v) = 0`, `v_t = Δv + u − v`, χ=1, IC
+`u0=840 e^{−84r²}`, `v0=420 e^{−42r²}` (M_u=10π), report at t=6e-5, 1.2e-4, 2e-4.
+
+### 3.1 🟢 Direct LDG reference (Li–Shu–Yang) — VERIFIED
+- **Purpose:** the *direct LDG* comparator the benchmark requires (FVM is not acceptable as the LDG reference).
+- **Method:** from-scratch P¹ modal LDG following the paper — auxiliary `p=∇u, r=∇v`, alternating fluxes, Lax–Friedrichs chemotaxis flux, Zhang–Shu P¹ positivity limiter, SSP-RK3, Neumann on [−½,½]².
+- **Verification (positive):** pure-heat LDG **2nd order** (2.00, 2.03, 2.02); Laplacian operator **symmetric to 5.5×10⁻¹⁷** (negative-definite); chemotaxis `−div(u∇v)` consistency **3rd order**; **u-mass = 10π exactly** (drift ~1e-14); positivity holds (u_min ~ −1e-11). Matches the paper's Table 5.1 structure.
+- **Example 5.2 (positive):** reproduces the concentration — `S_L2(2e-4)` grows **893 (N=80) → 1604 (160) → 3274 (320)**, peak up to ~1×10⁶.
+- **Numerical blow-up time `tb(N)=inf{t: S(2N,t)≥1.05 S(N,t)}` (their (5.2)) — 🔴 negative/limited:** `tb(1.05) ≈ 7×10⁻⁶` for both (80→160) and (160→320) pairs; it does **NOT** converge to the reference `1.21×10⁻⁴` at uniform resolution — exactly the paper's own caveat that adaptive meshes are needed (they computed `tb(N)` only for a 1-D manufactured test). We do not quote a continuum blow-up time.
+- **Data:** `experiments/keller_segel/ldg_reference/`, `reference_results/keller_segel_ldg_pp/ldg_<run_id>/`. **Not yet in paper** (the §5.4 rewrite is pending).
+
+### 3.2 🟢 / ⚪ FVM grid baseline — now a sanity anchor only
+- **Purpose:** originally the §5.4 deterministic reference; **demoted** to a sanity check after the LDG reference was built (FVM ≠ LDG).
+- **Result (positive as a check):** positivity-preserving upwind FVM (Neumann), mass conserved to ~1e-16, positivity, `t_b(1.05)` = 3.5e-5 (128→256), 5.0e-5 (256→512). Consistent concentration scale with LDG and particle.
+- **Data:** `experiments/keller_segel/ldg_pp_baseline/`, `reference_results/keller_segel_ldg_pp/baseline_<run_id>/`. Manuscript §5.4 currently still cites it as the grid reference (to be revised to LDG).
+
+### 3.3 🟢 Particle method on the same equation
+- **Result (positive):** the fully-pp particle run (`ldg_comparison`, u-conservative + v decay/injection min-variance kernel) reproduces comparable reporting-time concentration: `S_L2(2e-4)` ≈ 1275 (base) / 2686 (refined), bracketing the LDG (1604–3274) and FVM (1982–2941). Cell mass conserved; chemical mass follows the injection balance to <1e-4. Reconstructed **peak is bandwidth-sensitive**; **core radii R₀.₅,R₀.₈ are reconstruction-free**.
+- **🔴 note:** the refined run trips the **drift-CFL guard at t≈1.66e-4** — the un-hybridized global-Fourier reconstruction destabilizes the chemotactic drift as the core concentrates. This motivates the online solver-level hybrid (§3.5, not yet done).
+- **Data:** `reference_results/{ldg_comparison/...,keller_segel_ldg_pp/particle_<run_id>}`.
+
+### 3.4 🟡 Core-local / reconstruction-free blow-up-proxy diagnostics (§5.5)
+- **Positive:** the reconstruction-free radii `R₀.₅,R₀.₈` collapse robustly and identically across grid resolutions and methods — the reliable concentration signal.
+- **🔴 negative/limited (two findings):**
+  1. A radius-fit candidate concentration time `R_q² ≈ C_q(T*−t)` gives `T*` of order 1e-4 but **window-sensitive: 1.4×–4.5× spread** across fit windows (radii saturate at the grid/bandwidth floor). **No continuum blow-up time is quoted** — consistent with the project finding that the blow-up *time* is not defensibly computable while the *collapse* is.
+  2. **Core-localizing the L² norm does not sharpen the proxy:** for the resolving grid `S_core ≡ S_L2` (the field carries all its L² mass in the core), so `t_b^core ≡ t_b^global`.
+- **Data:** `experiments/keller_segel/core_local_proxy/`, `reference_results/keller_segel_ldg_pp/core_proxy_<run_id>/`. **In paper §5.5 (limited result, Fig 8).**
+
+### 3.5 🟡 Particle-adaptive reconstruction (post-processing audit)
+- **Purpose:** drive a local reconstruction from the particle cloud instead of a uniform global Fourier bandwidth.
+- **Positive:** global Fourier under-resolves the core at every feasible `Kg` (base t=2e-4: peak 2.4k→78k for Kg 5→32), while the **particle-adaptive hybrid** (P_Kg + signed local residual on `B(x_c,3R₀.₈)`, local spectrum/blob) recovers it at low global bandwidth — peak ≈3.9×10⁵, `S_L2` ≈2180, near the FVM anchor (5.95×10⁵, 2941). Consistent with the reconstruction-free radii where global Fourier is not.
+- **🔴 negative/limited (caveats, reported not hidden):** the hybrid peak is still **local-`Kl` sensitive** (refined cloud t=1.2e-4: 545k→979k for Kl 24→40) and overshoots the FVM grid baseline; the tapered signed residual is only **~mass-conserving (∫u≈25.3 vs M=31.4, ~19% deficit)**; both high-K global *and* the signed hybrid go **negative (Gibbs)** — the blob variant undershoots least.
+- **Conclusion:** a real diagnostic improvement that reduces *global*-bandwidth sensitivity, but it trades it for *local*-bandwidth sensitivity and signed-residual artifacts; **not** a converged peak / blow-up estimate.
+- **Data:** `experiments/keller_segel/pp_particle_ldg/adaptive_reconstruct.py`, `reference_results/keller_segel_ldg_pp/adaptive_recon/`. **Not in paper.**
+
+### 3.6 ⚪ Cross-species injection mass-law check (Appendix)
+- **Positive:** the parabolic–parabolic chemical equation `v_t=Δv+u−v` uses the injection kernel `μ_v^{n+1}=e^{−τ}μ_v*+(1−e^{−τ})μ_u*` (not a `(u−v)/v` quotient). Chemical mass follows the exact balance law to <1.4% (smooth IC). Validates the §5.4 algorithm.
+- **Data:** `experiments/keller_segel/pp_injection/`. **In paper (Appendix F-coupled).**
+
+---
+
+## 4. Other Keller–Segel / high-dim (unchanged this revision)
+
+- ⚪ **Parabolic–elliptic core-adaptive `t_gap` diagnostics** — moved to **appendix (record only)**; the main KS benchmark is the fully-pp system. `experiments/keller_segel/concentration_ldg/`.
+- ⚪ **Local reconstruction (hybrid spectrum+residual) on synthetic cores** — moved to **appendix**. `experiments/resolution_hybrid/`.
+- ✅ **3D Keller–Segel focusing** (§5.6) and **6D kinetic Keller–Segel** (§5.7): conservative particle-field focusing tests, no blow-up-time claim. Unchanged.
+
+---
+
+## 5. Not done (scoped honestly)
+
+- **Online solver-level hybrid reconstruction** (plan §4): feed the particle-adaptive hybrid field into the chemotactic drift inside the time step (the §3.3 drift-CFL abort and §3.5 caveats motivate it, but it is not yet implemented/verified).
+- **§5.4 manuscript rewrite** around **LDG vs particle-global-Fourier vs particle-adaptive** (now unblocked by the verified LDG reference §3.1). The current manuscript §5.4 still uses the FVM baseline as the grid reference.
+- **Pre-existing unrelated issue:** 5 introduction citations are missing from `main.bib` (`vazquez2006porous`, `fisher1937wave`, `williams2018combustion`, `doucet2000sequential`, `liu1998sequential`).
+
+---
+
+## 6. One-line summary
+
+Branching's defensible win is reconstructed-field accuracy on the single-peak (§5.2)
+and switching (§5.3) benchmarks, robust to reconstruction bandwidth (Appendix F).
+Multi-island and per-island *mass* metrics do **not** favor branching (negative,
+record only). For Keller–Segel, a verified direct LDG reference and the particle
+method reproduce the same pre-singular concentration; the numerical blow-up time and
+the candidate `T*` are resolution/bandwidth/window-sensitive and are **not** quoted
+as a continuum blow-up time. Particle-adaptive reconstruction helps the core but
+introduces local-bandwidth and signed-residual artifacts (mixed). The online
+solver-level hybrid and the §5.4 LDG rewrite remain.
