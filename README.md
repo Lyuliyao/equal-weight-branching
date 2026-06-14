@@ -31,6 +31,7 @@ concentration/focusing regimes.
 | `experiments/keller_segel/logistic/` | Appendix | Non-conservative logistic KS (coupled-system check) |
 | `experiments/allen_cahn/` | Appendix | Allen–Cahn sanity check |
 | `reference_results/` | Tables & Figures | CSV outputs of the production runs used in the paper, with the exact configs |
+| `paper/` | Manuscript | Self-contained LaTeX source (`cmame-main.tex`) + figures + compiled PDF |
 
 Each experiment directory is self-contained: shared modules are vendored in rather than imported across
 directories (`kinetic_ks/` vendors `common_highdim.py`; `keller_segel/concentration_ldg/` vendors the

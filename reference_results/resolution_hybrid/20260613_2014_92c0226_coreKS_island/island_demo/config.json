@@ -1,0 +1,12 @@
+{
+  "cloud": "/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching/reference_results/multi_island/20260613_2008_92c0226_M16_N2e4_K64/seed_0/clouds/cloud_minvar_branch_seed0.npz",
+  "ref_island_masses": "/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching/experiments/branch_vs_weighted/results/mi_check/island_masses.csv",
+  "method_in_ref": "minvar_branch",
+  "Kg": 8,
+  "Kfull": 48,
+  "Kl": 40,
+  "grid": 288,
+  "c_window": 3.0,
+  "B_target": 2000,
+  "out_dir": "/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching/reference_results/resolution_hybrid/20260613_2014_92c0226_coreKS_island/island_demo"
+}

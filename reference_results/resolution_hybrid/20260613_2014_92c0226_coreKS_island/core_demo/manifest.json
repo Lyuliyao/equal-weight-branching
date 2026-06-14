@@ -1,0 +1,12 @@
+{
+  "experiment": "resolution_hybrid/core_window_demo",
+  "git_commit": "92c0226703c9c8c3cd638e0fb54488b1973eae4e",
+  "git_commit_short": "92c0226",
+  "command_line": "/mnt/home/lyuliyao/.conda/envs/heat/bin/python core_window_demo.py --N 400000 --grid 221 --Kg 8 --Kfull 40 --Kl 40 --B_target 3000 --blob --out_dir /mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching/reference_results/resolution_hybrid/20260613_2014_92c0226_coreKS_island/core_demo",
+  "python_version": "3.12.7",
+  "numpy_version": "2.4.4",
+  "datetime": "2026-06-13T20:14:41",
+  "out_dir": "/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching/reference_results/resolution_hybrid/20260613_2014_92c0226_coreKS_island/core_demo",
+  "window_detected_from": "particles (detect_core_window)",
+  "cloud": "synthetic concentrated KS-core Gaussian"
+}

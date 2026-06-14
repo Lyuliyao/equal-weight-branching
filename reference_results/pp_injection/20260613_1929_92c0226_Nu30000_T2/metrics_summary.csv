@@ -1,0 +1,17 @@
+metric,value
+n_samples,30000
+chi,1.0
+T,2.0
+dt,0.002
+n_steps,1000
+M_u_initial,1.0
+M_v_initial,0.3
+max_abs_Mu_drift,0.0
+max_relerr_Mv_law,0.013862327005009733
+M_v_final,0.8972333333333333
+M_v_exact_final,0.9052653017343711
+M_v_final_abs_err,0.008031968401037815
+total_births_recorded_snapshots,2395
+total_deaths_recorded_snapshots,1713
+p_birth_death,0.001998001332666921
+git_commit,92c0226703c9c8c3cd638e0fb54488b1973eae4e

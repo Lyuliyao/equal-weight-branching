@@ -13,3 +13,18 @@ scratch_smoke/
 results_smoke/
 scratch_*/
 *_smoke/
+multi_island_seed_*.out
+
+# --- revision reference artifacts: commit small plot data + figures, keep raw arrays out ---
+!reference_results/**/plot_data/*.npz
+!reference_results/**/figures/*.pdf
+!reference_results/**/figures/*.svg
+!reference_results/**/snapshots/*.npz
+!reference_results/**/residual_particles/*.npz
+# figure-regeneration inputs and reproducibility clouds (kept; seed-0 only)
+!reference_results/multi_island/**/fields_ref.npz
+!reference_results/multi_island/**/fields_seed0.npz
+!reference_results/multi_island/**/clouds/cloud_*_seed0.npz
+# large raw per-seed intermediates of the multi-island production are NOT committed
+reference_results/multi_island/**/seed_*/
+reference_results/multi_island/**/fields_seed[1-9]*.npz

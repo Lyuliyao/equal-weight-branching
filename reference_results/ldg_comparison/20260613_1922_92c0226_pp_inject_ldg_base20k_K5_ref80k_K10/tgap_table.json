@@ -1,0 +1,19 @@
+[
+  {
+    "base_csv": "diag_N20000_K5_tau1e-06_q0.8_seed0.csv",
+    "ref_csv": "diag_N80000_K10_tau2e-07_q0.8_seed0.csv",
+    "N_base": 20000,
+    "K_base": 5,
+    "N_ref": 80000,
+    "K_ref": 10,
+    "t_overlap": [
+      0.0,
+      0.00019999999999999998
+    ],
+    "ratio_max": 2.7102609405920766,
+    "ratio_final": 2.107088590248298,
+    "column": "S_L2",
+    "t_gap_1.05": 8e-06,
+    "t_gap_1.10": 1.2e-05
+  }
+]

@@ -1,0 +1,56 @@
+{
+  "git_commit": "92c0226703c9c8c3cd638e0fb54488b1973eae4e",
+  "git_repo": "/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching",
+  "command_line": [
+    "simulation.py",
+    "--n_samples",
+    "30000",
+    "--Mv0",
+    "0.3",
+    "--chi",
+    "1.0",
+    "--T",
+    "2.0",
+    "--dt",
+    "2e-3",
+    "--n_freq",
+    "5",
+    "--seed",
+    "0",
+    "--out_dir",
+    "/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching/reference_results/pp_injection/20260613_1929_92c0226_Nu30000_T2"
+  ],
+  "command_string": "/mnt/home/lyuliyao/.conda/envs/heat/bin/python simulation.py --n_samples 30000 --Mv0 0.3 --chi 1.0 --T 2.0 --dt 2e-3 --n_freq 5 --seed 0 --out_dir /mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching/reference_results/pp_injection/20260613_1929_92c0226_Nu30000_T2",
+  "python_version": "3.12.7",
+  "package_versions": {
+    "python": "3.12.7",
+    "numpy": "2.4.4",
+    "jax": "0.10.0",
+    "matplotlib": "3.10.8"
+  },
+  "resolved_args": {
+    "n_samples": 30000,
+    "Mv0": 0.3,
+    "chi": 1.0,
+    "T": 2.0,
+    "dt": 0.002,
+    "n_freq": 5,
+    "seed": 0,
+    "out_dir": "/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching/reference_results/pp_injection/20260613_1929_92c0226_Nu30000_T2",
+    "smoke": false,
+    "legacy_multiplicative_v_source": false
+  },
+  "random_seed": 0,
+  "output_dir": "/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching/reference_results/pp_injection/20260613_1929_92c0226_Nu30000_T2",
+  "datetime": "2026-06-13T19:30:17.850944",
+  "population_control_active": false,
+  "deterministic_reference_used": false,
+  "reference_kind": "analytic exact mass law (no grid/Fourier/FD/LDG solver)",
+  "outputs": [
+    "config.json",
+    "manifest.json",
+    "mass_balance.csv",
+    "metrics_summary.csv",
+    "plot_data/figure_mass_balance.npz"
+  ]
+}
