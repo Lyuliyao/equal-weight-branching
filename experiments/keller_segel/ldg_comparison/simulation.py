@@ -66,6 +66,7 @@ if _HERE not in sys.path:
 from adaptive_window import compute_window, density_coeffs_y  # noqa: E402
 from particle_dg_readout import (  # noqa: E402  LDG-matched P1 DG readout (Version A)
     project_particles_to_p1dg, dg_l2_norm, dg_inner_product, dg_peak)
+from hybrid_vfield import HybridVField  # noqa: E402  solver-level residual v-field
 from field_pp import (  # noqa: E402
     grad_v_from_cloud, recon_peak, recon_l2, recon_field_grid,
 )
@@ -233,7 +234,7 @@ def run(args):
     mask_v_outside = bool(args.mask_v_outside)
     cfl_abort = float(args.cfl_abort)
     p = 1.0 - np.exp(-tau)           # per-step death (v) / birth (u->v) probability
-    qs = [0.5, 0.8, 0.9, 0.99]
+    qs = [0.1, 0.2, 0.5, 0.8, 0.9, 0.99]   # inner-core radii for the core-halo diagnostic
 
     report_times = sorted(float(t) for t in args.report_times) if args.report_times else []
 
@@ -394,8 +395,22 @@ def run(args):
         coeff_v, M_v_eff, _ = coeffs_v_on_window(
             X2, x_c, L, args.K, N0, mask_v_outside)
 
-        # ---- 2b. GUARD: drift CFL blow-out --------------------------------
-        gradv_chk = grad_v_from_cloud(X1, coeff_v, x_c, L, M_v_eff, taper_s=taper_s)
+        # ---- 2b. SOLVER FIELD: grad v_hat for the u-drift (Form I hybrid optional)
+        if args.solver_field == "two_level_spectral_residual":
+            Yv = (np.asarray(X2) - np.asarray(x_c)) * (np.pi / L)
+            inb = np.max(np.abs(Yv), axis=1) <= np.pi          # in-window v-particles
+            Xin = jnp.asarray(np.asarray(X2)[inb])
+            if int(Xin.shape[0]) > 0:
+                hyb = HybridVField(Xin, x_c, L, M_v_eff, args.Kg, args.Kl,
+                                   taper_s=taper_s, frac_in=args.hybrid_frac_in,
+                                   frac_out=args.hybrid_frac_out)
+                gradv_u = hyb.grad(X1)
+            else:
+                gradv_u = grad_v_from_cloud(X1, coeff_v, x_c, L, M_v_eff, taper_s=taper_s)
+        else:
+            gradv_u = grad_v_from_cloud(X1, coeff_v, x_c, L, M_v_eff, taper_s=taper_s)
+        # ---- 2c. GUARD: drift CFL blow-out --------------------------------
+        gradv_chk = gradv_u
         if not bool(jnp.all(jnp.isfinite(gradv_chk))):
             print(f"[WARN] step {i}: non-finite grad v detected; stopping loop "
                   f"gracefully and writing diagnostics computed so far.", flush=True)
@@ -414,8 +429,8 @@ def run(args):
         rng, k1, k2, kd, kb = jax.random.split(rng, 5)
         xi1 = jax.random.normal(k1, X1.shape, dtype=X1.dtype)
         xi2 = jax.random.normal(k2, X2.shape, dtype=X2.dtype)
-        # ---- 3. transport u (chemotaxis from v-cloud + diffusion) ---------
-        X1 = transport_u(X1, coeff_v, x_c, L, M_v_eff, tau, xi1)
+        # ---- 3. transport u (chemotaxis from the SELECTED solver field) ----
+        X1 = X1 + chi * gradv_u * tau + jnp.sqrt(2.0 * tau) * xi1
         # ---- 4. transport v (diffusion only) ------------------------------
         X2 = transport_v(X2, tau, xi2)
         X1.block_until_ready(); X2.block_until_ready()
@@ -466,6 +481,15 @@ def build_parser():
     p.add_argument("--dg_readout_n", type=int, nargs="*", default=[],
                    help="LDG-matched P1 DG readout (Version A) at these diagnostic "
                         "resolutions n on [-0.5,0.5]^2 (e.g. 40 80 160); empty = off")
+    p.add_argument("--solver_field", default="current_fourier",
+                   choices=["current_fourier", "two_level_spectral_residual"],
+                   help="reconstruction used INSIDE the time step for the chemotactic "
+                        "drift grad v (current_fourier = single-K; two_level = Form I "
+                        "global Kg + local Kl residual on the core window)")
+    p.add_argument("--Kg", type=int, default=8, help="global low bandwidth (hybrid)")
+    p.add_argument("--Kl", type=int, default=24, help="local high bandwidth (hybrid)")
+    p.add_argument("--hybrid_frac_in", type=float, default=0.5)
+    p.add_argument("--hybrid_frac_out", type=float, default=0.85)
     p.add_argument("--a_u", type=float, default=84.0, help="u0 ~ exp(-a_u |x|^2)")
     p.add_argument("--a_v", type=float, default=42.0, help="v0 ~ exp(-a_v |x|^2)")
     p.add_argument("--diag_grid", type=int, default=65,
