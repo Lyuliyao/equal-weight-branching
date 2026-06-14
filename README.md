@@ -22,10 +22,15 @@ concentration/focusing regimes.
 | `experiments/mms/` | §5.1 | Manufactured-solution verification (error vs `N`, `τ`, `K`; Harris-coupled splitting-bias projection) |
 | `experiments/branch_vs_weighted/` (`experiment.py`) | §5.2 | Stationary localized growth: branching vs weighted and systematic resampling at matched particle-step cost |
 | `experiments/branch_vs_weighted/` (`experiment_switch.py`) | §5.3 | Switching growth: structural failure mode of global resampling (lineage-diversity collapse) |
+| `experiments/branch_vs_weighted/` (`staged_multi_island.py`) | not in paper (record only) | Staged 16-island benchmark. Branching keeps the lowest global `L²` and by far the largest late-island count, but at matched particle-step cost a cost-matched resampling baseline attains lower per-island *mass* error. This did not meet the "branching wins the local metric" bar, so it is **not in the paper**; the full record is in `staged_parameter_log.md` / `reference_results/staged_multi_island/<run_id>/parameter_log.md` |
+| `experiments/branch_vs_weighted/` (`multi_island.py`) | not in paper (record only) | Static separated-island diagnostic (global ESS vs local ESS); superseded by the staged variant |
 | `experiments/kinetic_ks/` | §5.4 | Six-dimensional field-coupled kinetic Keller–Segel (3D screened-Poisson field from the spatial marginal) |
 | `experiments/keller_segel/mass_balance/` | §5.5 | Conservative KS implementation check (exact mass balance) |
 | `experiments/keller_segel/concentration/` | §5.5 | Supercritical 2D concentration (parabolic–parabolic, finite-difference comparison) |
 | `experiments/keller_segel/concentration_ldg/` | §5.5 | Core-local & resolution-gap (LDG-style) diagnostics: parabolic–elliptic reduction on a core-adaptive Fourier window |
+| `experiments/keller_segel/pp_injection/` | §5.4 | Cross-species injection for the parabolic–parabolic chemical equation `v_t=Δv+u−v` (mass-law check) |
+| `experiments/keller_segel/ldg_comparison/` | §5.5 | LDG-aligned parabolic–parabolic concentration (Li–Shu–Yang IC + report times, `t_gap` resolution-gap indicator) |
+| `experiments/resolution_hybrid/` | §5.x | Local reconstruction diagnostics: global spectrum + local residual window/blob/particles |
 | `experiments/keller_segel/focusing_3d/` | §5.6 | Three-dimensional Keller–Segel focusing transition (radial mass sweep + tetrahedral clusters) |
 | `experiments/highdim/` | Appendix | Dense 4D/6D reconstruction on a separable manufactured solution + FHT low-rank marginal diagnostics |
 | `experiments/keller_segel/logistic/` | Appendix | Non-conservative logistic KS (coupled-system check) |

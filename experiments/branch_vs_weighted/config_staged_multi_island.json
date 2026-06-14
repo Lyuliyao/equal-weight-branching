@@ -1,0 +1,10 @@
+{
+  "_comment": "Tuned production config for the staged separated-growth-island benchmark (paper Sec. 5.2). Tuning log: staged_parameter_log.md. lambda=13, beta=0.1 chosen so branching wins the late-island metrics over both ESS-resampling baselines at moderate growth (2.6x). Uniform amplitudes (amp_var=0) isolate the activation-timing mechanism.",
+  "M": 16, "G": 4, "sigma": 0.16, "D": 0.01, "lam": 13.0, "beta": 0.1,
+  "T": 1.2, "tau": 1e-3, "N0": 20000, "K": 64, "grid": 512,
+  "delta": 0.03, "amp_var": 0.0,
+  "windows": [[0.00, 0.35], [0.25, 0.60], [0.50, 0.90], [0.80, 1.20]],
+  "eta": 0.5, "ess_threshold": 0.5, "n_snapshots": 24,
+  "seeds": [0, 1, 2, 3, 4, 5, 6, 7], "buffer_safety": 1.8,
+  "methods": ["weighted", "weighted_ess_resample", "weighted_ess_resample_costmatched", "minvar_branch"]
+}
