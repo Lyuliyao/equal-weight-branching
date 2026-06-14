@@ -71,12 +71,16 @@ cd ../../highdim                           && python experiment.py --smoke    # 
 |---|---|
 | MMS errors vs `N`/`τ`/`K`, splitting-bias table (§5.1) | `cd experiments/mms && python experiment.py && python plot.py` |
 | Branch-vs-weighted table + snapshots/nESS/L²/boxplot (§5.2) | `cd experiments/branch_vs_weighted && python experiment.py && python plot.py` |
-| Cost-matched resampling rows of the §5.2 table | `cd experiments/branch_vs_weighted && python cost_match.py` |
+| Cost-matched resampling rows of the §5.2 table | `cd experiments/branch_vs_weighted && python cost_match.py` (weighted cost-match) and `python cost_match_resample.py --N0 38000` (the ESS-resample cost-matched row; CSV under `reference_results/branch_vs_weighted/cost_match_resample/`) |
 | Switching-growth table + ancestor diversity (§5.3) | `cd experiments/branch_vs_weighted && python experiment_switch.py` |
 | 6D field-coupled kinetic KS table + figures (§5.4) | `cd experiments/kinetic_ks && sbatch run_me "--config config_pilot.json" && python plot_kinetic.py --results_dir results/pilot` |
 | KS mass balance (§5.5) | `cd experiments/keller_segel/mass_balance && python simulation.py <N>` |
 | KS 2D concentration vs finite difference (§5.5) | `cd experiments/keller_segel/concentration && python simulation.py <N>` (reference: `python finite_difference.py`) |
-| KS LDG-style core/resolution-gap diagnostics + `t_gap` table (§5.5) | `cd experiments/keller_segel/concentration_ldg && bash submit_focused.sh` then `python tgap.py --pairs ...` and `python plot_ldg.py` |
+| KS parabolic–elliptic core/resolution-gap diagnostics + `t_gap` (§5.4) | `cd experiments/keller_segel/concentration_ldg && bash submit_focused.sh` then `python tgap.py --pairs ...` and `python plot_ldg.py` |
+| KS cross-species injection mass-law check (§5.4) | `cd experiments/keller_segel/pp_injection && python simulation.py` then `python plot.py --results_dir results` |
+| KS LDG-aligned parabolic–parabolic concentration + `t_gap` (§5.4) | `cd experiments/keller_segel/ldg_comparison && python simulation.py --report_times 6e-5 1.2e-4 2e-4 ...` then `python tgap.py --pairs ...` and `python plot_ldg_style.py --results_dir ...` |
+| Local reconstruction diagnostics (§5.4) | `cd experiments/resolution_hybrid && python core_window_demo.py --blob && python plot_hybrid_reconstruction.py --results_dir ...` |
+| Staged / static multi-island (not in paper; diagnostic records) | `cd experiments/branch_vs_weighted && python staged_multi_island.py --config config_staged_multi_island.json --smoke` (see `staged_parameter_log.md`) |
 | 3D KS focusing: mass sweep, self-convergence, tetrahedral (§5.6) | `cd experiments/keller_segel/focusing_3d && bash submit_focused.sh` then `python plot_focusing.py --runs results/* && python plot_selfconv_NH.py` |
 | Dense 4D/6D reconstruction MMS (Appendix) | `cd experiments/highdim && python experiment.py && python experiment.py --d6 && python plot.py` |
 | Logistic KS (Appendix) | `cd experiments/keller_segel/logistic && python simulation.py <N>` |

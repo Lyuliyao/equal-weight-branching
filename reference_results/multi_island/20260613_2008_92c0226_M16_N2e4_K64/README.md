@@ -1,6 +1,14 @@
-# Separated growth-island benchmark (paper §5.2) — production run
+# Static separated growth-island benchmark — diagnostic record (not in paper)
 
-Production reference for the local-degeneracy rebuttal experiment
+> **Diagnostic record only, not used in the main paper.** This static run shows a
+> useful diagnostic fact — a global ESS can look healthy while an island's local
+> effective sample size collapses — but it does **not** show that branching has a
+> smaller per-island mass error than ESS resampling, so it is not a main-paper
+> branching-wins benchmark. Superseded by the staged variant (also a negative
+> record). The main branching-wins evidence is the single-peak (§5.2) and
+> switching (§5.3) benchmarks.
+
+Reference outputs for the static local-degeneracy experiment
 (`experiments/branch_vs_weighted/multi_island.py`).
 
 ## Configuration

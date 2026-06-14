@@ -144,3 +144,5 @@ advantage is GLOBAL L2 / peak resolution, already shown by the single-peak (§5.
 and switching (§5.3) benchmarks. Therefore the multi-island benchmark is DEMOTED:
 it stays in `reference_results/` as a diagnostic, not as a main-paper "branching
 wins" benchmark.
+
+> **Status: diagnostic / negative-result record only.** This benchmark was designed as a candidate main-paper result, but the 8-seed production result did not satisfy the success criterion. It is kept as a negative-result record and is not used in the main paper.

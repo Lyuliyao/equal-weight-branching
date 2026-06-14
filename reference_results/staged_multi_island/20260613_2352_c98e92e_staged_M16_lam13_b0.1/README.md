@@ -1,10 +1,19 @@
-# Staged separated growth-island benchmark (paper §5.2) — production run
+# Staged separated growth-island benchmark — diagnostic / negative-result record
 
-Production reference for the **staged** local-degeneracy benchmark
-(`experiments/branch_vs_weighted/staged_multi_island.py`). This replaces the
-static multi-island run as the main §5.2 benchmark: it shows branching is
-quantitatively *better* (not just a diagnostic) when separated growth regions
-become important at different times.
+> **This benchmark was designed as a candidate main-paper result, but the 8-seed
+> production result did not satisfy the success criterion. It is kept as a
+> diagnostic / negative-result record and is not used in the main paper.**
+
+Reference outputs for the **staged** multi-island experiment
+(`experiments/branch_vs_weighted/staged_multi_island.py`), which activates the
+separated islands at different times. Branching attains the lowest global `L²` and
+by far the largest late-island particle count, but at matched particle-step cost
+the cost-matched weighted+ESS baseline attains the lower per-island *mass* error
+(late mean `E_m` 0.137 vs 0.202). Per-island mass is a forgiving integral that
+favors weighted particles; a high final local count does not imply low island-mass
+variance. The branching advantage is the global / peak-resolution accuracy shown
+by the single-peak (§5.2) and switching (§5.3) benchmarks. See `parameter_log.md`
+for the full tuning record.
 
 ## Mechanism
 
