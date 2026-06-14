@@ -1031,7 +1031,7 @@ s(t)=\frac12\left(1+\tanh\frac{t-T/2}{\delta}\right).
 \end{equation}
 Here $u_0\equiv1$, $D=0.02$, $\lambda=10$, $\beta=0.1$, $\sigma=0.25$, $T=1.2$, $\delta=0.04$, $\tau=10^{-3}$, $K=48$, and $N_0=2\times10^4$.  The reference is a deterministic Fourier split-step computation on a $512^2$ grid.  The code also tracks the ancestor label of each particle, so the number of distinct surviving ancestors at the switch can be measured.
 
-The second-stage region $B_B$ is the discriminating diagnostic.  As shown in Table~\ref{tab:switch}, both branching kernels outperform the tested global resampling baselines globally and in $B_B$.  ESS-triggered resampling is best only in the first-stage region $B_A$, where it has concentrated the fixed particle budget before the switch.  By $t=T/2^-$, global resampling has reduced the number of distinct surviving ancestors to $63$--$68\%$ of $N_0$, while branching retains about $95\%$ and has grown the active population to $4.2\times10^4$.  Thus the failure mode in this test is not only weight variance; it is loss of future-growth lineages.
+The second-stage region $B_B$ is the discriminating diagnostic.  As shown in Table~\ref{tab:switch}, both branching kernels outperform the tested global resampling baselines globally and in $B_B$.  ESS-triggered resampling is best only in the first-stage region $B_A$, where it has concentrated the fixed particle budget before the switch.  By $t=T/2^-$, global resampling has reduced the number of distinct surviving ancestors to $63$--$68\%$ of $N_0$, while branching retains about $95\%$ and has grown the active population to $4.2\times10^4$.  Thus the failure mode in this test is not only weight variance; it is loss of future-growth lineages.  Appendix~\ref{app:recon_audit} confirms that the localized- and switching-growth orderings reported here are stable under changes of the Fourier reconstruction bandwidth and under a common periodic Gaussian smoothing, so they do not depend on the single bandwidth $K$ used in the main tables.
 
 \begin{table}[t]
 \centering
@@ -1827,6 +1827,99 @@ $k_{\max}=1$).  Left: the reconstructed one-dimensional marginal of each of the 
 exact marginal $(1+a\cos z)/2\pi$ (dashed).  Middle and right: the reconstructed and exact two-dimensional
 marginals of $(z_1,z_2)$, on a common colour scale.}
 \label{fig:highdim_mms_marg}
+\end{figure}
+
+\section{Reconstruction-bandwidth and smoothing audit}
+\label{app:recon_audit}
+
+The branching-versus-weighted comparisons in Sections~\ref{sec:branch_vs_weight}
+and~\ref{sec:switch} report the relative $L^2$ error of the Fourier-reconstructed
+solver output $u_h^{N,K}=P_K\mu_t^N$, which is the field the implemented method
+produces.  A natural concern is whether the reported method ordering is an artifact
+of the single reconstruction bandwidth $K$: if $K$ is too small the error is
+dominated by the Fourier truncation bias of the reference, and if $K$ is too large
+it is dominated by Monte-Carlo noise in the high-frequency coefficients, which
+would favor whichever method carries more final particles.  We therefore re-ran the
+exact production dynamics of both benchmarks---identical configurations, seeds, and
+common-random-number streams, with no change to the algorithm---captured the final
+particle clouds, and recomputed the error across a range of Fourier bandwidths and
+after a common periodic Gaussian smoothing.  The replicated runs reproduce the
+archived per-seed errors to machine precision (maximum absolute deviation
+$2\times10^{-17}$ for the localized benchmark and $1\times10^{-16}$ for the
+switching benchmark), so the audit measures only the reconstruction, not a
+re-randomized solve.  The audit uses three of the production seeds.
+
+For each final cloud we evaluate, at several bandwidths $K$,
+\begin{equation}
+E_{\rm total}(K)=\frac{\|P_K\mu^N-u_{\rm ref}\|}{\|u_{\rm ref}\|},\qquad
+E_{\rm particle}(K)=\frac{\|P_K\mu^N-P_Ku_{\rm ref}\|}{\|P_Ku_{\rm ref}\|},\qquad
+E_{\rm proj}(K)=\frac{\|P_Ku_{\rm ref}-u_{\rm ref}\|}{\|u_{\rm ref}\|},
+\label{equ:audit_fourier}
+\end{equation}
+where $P_K u_{\rm ref}$ is the band-limited $L^2$ projection of the reference onto
+the same cos/sin space used for the particle reconstruction.  Here $E_{\rm total}$
+is the error reported in the main tables, $E_{\rm particle}$ is the representation
+error at a fixed reconstruction scale, and $E_{\rm proj}$ is the truncation bias of
+the reference.  We also apply a common periodic Gaussian smoothing of scale $h$ to
+both the particle measure and the reference and report the smoothed representation
+error $E_{\rm KDE}^{\rm rep}(h)=\|u_h^N-u_{{\rm ref},h}\|/\|u_{{\rm ref},h}\|$
+together with the smoothing bias
+$E_{\rm bias}(h)=\|u_{{\rm ref},h}-u_{\rm ref}\|/\|u_{\rm ref}\|$.  The same $h$ is
+used for every method; no data-driven or per-method bandwidth is selected.
+
+Figure~\ref{fig:audit_loc} shows the localized-growth benchmark of
+Section~\ref{sec:branch_vs_weight}.  Minimum-variance branching has the lower error
+at every bandwidth $K\in\{8,12,16,24\}$ and every smoothing scale
+$h\in\{0.10,\dots,0.25\}$.  Its error is essentially flat in $K$
+($E_{\rm total}\approx0.04$), whereas the weighted error grows with $K$
+(from $0.18$ to $0.40$) once the truncation bias $E_{\rm proj}$ becomes negligible:
+this is the expected entry of Monte-Carlo coefficient noise, and it makes the
+weighted representation worse, not better, at large $K$.  Under Gaussian smoothing
+the branching error stays near $0.03$ while the weighted error decreases as the
+smoothing scale grows but remains several times larger throughout; the gap narrows
+only once $h$ is large enough that the smoothing bias $E_{\rm bias}$ is itself
+comparable to the errors being compared.
+
+Figure~\ref{fig:audit_switch} shows the switching-growth benchmark of
+Section~\ref{sec:switch}, with the global error and the local errors in the old
+region $B_A$ and the new region $B_B$.  The mechanism of Table~\ref{tab:switch} is
+stable across $K\in\{32,48,64\}$ and $h\in\{0.06,0.10,0.15\}$ under both
+reconstructions: branching has the smallest global error; ESS-triggered resampling
+is competitive with branching in the old region $B_A$, where it concentrated the
+fixed budget before the switch; and branching is the most accurate in the new
+region $B_B$.  No ordering depends on a single bandwidth, and differences narrow
+only at the coarsest smoothing scales, as expected.  For this smooth-reference
+benchmark $E_{\rm proj}$ ranges from $1.6\times10^{-4}$ at $K=32$ to
+$1\times10^{-11}$ at $K=64$, so $E_{\rm total}$ and $E_{\rm particle}$ coincide to
+plotting accuracy and $E_{\rm proj}$ is omitted from the figure.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figure/localized_audit.pdf}
+\caption{Reconstruction-bandwidth and smoothing audit of the localized-growth
+benchmark (Section~\ref{sec:branch_vs_weight}), mean$\pm$std over three seeds.
+Left and center: relative $L^2$ error versus Fourier bandwidth $K$, decomposed as
+in~\eqref{equ:audit_fourier}; the dashed curve is the reference truncation bias
+$E_{\rm proj}$, and the vertical line marks the production bandwidth $K=16$.  Right:
+representation error after a common periodic Gaussian smoothing of scale $h$, with
+the smoothing bias $E_{\rm bias}$ dashed.  Minimum-variance branching is more
+accurate at every $K$ and $h$; the weighted error grows with $K$ as Monte-Carlo
+coefficient noise enters.}
+\label{fig:audit_loc}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figure/switching_audit.pdf}
+\caption{Reconstruction-bandwidth and smoothing audit of the switching-growth
+benchmark (Section~\ref{sec:switch}), mean$\pm$std over three seeds, reported
+globally and in the old region $B_A$ and new region $B_B$.  Top: $E_{\rm total}(K)$
+versus Fourier bandwidth (vertical line at the production $K=48$).  Bottom:
+smoothed representation error $E_{\rm KDE}^{\rm rep}(h)$, with the smoothing bias
+$E_{\rm bias}$ dashed.  The Table~\ref{tab:switch} mechanism is stable across the
+reconstruction scales: branching is best globally and in $B_B$, while resampling is
+competitive with branching in $B_A$.}
+\label{fig:audit_switch}
 \end{figure}
 
 \printcredits

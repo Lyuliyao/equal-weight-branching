@@ -1,0 +1,37 @@
+{
+  "experiment": "localized",
+  "smoke": false,
+  "seeds": [
+    0,
+    1,
+    2
+  ],
+  "K_list": [
+    8,
+    12,
+    16,
+    24
+  ],
+  "h_list": [
+    0.1,
+    0.15,
+    0.2,
+    0.25
+  ],
+  "git_hash": "189036e",
+  "python": "3.12.7",
+  "jax": "0.10.0",
+  "numpy": "2.4.4",
+  "command": "python audit_fourier_kde.py --exp localized --seeds 0 1 2",
+  "validation_seed0": {
+    "archived": true,
+    "K": 16,
+    "L2_match_maxabs": 2.0816681711721685e-17,
+    "L2_match_per_method": {
+      "weighted": 0.0,
+      "minvar": 2.0816681711721685e-17
+    }
+  },
+  "wallclock_s": 65.0,
+  "note": "Appendix reconstruction-bandwidth/KDE audit; reruns exact production dynamics (CLAUDE.md S7), no algorithm or parameter change."
+}

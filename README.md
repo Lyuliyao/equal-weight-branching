@@ -32,6 +32,7 @@ concentration/focusing regimes.
 | `experiments/keller_segel/pp_injection/` | §5.4 | Cross-species injection for the parabolic–parabolic chemical equation `v_t=Δv+u−v` (mass-law check) |
 | `experiments/keller_segel/ldg_comparison/` | §5.5 | LDG-aligned parabolic–parabolic concentration (Li–Shu–Yang IC + report times, `t_gap` resolution-gap indicator) |
 | `experiments/resolution_hybrid/` | §5.x | Local reconstruction diagnostics: global spectrum + local residual window/blob/particles |
+| `experiments/reconstruction_audit/` | Appendix | Fourier-bandwidth & periodic-Gaussian-KDE robustness audit of the §5.2/§5.3 error ordering (reruns exact production dynamics, validated byte-faithful) |
 | `experiments/keller_segel/focusing_3d/` | §5.6 | Three-dimensional Keller–Segel focusing transition (radial mass sweep + tetrahedral clusters) |
 | `experiments/highdim/` | Appendix | Dense 4D/6D reconstruction on a separable manufactured solution + FHT low-rank marginal diagnostics |
 | `experiments/keller_segel/logistic/` | Appendix | Non-conservative logistic KS (coupled-system check) |
@@ -82,6 +83,7 @@ cd ../../highdim                           && python experiment.py --smoke    # 
 | KS cross-species injection mass-law check (§5.4) | `cd experiments/keller_segel/pp_injection && python simulation.py` then `python plot.py --results_dir results` |
 | KS LDG-aligned parabolic–parabolic concentration + `t_gap` (§5.4) | `cd experiments/keller_segel/ldg_comparison && python simulation.py --report_times 6e-5 1.2e-4 2e-4 ...` then `python tgap.py --pairs ...` and `python plot_ldg_style.py --results_dir ...` |
 | Local reconstruction diagnostics (§5.4) | `cd experiments/resolution_hybrid && python core_window_demo.py --blob && python plot_hybrid_reconstruction.py --results_dir ...` |
+| Fourier/KDE reconstruction audit (Appendix) | `cd experiments/reconstruction_audit && python audit_fourier_kde.py --seeds 0 1 2 && python plot_audit.py` (validation tolerances in each `reference_results/reconstruction_audit/*/manifest.json`) |
 | Staged / static multi-island (not in paper; diagnostic records) | `cd experiments/branch_vs_weighted && python staged_multi_island.py --config config_staged_multi_island.json --smoke` (see `staged_parameter_log.md`) |
 | 3D KS focusing: mass sweep, self-convergence, tetrahedral (§5.6) | `cd experiments/keller_segel/focusing_3d && bash submit_focused.sh` then `python plot_focusing.py --runs results/* && python plot_selfconv_NH.py` |
 | Dense 4D/6D reconstruction MMS (Appendix) | `cd experiments/highdim && python experiment.py && python experiment.py --d6 && python plot.py` |
