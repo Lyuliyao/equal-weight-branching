@@ -99,7 +99,7 @@ Remove or rewrite any sentence saying:
 
 ---
 
-## 2. Current highest-priority task: improve §5.3 switching-growth Figure 6
+## 2. Switching-growth Figure 6: finish and verify the A/B microscope version
 
 Do **not** run new solver jobs for this task. The switching experiment already saves the needed data:
 
@@ -109,7 +109,9 @@ reference_results/switch/ancestors_at_switch.csv
 reference_results/switch/fields_seed*.npz
 ```
 
-The problem is visualization: the current full-domain Figure 6 is too small to show what happens in the old growth region \(B_A\) and the new growth region \(B_B\). The figure must visually explain Table 6.
+The visualization problem is that a full-domain Figure 6 is too small to show what happens in the old growth region \(B_A\) and the new growth region \(B_B\). The figure must visually explain Table 6.
+
+If the new A/B microscope Figure 6 has already been generated, verify that it is actually the figure used by the manuscript and that the saved `plot_data` regenerates it without rerunning the solver.
 
 ### 2.1 Purpose of the switching-growth example
 
@@ -129,7 +131,7 @@ The figure should make this mechanism visible.
 
 ---
 
-## 3. Required Figure 6 redesign: full domain + A/B microscope zooms
+## 3. Required Figure 6 design: full domain + A/B microscope zooms
 
 Create or update:
 
@@ -141,7 +143,7 @@ The plot script must read saved data only. It must not rerun the solver.
 
 ### 3.1 Figure layout
 
-Replace the current four-panel full-domain figure with a 4-column × 3-row figure:
+Use a 4-column × 3-row figure:
 
 ```text
 columns:
@@ -198,7 +200,7 @@ Use distinct but non-distracting markers:
 
 ```text
 B_A: circle boundary
-B_B: square or circle boundary with different linestyle
+B_B: circle boundary with different linestyle
 ```
 
 The reader must immediately understand that Table 6 local errors are computed in these marked regions.
@@ -216,6 +218,8 @@ row 3: one shared color scale for all B-zoom panels
 Do not use a separate color scale for each method; that would hide accuracy differences.
 
 Do not force the zoom rows to use the full-domain color scale if it makes local structure invisible. The zoom rows are microscopes and may use their own row-wise scale.
+
+If any percentile clipping is used for readability, record it explicitly in the plot-data metadata and/or README. Do not silently clip values in a way that could be interpreted as hiding weighted spikes.
 
 ### 3.4 Local error labels
 
@@ -266,6 +270,7 @@ minvar field
 cA, cB, sigma, eta, R_B, R_zoom
 row-wise vmin/vmax
 final-time local errors used for annotations
+display clipping policy if any
 ```
 
 The plot script must be idempotent: rerunning it from saved CSV/NPZ should reproduce the same figure without running the solver.
@@ -274,7 +279,7 @@ The plot script must be idempotent: rerunning it from saved CSV/NPZ should repro
 
 ## 4. Figure 6 caption target
 
-Replace the current caption with a mechanism-focused caption like:
+Use a mechanism-focused caption:
 
 ```latex
 Switching-growth benchmark at \(T=1.2\). Top row: full-domain reconstructed fields after the source has moved from \(x_A\) to \(x_B\). Middle and bottom rows: magnified views of the old growth region \(B_A\) and the new growth region \(B_B\), with the local diagnostic sets marked. Global ESS resampling gives the smallest error in \(B_A\), where it has concentrated the fixed particle budget before the switch, but it is less accurate in the second-stage region \(B_B\). Equal-weight branching preserves more surviving lineages and reconstructs the new growth region more accurately, consistent with Table~\ref{tab:switch}.
@@ -342,210 +347,301 @@ This definition should be stated once, near the start of the numerical section. 
 
 ---
 
-## 7. Optional appendix audit: Fourier bandwidth and KDE-smoothed errors
+## 7. Optional appendix audit: Fourier bandwidth and KDE-smoothed error
 
-This is the next optional robustness task after Figure 6. It should be considered for an appendix only. Do not use it to replace the main tables unless the result produces a scientifically important reversal.
+This is the next optional robustness check. It is not a new main-paper experiment unless it reveals a surprising and scientifically important reversal.
 
 ### 7.1 Purpose
 
-The concern is that the reported Fourier-reconstructed \(L^2\) errors might be affected by the chosen reconstruction bandwidth \(K\). If \(K\) is too large, high-frequency Monte-Carlo coefficient noise can dominate, and the error may depend strongly on the effective particle count. This is not automatically a flaw — the paper is about reconstructed-field accuracy under weight degeneracy — but we should audit whether the comparison is an artifact of a single \(K\).
-
-The audit should answer:
-
-```text
-Is the method ordering in §5.2 and §5.3 stable over a reasonable Fourier-K range?
-Does a common KDE / Gaussian smoothing scale change the conclusion?
-Are there any surprising reversals, e.g. a method that looked better under Fourier error but worse under KDE, or vice versa?
-```
-
-If there is no surprising reversal, put the audit in an appendix or supplementary note. The main paper can contain at most one sentence saying the ordering is robust to a reconstruction-scale audit. If there is a surprising reversal, stop and report it before changing the manuscript.
-
-### 7.2 Do not replace the main error definition
-
-The main tables should continue to report the relative \(L^2\) error of the solver output \(P_K\mu^N\), because the implemented method uses Fourier reconstruction. KDE is a robustness audit, not the main solver output.
-
-Do not write:
-
-```text
-We replace the Fourier error by KDE error.
-```
-
-Use:
-
-```text
-The main tables report the relative \(L^2\) error of the reconstructed physical field \(P_K\mu^N\). As a reconstruction-scale robustness check, we also recompute errors under several Fourier bandwidths and after applying the same periodic Gaussian smoothing to both the particle measure and the deterministic reference.
-```
-
-### 7.3 Fourier audit definitions
-
-For a fixed bandwidth \(K\), compute:
+The main tables report relative \(L^2\) error of the reconstructed physical field
 
 \[
-E_{\rm total}(K)=
-\frac{\|P_K\mu_T^N-u_{\rm ref}(T)\|_{L^2}}
-{\|u_{\rm ref}(T)\|_{L^2}},
+u_h^{N,K}=P_K\mu_t^N.
+\]
+
+This is the correct solver-output error because the implemented method outputs a Fourier-reconstructed field. However, there is a legitimate concern:
+
+> If \(K\) is too large, the reported \(L^2\) error may be dominated by Monte Carlo noise in many high-frequency Fourier coefficients. In that regime, a method with more final particles can look better mainly because it has lower coefficient noise.
+
+This concern is connected to the revision motivation: weighted-particle strategies can suffer large sampling variance, while branching tries to reduce that variance by converting local growth into local particle count. The audit should show that the reported comparison is not an artifact of a single overly large Fourier bandwidth.
+
+### 7.2 Policy
+
+Do not replace the main Fourier \(L^2\) error unless the audit reveals a major contradiction.
+
+The main paper should keep reporting the error of the implemented Fourier-reconstructed solver output. The KDE / bandwidth audit is a robustness check, best placed in the appendix if it confirms the current story or only shows expected scale dependence.
+
+If the audit reveals a surprising reversal, pause and report before changing the manuscript. Examples of surprising reversals:
+
+```text
+1. A method that looked better under Fourier reconstruction becomes clearly worse under KDE.
+2. Branching becomes much better under KDE in a case where Fourier suggested only parity.
+3. The ordering in Table 4 or Table 6 only appears at one isolated bandwidth K.
+```
+
+If the result is unsurprising, use appendix language such as:
+
+```text
+The main tables report Fourier-reconstructed field error, which is the solver output.
+Appendix X verifies that the ordering is stable under moderate changes of Fourier bandwidth
+and under common periodic Gaussian smoothing. At very coarse smoothing scales, differences
+narrow, as expected, because smoothing removes localized degeneracy.
+```
+
+### 7.3 Fourier bandwidth decomposition
+
+For each selected \(K\), compute three quantities:
+
+\[
+E_{\rm total}(K)
+=
+\frac{\|P_K\mu^N-u_{\rm ref}\|_{L^2}}
+{\|u_{\rm ref}\|_{L^2}},
 \]
 
 \[
-E_{\rm particle}(K)=
-\frac{\|P_K\mu_T^N-P_Ku_{\rm ref}(T)\|_{L^2}}
-{\|P_Ku_{\rm ref}(T)\|_{L^2}},
+E_{\rm particle}(K)
+=
+\frac{\|P_K\mu^N-P_Ku_{\rm ref}\|_{L^2}}
+{\|P_Ku_{\rm ref}\|_{L^2}},
 \]
 
 \[
-E_{\rm proj}(K)=
-\frac{\|P_Ku_{\rm ref}(T)-u_{\rm ref}(T)\|_{L^2}}
-{\|u_{\rm ref}(T)\|_{L^2}}.
+E_{\rm proj}(K)
+=
+\frac{\|P_Ku_{\rm ref}-u_{\rm ref}\|_{L^2}}
+{\|u_{\rm ref}\|_{L^2}}.
 \]
 
 Interpretation:
 
 ```text
-E_proj large     => K is too small / under-resolved.
-E_particle grows strongly with K => MC reconstruction noise is becoming dominant.
-A stable method ordering over moderate K supports the main comparison.
+E_total(K)    : the current reported solver-output error.
+E_particle(K) : particle / representation error at fixed reconstruction scale.
+E_proj(K)     : deterministic Fourier truncation bias of the reference.
 ```
 
-Use fixed bandwidths:
+If \(K\) is too small, \(E_{\rm proj}\) dominates and all methods look artificially similar. If \(K\) is too large, \(E_{\rm particle}\) grows like Monte Carlo coefficient noise. The useful regime is where the method ordering is stable and \(K\) is large enough to resolve the localized peak but not so large that all errors are high-frequency noise.
+
+Suggested values:
 
 ```text
-§5.2 localized growth: K = 8, 12, 16, 24
-§5.3 switching growth: K = 32, 48, 64
+§5.2 localized growth:
+    K = 8, 12, 16, 24
+
+§5.3 switching growth:
+    K = 32, 48, 64
 ```
 
-For §5.3, report both global and local \(B_A,B_B\) errors.
+For §5.3, report both global and local errors:
 
-### 7.4 KDE-smoothed audit definitions
+```text
+global E_total / E_particle / E_proj
+B_A local E_total / E_particle
+B_B local E_total / E_particle
+```
 
-Use periodic Gaussian smoothing with the same bandwidth \(h\) for all methods and for the reference. Do not use method-dependent bandwidths.
+The key question is whether the Table 6 mechanism remains stable:
 
-For particles:
+```text
+ESS resampling is best or competitive in old region B_A.
+Branching is better in new region B_B.
+```
+
+### 7.4 KDE-smoothed representation error
+
+Use a common periodic Gaussian smoothing scale \(h\). Do not select a different bandwidth per method.
+
+Define
 
 \[
-u_h^N = \eta_h^{\rm per} * \mu_T^N.
+u_h^N = \eta_h^{\rm per} * \mu_T^N,
+\qquad
+u_{{\rm ref},h} = \eta_h^{\rm per} * u_{\rm ref}.
 \]
 
-For the deterministic reference:
+For weighted particles,
 
 \[
-u_{{\rm ref},h}=\eta_h^{\rm per}*u_{\rm ref}(T).
+u_{h,\rm w}^N(x)
+=
+\frac{M_0}{N_0}
+\sum_i w_i \eta_h^{\rm per}(x-X_i).
 \]
 
-Report the smoothed representation error:
+For branching,
 
 \[
-E_{\rm KDE}^{\rm rep}(h)=
-\frac{\|u_h^N-u_{{\rm ref},h}\|_{L^2}}
-{\|u_{{\rm ref},h}\|_{L^2}},
+u_{h,\rm br}^N(x)
+=
+\frac{M_0}{N_0}
+\sum_{i\in\mathcal I_T}
+\eta_h^{\rm per}(x-X_i).
 \]
 
-and the deterministic smoothing bias:
+The primary KDE audit metric is the smoothed representation error:
 
 \[
-E_{\rm bias}(h)=
-\frac{\|u_{{\rm ref},h}-u_{\rm ref}\|_{L^2}}
-{\|u_{\rm ref}\|_{L^2}}.
+E_{\rm KDE}^{\rm rep}(h)
+=
+\frac{
+\|u_h^N-u_{{\rm ref},h}\|_{L^2}
+}{
+\|u_{{\rm ref},h}\|_{L^2}
+}.
 \]
 
-The bias must be reported. If \(E_{\rm bias}(h)\) is large, the smoothing scale is too coarse to support an accuracy claim.
+Also report the smoothing bias:
 
-Use fixed smoothing scales:
+\[
+E_{\rm bias}(h)
+=
+\frac{
+\|u_{{\rm ref},h}-u_{\rm ref}\|_{L^2}
+}{
+\|u_{\rm ref}\|_{L^2}
+}.
+\]
+
+This separation is important. \(E_{\rm KDE}^{\rm rep}\) compares particle representations at the same smoothing scale. \(E_{\rm bias}\) tells us whether the smoothing scale is too coarse to support an accuracy claim.
+
+Suggested \(h\) values:
 
 ```text
-§5.2 localized growth: h = 0.10, 0.15, 0.20, 0.25
-§5.3 switching growth: h = 0.06, 0.10, 0.15
+§5.2 localized growth:
+    h = 0.10, 0.15, 0.20, 0.25
+
+§5.3 switching growth:
+    h = 0.06, 0.10, 0.15
 ```
 
-For §5.3, also report local KDE errors in \(B_A\) and \(B_B\). The key robustness question is whether the old-region/new-region mechanism remains visible:
+For §5.3, compute both global and local KDE errors in \(B_A\) and \(B_B\).
+
+### 7.5 Implementation details
+
+Use FFT-based periodic Gaussian smoothing, not direct \(O(NG)\) KDE.
+
+Recommended implementation:
 
 ```text
-ESS resampling best or near-best in B_A;
-branching better in B_B;
-branching preserves lineage diversity independently of reconstruction.
+1. Deposit particles to the evaluation grid as a weighted periodic histogram or CIC field.
+2. FFT the deposited field.
+3. Multiply by exp(-0.5*h^2*|k|^2).
+4. Inverse FFT.
+5. Apply the correct physical mass normalization.
+6. Apply the same Gaussian multiplier to the deterministic reference field.
 ```
 
-### 7.5 Implementation requirements
+Use the same grid as the existing error computation whenever possible.
 
-Create a focused audit script, for example:
+Do not use data-driven bandwidth selection. Do not choose \(h\) separately for each method. Do not tune \(h\) to make branching win.
+
+If final particle clouds are not already archived for §5.2 or §5.3, do the minimum necessary rerun to save final clouds with the exact production configs and seeds. This is a reconstruction audit, not a new dynamics experiment. Record this clearly.
+
+Possible file structure:
 
 ```text
-experiments/branch_vs_weighted/reconstruction_audit.py
+experiments/reconstruction_audit/
+    audit_fourier_kde.py
+    plot_audit.py
+    README.md
+
+reference_results/reconstruction_audit/
+    localized_growth/
+        config_used.json
+        fourier_k_sweep.csv
+        kde_h_sweep.csv
+        plot_data/*.npz
+        figures/*.pdf
+        figures/*.png
+    switching_growth/
+        config_used.json
+        fourier_k_sweep.csv
+        kde_h_sweep.csv
+        plot_data/*.npz
+        figures/*.pdf
+        figures/*.png
 ```
 
-Preferred implementation:
-
-1. Use saved final particle clouds if available.
-2. If final particles are not saved for the needed methods, rerun only the minimum necessary seeds with the existing solver and save final particle states. Do not rerun a large production job unless explicitly approved.
-3. Use the same initial particles and Brownian streams as the original experiments when rerunning.
-4. For KDE, use an FFT-based periodic Gaussian convolution:
-   - deposit weighted particles to the grid using the same deposition rule for all methods;
-   - FFT the deposited field;
-   - multiply by \(\exp(-h^2|k|^2/2)\);
-   - inverse FFT;
-   - apply the same smoothing to the reference field.
-5. A simple histogram deposit is acceptable for a first audit if documented, but CIC is preferable. Do not use adaptive or method-specific KDE bandwidths.
-6. The audit must run on saved/rerun data and write reproducibility files; plot scripts must not rerun the solver.
-
-### 7.6 Outputs
-
-Write to:
+The audit script should be idempotent. It should either:
 
 ```text
-reference_results/reconstruction_audit/<run_id>/
+A. read saved final particle clouds and references, or
+B. rerun the exact production dynamics only to save the missing final clouds,
+   with no change to algorithm or parameters.
 ```
 
-Include:
+### 7.6 Success criteria
+
+The audit is appendix-worthy if:
 
 ```text
-config.json
+1. The §5.2 method ordering is stable for moderate K and moderate h.
+2. The §5.3 old/new-region mechanism is stable for moderate K and moderate h.
+3. Very small K or very large h smooths away differences, as expected.
+4. Very large K increases particle-noise sensitivity, as expected.
+5. No conclusion depends on one isolated K or one isolated h.
+```
+
+If KDE changes the magnitude but not the story, place it in the appendix as a robustness audit.
+
+If KDE produces a surprising reversal, do not bury it in an appendix. Report the result and reassess the manuscript claim before editing.
+
+### 7.7 Appendix text target
+
+If the audit confirms the current story, add a short appendix paragraph:
+
+```latex
+The main comparisons use the Fourier-reconstructed field \(P_K\mu^N\), which is the
+output of the implemented solver. To check that the conclusions do not depend on a
+single reconstruction bandwidth, we repeated the error computation across nearby
+Fourier cutoffs and after applying a common periodic Gaussian smoothing to both the
+particle measure and the deterministic reference. The method ordering in the
+localized-growth benchmark and the old/new-region mechanism in the switching-growth
+benchmark are stable over the moderate bandwidths reported here. At coarse smoothing
+scales the methods become closer, and at very high Fourier bandwidths the expected
+Monte-Carlo coefficient noise becomes visible.
+```
+
+Keep this appendix compact. Do not let the audit become another large numerical section.
+
+### 7.8 Output and traceability
+
+Every number used in the appendix must have a CSV in `reference_results/reconstruction_audit/`.
+
+Required outputs:
+
+```text
+fourier_k_sweep.csv
+kde_h_sweep.csv
+config_used.json
 manifest.json
-summary.md
-metrics_fourier_K.csv
-metrics_kde_h.csv
-projection_bias.csv
-particle_clouds/ or clear pointers to source particle files
 plot_data/*.npz
 figures/*.pdf
 figures/*.png
+README.md
 ```
 
-At minimum, the summary must answer:
+The CSVs should include:
 
 ```text
-1. Does the §5.2 method ordering survive K = 8,12,16,24?
-2. Does the §5.2 method ordering survive KDE h = 0.10,0.15,0.20,0.25?
-3. Does the §5.3 B_A/B_B mechanism survive K = 32,48,64?
-4. Does the §5.3 B_A/B_B mechanism survive KDE h = 0.06,0.10,0.15?
-5. Are there surprising reversals?
-6. Should this remain appendix robustness, or does it require a main-text change?
+experiment
+method
+seed
+K or h
+region = global / B / B_A / B_B
+E_total
+E_particle
+E_proj
+E_KDE_rep
+E_bias
+global_nESS
+local_nESS_or_count
+N_active
+particle_steps
 ```
 
-### 7.7 Decision rules
-
-If the audit shows no surprising reversal:
-
-```text
-Keep it in the appendix or supplementary repository record.
-Do not expand the main numerical section.
-Add at most one sentence in §5.2/§5.3 or the appendix: the ordering is robust over the tested reconstruction scales.
-```
-
-If KDE or K-sweep weakens the branching claim:
-
-```text
-Do not hide it.
-Narrow the main-text claim to the scale where it is supported.
-Report that coarse smoothing reduces method differences, if that is what happens.
-```
-
-If KDE or K-sweep strengthens branching in an unexpected way, for example a baseline that looked comparable under Fourier error becomes worse under KDE, or branching becomes clearly better at moderate smoothing scales:
-
-```text
-Stop and report the result before rewriting the manuscript.
-This may justify an appendix figure or a small main-text sentence, but not an uncontrolled expansion of the paper.
-```
-
-Do not let this audit become another large experiment. It is a reconstruction-scale sanity check.
+For rows where a quantity is not applicable, use blank or NaN, but keep the schema stable.
 
 ---
 
@@ -586,7 +682,8 @@ Keep the numerical section organized as:
 5.4 2D Keller-Segel: coupled solver + pre-singular concentration
 5.5 3D Keller-Segel focusing
 5.6 6D kinetic Keller-Segel
-Appendix: Allen-Cahn, logistic KS, high-dimensional dense reconstruction, optional KDE/bandwidth audit, negative multi-island records
+Appendix: Allen-Cahn, logistic KS, high-dimensional dense reconstruction, negative multi-island records
+Optional appendix: Fourier/KDE reconstruction audit if it confirms robustness
 ```
 
 Do not insert multi-island into the main story.
@@ -669,7 +766,8 @@ Update the root README so that:
 - static/staged/compressive multi-island are listed as `not in paper / diagnostic record`;
 - `pp_injection`, `ldg_comparison`, and any `resolution_hybrid` directory are correctly categorized;
 - section numbers match the final manuscript;
-- if the KDE/bandwidth audit is run, add it under appendix / robustness, not main paper.
+- Figure 6 reproduction includes `plot_switch.py`;
+- any Fourier/KDE audit is clearly marked as appendix / robustness only.
 
 ### 9.4 Data traceability
 
@@ -679,6 +777,12 @@ The localized-growth cost-matched row must remain traceable:
 
 ```text
 weighted + resample (ESS), N0 = 3.8e4, particle-steps = 1.9e7
+```
+
+Every number in the optional Fourier/KDE appendix must also be traceable to:
+
+```text
+reference_results/reconstruction_audit/
 ```
 
 ### 9.5 Figures
@@ -694,7 +798,7 @@ figure.pdf
 figure.png
 ```
 
-Plot scripts must not rerun the solver.
+Plot scripts must not rerun the solver unless explicitly documented as a missing-data reconstruction step.
 
 ---
 
@@ -711,7 +815,7 @@ Before running any expensive job:
 
 For the Figure 6 task, no expensive job is needed; use saved switching-growth data only.
 
-For the KDE/bandwidth audit, use saved particle clouds if possible; otherwise rerun only the minimum necessary seeds and save final particle clouds. This is an appendix robustness audit, not a new main experiment.
+For the Fourier/KDE audit, first determine whether final particle clouds are already available. If not, rerun only the exact production dynamics needed to save final clouds, and document that this is a reconstruction audit rather than a new solver experiment.
 
 After every run or figure-generation change:
 
@@ -729,9 +833,10 @@ After every run or figure-generation change:
 - Do not add experiments that do not strengthen the paper.
 - Do not claim branching wins a metric unless the table says so.
 - Do not use per-island mass `E_m` as the main argument for branching.
-- Do not replace the main Fourier reconstructed-field error with KDE error; KDE is a robustness audit.
-- Do not use method-dependent KDE bandwidths.
 - Do not claim blow-up time from reconstructed peak or \(L^2\).
+- Do not replace the main Fourier error by KDE error unless the audit reveals a serious contradiction.
+- Do not tune KDE bandwidth separately by method.
+- Do not use KDE or \(K\)-sweeps to cherry-pick a favorable story.
 - Do not introduce variable diffusion without writing the correct Fokker–Planck / Itô form.
 - Do not hide cost; always report particle-steps and active counts.
 - Do not hide failed pilots; keep them in logs.
