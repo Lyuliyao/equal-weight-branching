@@ -28,10 +28,13 @@ concentration/focusing regimes.
 | `experiments/kinetic_ks/` | §5.4 | Six-dimensional field-coupled kinetic Keller–Segel (3D screened-Poisson field from the spatial marginal) |
 | `experiments/keller_segel/mass_balance/` | §5.5 | Conservative KS implementation check (exact mass balance) |
 | `experiments/keller_segel/concentration/` | §5.5 | Supercritical 2D concentration (parabolic–parabolic, finite-difference comparison) |
-| `experiments/keller_segel/concentration_ldg/` | §5.5 | Core-local & resolution-gap (LDG-style) diagnostics: parabolic–elliptic reduction on a core-adaptive Fourier window |
-| `experiments/keller_segel/pp_injection/` | §5.4 | Cross-species injection for the parabolic–parabolic chemical equation `v_t=Δv+u−v` (mass-law check) |
-| `experiments/keller_segel/ldg_comparison/` | §5.5 | LDG-aligned parabolic–parabolic concentration (Li–Shu–Yang IC + report times, `t_gap` resolution-gap indicator) |
-| `experiments/resolution_hybrid/` | §5.x | Local reconstruction diagnostics: global spectrum + local residual window/blob/particles |
+| `experiments/keller_segel/ldg_pp_baseline/` | §5.4 | **Deterministic grid baseline** for the fully parabolic–parabolic LDG benchmark: positivity-preserving FVM (Neumann), `S_N(t)`, resolution-gap `t_b(n;1.05)`, snapshots |
+| `experiments/keller_segel/pp_particle_ldg/` | §5.4 | Particle method on the same fully pp equation (solver = `ldg_comparison/`; `u`-conservative + `v` decay/injection min-variance kernel); README documents the baseline comparison |
+| `experiments/keller_segel/core_local_proxy/` | §5.5 | Core-local & reconstruction-free blow-up-proxy diagnostics: radius collapse, window-sensitivity of the candidate `T*`, global-vs-core `t_b` (post-processing only) |
+| `experiments/keller_segel/ldg_comparison/` | §5.4 | Fully parabolic–parabolic particle run (Li–Shu–Yang IC + report times, injection kernel); the §5.4 particle solver |
+| `experiments/keller_segel/pp_injection/` | App. F | Cross-species injection mass-law check for `v_t=Δv+u−v` (validates the §5.4 algorithm) |
+| `experiments/keller_segel/concentration_ldg/` | App. G | Parabolic–elliptic core-adaptive `t_gap` diagnostics — **record only** (the main KS benchmark is the fully pp system) |
+| `experiments/resolution_hybrid/` | App. H | Local reconstruction diagnostics: global spectrum + local residual window/blob/particles |
 | `experiments/reconstruction_audit/` | Appendix | Fourier-bandwidth & periodic-Gaussian-KDE robustness audit of the §5.2/§5.3 error ordering (reruns exact production dynamics, validated byte-faithful) |
 | `experiments/keller_segel/focusing_3d/` | §5.6 | Three-dimensional Keller–Segel focusing transition (radial mass sweep + tetrahedral clusters) |
 | `experiments/highdim/` | Appendix | Dense 4D/6D reconstruction on a separable manufactured solution + FHT low-rank marginal diagnostics |
@@ -79,10 +82,12 @@ cd ../../highdim                           && python experiment.py --smoke    # 
 | 6D field-coupled kinetic KS table + figures (§5.4) | `cd experiments/kinetic_ks && sbatch run_me "--config config_pilot.json" && python plot_kinetic.py --results_dir results/pilot` |
 | KS mass balance (§5.5) | `cd experiments/keller_segel/mass_balance && python simulation.py <N>` |
 | KS 2D concentration vs finite difference (§5.5) | `cd experiments/keller_segel/concentration && python simulation.py <N>` (reference: `python finite_difference.py`) |
-| KS parabolic–elliptic core/resolution-gap diagnostics + `t_gap` (§5.4) | `cd experiments/keller_segel/concentration_ldg && bash submit_focused.sh` then `python tgap.py --pairs ...` and `python plot_ldg.py` |
-| KS cross-species injection mass-law check (§5.4) | `cd experiments/keller_segel/pp_injection && python simulation.py` then `python plot.py --results_dir results` |
-| KS LDG-aligned parabolic–parabolic concentration + `t_gap` (§5.4) | `cd experiments/keller_segel/ldg_comparison && python simulation.py --report_times 6e-5 1.2e-4 2e-4 ...` then `python tgap.py --pairs ...` and `python plot_ldg_style.py --results_dir ...` |
-| Local reconstruction diagnostics (§5.4) | `cd experiments/resolution_hybrid && python core_window_demo.py --blob && python plot_hybrid_reconstruction.py --results_dir ...` |
+| Fully pp KS grid baseline + `t_b` (§5.4) | `cd experiments/keller_segel/ldg_pp_baseline && for n in 128 256 512; do python fvm_baseline.py --n $n --T 2e-4 --out_dir results/n$n; done && python tb_from_pair.py --pairs results/n128/S_curves.csv:results/n256/S_curves.csv results/n256/S_curves.csv:results/n512/S_curves.csv` |
+| Fully pp KS particle run (§5.4) | `cd experiments/keller_segel/ldg_comparison && python simulation.py --N 20000 --K 5 --report_times 6e-5 1.2e-4 2e-4 --outdir <run>/base` (refined: `--N 80000 --K 10`); plot via `ldg_pp_baseline/plot_baseline.py` |
+| Core-local / reconstruction-free proxy (§5.5) | `cd experiments/keller_segel/core_local_proxy && python analyze_core_proxy.py --baseline_dir <baseline_run> --particle_base <diag.csv> --particle_refined <diag.csv> --out_dir <core_run> && python plot_core_proxy.py --core_dir <core_run> --baseline_dir <baseline_run>` |
+| KS cross-species injection mass-law check (App. F) | `cd experiments/keller_segel/pp_injection && python simulation.py` then `python plot.py --results_dir results` |
+| KS parabolic–elliptic `t_gap` diagnostics (App. G, record only) | `cd experiments/keller_segel/concentration_ldg && bash submit_focused.sh` then `python tgap.py --pairs ...` and `python plot_ldg.py` |
+| Local reconstruction diagnostics (App. H) | `cd experiments/resolution_hybrid && python core_window_demo.py --blob && python plot_hybrid_reconstruction.py --results_dir ...` |
 | Fourier/KDE reconstruction audit (Appendix) | `cd experiments/reconstruction_audit && python audit_fourier_kde.py --seeds 0 1 2 && python plot_audit.py` (validation tolerances in each `reference_results/reconstruction_audit/*/manifest.json`) |
 | Staged / static multi-island (not in paper; diagnostic records) | `cd experiments/branch_vs_weighted && python staged_multi_island.py --config config_staged_multi_island.json --smoke` (see `staged_parameter_log.md`) |
 | 3D KS focusing: mass sweep, self-convergence, tetrahedral (§5.6) | `cd experiments/keller_segel/focusing_3d && bash submit_focused.sh` then `python plot_focusing.py --runs results/* && python plot_selfconv_NH.py` |

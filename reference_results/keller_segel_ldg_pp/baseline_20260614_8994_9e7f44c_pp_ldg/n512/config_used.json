@@ -1,0 +1,26 @@
+{
+  "n": 512,
+  "T": 0.0002,
+  "cfl": 0.25,
+  "report_times": [
+    6e-05,
+    0.00012,
+    0.0002
+  ],
+  "dx": 0.001953125,
+  "dt_max": null,
+  "scheme": "positivity-preserving upwind FVM, central diffusion, explicit Euler, Neumann",
+  "domain": [
+    -0.5,
+    0.5
+  ],
+  "M_u0": 31.41592653016963,
+  "blew_up": false,
+  "final_t": 0.0002,
+  "steps": 1197,
+  "runtime_s": 15.83,
+  "umin_global": 5.689746313128814e-16,
+  "max_mass_drift": 4.52345554779513e-16,
+  "numpy": "2.4.4",
+  "python": "3.12.7"
+}

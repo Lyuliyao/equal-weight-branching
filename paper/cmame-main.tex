@@ -860,7 +860,7 @@ The parabolic--parabolic Keller--Segel chemical equation $v_t=\Delta v+u-v$ is t
 \mu_v^{n+1}=e^{-\tau}\,\mu_v^{*}+\bigl(1-e^{-\tau}\bigr)\,\mu_u^{*},
 \label{equ:injection}
 \end{equation}
-where $\mu_u^{*},\mu_v^{*}$ are the transported cell and chemical measures.  We realize \eqref{equ:injection} as a two-species birth--death process, with no division and no positivity floor: each transported chemical particle survives with probability $e^{-\tau}$ (the minimum-variance integer kernel for a multiplier below one), and each transported cell particle injects a new chemical particle at its own position with mean $q=(1-e^{-\tau})\,\omega_u/\omega_v$ by stochastic rounding $\nu_i=\lfloor q\rfloor+\mathrm{Bernoulli}(q-\lfloor q\rfloor)$.  When $\omega_u=\omega_v$ and $\tau$ is small this is a Bernoulli injection with probability $1-e^{-\tau}$.  Conditional on the transported clouds, \eqref{equ:injection} holds in mean, so the chemical mass obeys the exact balance $M_v(t)=M_u(0)+[M_v(0)-M_u(0)]e^{-t}$, which Section~\ref{sec:ks} verifies to sampling accuracy.  This is the unbiased extension of the equal-weight method to multi-species production and avoids the division by small $v$ inherent in a multiplicative chemical rate.
+where $\mu_u^{*},\mu_v^{*}$ are the transported cell and chemical measures.  We realize \eqref{equ:injection} as a two-species birth--death process, with no division and no positivity floor: each transported chemical particle survives with probability $e^{-\tau}$ (the minimum-variance integer kernel for a multiplier below one), and each transported cell particle injects a new chemical particle at its own position with mean $q=(1-e^{-\tau})\,\omega_u/\omega_v$ by stochastic rounding $\nu_i=\lfloor q\rfloor+\mathrm{Bernoulli}(q-\lfloor q\rfloor)$.  When $\omega_u=\omega_v$ and $\tau$ is small this is a Bernoulli injection with probability $1-e^{-\tau}$.  Conditional on the transported clouds, \eqref{equ:injection} holds in mean, so the chemical mass obeys the exact balance $M_v(t)=M_u(0)+[M_v(0)-M_u(0)]e^{-t}$, which Appendix~\ref{app:coupled_pp} verifies to sampling accuracy.  This is the unbiased extension of the equal-weight method to multi-species production and avoids the division by small $v$ inherent in a multiplicative chemical rate.
 
 \section{Numerical experiments}
 \label{sec:numerics}
@@ -1057,140 +1057,71 @@ minimum-variance branching & $0.203\pm0.051$ & $0.170\pm0.136$ & $0.174\pm0.022$
 \label{fig:switch}
 \end{figure}
 
-\subsection{Two-dimensional Keller--Segel: coupled solver and pre-singular concentration}
+\subsection{Fully parabolic--parabolic Keller--Segel: an LDG-aligned concentration benchmark}
 \label{sec:ks}
 
-We next move to Keller--Segel dynamics in physical dimension two.  These experiments test the particle-field coupling and the behavior of the mesh-free representation in concentration-dominated regimes.  They are deliberately interpreted as pre-singular concentration tests, not as convergence through blow-up, because the Fourier reconstruction is bandwidth-limited while the continuum Keller--Segel dynamics may approach singular measures in two dimensions~\cite{herrero1997blow,perthame2007transport,giga2011asymptotic,souplet2019blow,filbet2006finite,chertock2008second,chertock2018high,shen2020unconditionally,chen2022error,liu2018positivity,zhong2024direct,li2017local,epshteyn2009new,epshteyn2019efficient,strehl2013positivity}.
-
-\paragraph{Coupled parabolic--parabolic implementation check.}
-We first solve
+We now test the particle--field method on the fully parabolic--parabolic Keller--Segel system used as a concentration benchmark in the local discontinuous Galerkin (LDG) study of Li, Shu, and Yang~\cite{li2017local},
 \begin{equation}
- u_t-\nabla\cdot(\nabla u-u\nabla v)=0,
- \qquad
- v_t-\Delta v=u-v,
- \qquad \mathbf x\in[0,2\pi]^2,
+u_t-\nabla\cdot(\nabla u-u\nabla v)=0,
+\qquad
+v_t-\Delta v=u-v,
 \label{equ:case1}
 \end{equation}
-with periodic boundary conditions and initial data $u_0(\mathbf x)=\sin^2(x_1)\cos^2(x_2)$ and $v_0(\mathbf x)=\cos x_1+\cos x_2+2$.  Since the cell equation is conservative, $\int u(t,x)dx=\pi^2$, and the chemical mass satisfies
+with the concentrated, super-critical initial data
 \[
-M_v'(t)=-M_v(t)+\pi^2,
+u_0(\mathbf x)=840\exp[-84(x_1^2+x_2^2)],
 \qquad
-M_v(t)=\pi^2+[M_v(0)-\pi^2]e^{-t}.
+v_0(\mathbf x)=420\exp[-42(x_1^2+x_2^2)],
 \]
-The chemical source $u-v$ is realized by the cross-species injection kernel of Section~\ref{sec:injection} and Eq.~\eqref{equ:injection}, not by a multiplicative rate on chemical particles: each transported chemical particle survives with probability $e^{-\tau}$ and each transported cell particle injects a new chemical particle at its position with mean $(1-e^{-\tau})\omega_u/\omega_v$.  Figure~\ref{fig:total_mass} shows that the computed chemical mass follows the balance identity to sampling accuracy (maximum relative error of $M_v(t)$ against the exact law below $1.4\%$ over the run, with the cell mass conserved exactly).  Figures~\ref{fig:fd_comparison_u}--\ref{fig:fd_comparison_v} compare the particle fields with a finite-difference reference, and Fig.~\ref{fig:convergence_error} shows the expected $N^{-1/2}$ trend against a high-particle reference.  This is an implementation check for the coupled transport, the injection reaction, and the field reconstruction, not the main branching comparison.
+whose cell mass $M_u=10\pi$ exceeds the two-dimensional critical mass $8\pi$, and we report at the LDG times $t=6\times10^{-5},\,1.2\times10^{-4},\,2.0\times10^{-4}$.  The cell equation is conservative and the chemical is produced by the cross-species injection kernel of Section~\ref{sec:injection}; the coupled implementation is validated separately in Appendix~\ref{app:coupled_pp}.  These are pre-singular concentration tests: the continuum dynamics may approach a singular measure in two dimensions~\cite{herrero1997blow,perthame2007transport,giga2011asymptotic,souplet2019blow}, and every reconstructed quantity is bandwidth-limited, so we report resolution-gap indicators and reconstruction-free radii and do not claim a continuum blow-up time.
 
-\begin{figure}[h]
-\centering
-\includegraphics[width=0.8\linewidth]{figure/total_mass.pdf}
-\caption{Mass-balance test for the conservative Keller--Segel system.  The chemical mass follows the exact balance law to sampling accuracy.}
-\label{fig:total_mass}
-\end{figure}
+\paragraph{Deterministic grid baseline.}
+As a reproducible deterministic reference we first solve~\eqref{equ:case1} with a positivity-preserving finite-volume scheme on $[-\tfrac12,\tfrac12]^2$ with homogeneous Neumann boundaries: a first-order upwind chemotactic flux, central diffusion, and explicit Euler under the CFL step $\Delta t=\tfrac14\min(\Delta x^2,\Delta x/\max|\nabla v|)$ (the released code).  Because the Gaussian core has standard deviation $\approx0.077$, its value at the boundary is $e^{-21}$, so the Neumann, periodic, and whole-plane problems coincide to that accuracy over the reported times.  The scheme conserves the cell mass to machine precision and keeps $u\ge0$ ($u_{\min}\sim10^{-16}$, Table~\ref{tab:ks_pp}).  Refining the grid $n\to2n$ resolves more of the concentrating core, so the reconstructed norm $S_n(t)=\|u_n(t)\|_{L^2}$ increases with $n$ at late times, and the LDG-style resolution-gap time
+\begin{equation}
+t_b(n;\theta)=\inf\{t:S_{2n}(t)\ge\theta\,S_n(t)\}
+\label{equ:tb}
+\end{equation}
+is $t_b(1.05)=3.5\times10^{-5}$ for the $128\to256$ pair and $5.0\times10^{-5}$ for $256\to512$.  This indicator is itself resolution-dependent and a few$\,\times10^{-5}$, the same order as the LDG numerical blow-up window $\approx1.21\times10^{-4}$ that it precedes; we read it as a numerical resolution-gap onset, not a continuum blow-up time.
 
-\begin{figure}[h]
-\centering
-\includegraphics[width=\linewidth]{figure/case1_u.pdf}
-\caption{Conservative Keller--Segel test: comparison of the cell field $u$ from the particle method and from a finite-difference reference.}
-\label{fig:fd_comparison_u}
-\end{figure}
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=\linewidth]{figure/case1_v.pdf}
-\caption{Conservative Keller--Segel test: comparison of the chemical field $v$ from the particle method and from a finite-difference reference.}
-\label{fig:fd_comparison_v}
-\end{figure}
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=0.8\linewidth]{figure/case1_err.pdf}
-\caption{Relative $L^2$ error of $u$ and $v$ versus initial particle count.  The reference solution uses $N_0=320{,}000$, and both fields show the expected sampling trend.}
-\label{fig:convergence_error}
-\end{figure}
-
-\paragraph{Supercritical concentration.}
-We then use the concentrated Gaussian data
-\[
- u_0(\mathbf x)=840\exp[-84(x_1^2+x_2^2)],
- \qquad
- v_0(\mathbf x)=420\exp[-42(x_1^2+x_2^2)],
-\]
-whose cell mass is $10\pi$, above the two-dimensional critical mass $8\pi$.  This profile is a standard test in grid-based Keller--Segel studies, including LDG and finite-volume methods~\cite{li2017local,epshteyn2009new,chertock2008second}.  We use it to ask whether the particle cloud tracks the concentrating region without an externally imposed adaptive mesh.  Figures~\ref{fig:case2_u} and~\ref{fig:comparison} show rapid peak formation and compare the particle reconstruction with uniform-grid finite-difference solutions.  The finite-difference peak sharpens with mesh refinement, while the particle reconstruction is stable over the tested particle counts.  This comparison is qualitative; specialized positivity-preserving adaptive grid methods remain the reference for resolving the singular limit.
-
-Rather than fit a blow-up time, we report grid-free concentration diagnostics in Fig.~\ref{fig:ks_concentration_diag}.  The second moment about the cell centroid decreases by about a factor of six, and the local particle count in a fixed ball of radius $0.05$ grows by about $4.5$ times.  The curves overlap for $N=4\times10^4$, $1.6\times10^5$, and $6.4\times10^5$, indicating that the observed concentration is not a sampling artifact.
-
-\begin{figure}
-\centering
-\includegraphics[width=0.8\linewidth]{figure/case2_u.pdf}
-\caption{Pre-singular concentration test: particle approximation of $u$ at early times.  The cell density concentrates rapidly while remaining stable over the tested particle counts.}
-\label{fig:case2_u}
-\end{figure}
-
-\begin{figure}
-\centering
-\includegraphics[width=0.85\linewidth]{figure/comparison.pdf}
-\caption{Pre-singular concentration test at $t=5\times10^{-5}$: particle approximation compared with finite-difference approximations on three uniform grids.  The particle peak is stable across particle counts; the uniform-grid solution sharpens with mesh refinement.}
-\label{fig:comparison}
-\end{figure}
+\paragraph{Particle method on the same equation.}
+We then run the particle method on~\eqref{equ:case1} with the same data and reporting times: conservative equal-weight cell particles transported by the chemotactic drift, and a chemical cloud evolved by diffusion and the decay/injection kernel $\mu_v^{n+1}=e^{-\tau}\mu_v^{*}+(1-e^{-\tau})\mu_u^{*}$ with a minimum-variance integer injection (Section~\ref{sec:injection}).  The reconstruction uses a core-adaptive periodic Fourier window, which is LDG-aligned rather than strictly Neumann; the cell mass is conserved and the chemical mass follows the injection balance to below $10^{-4}$.  As Fig.~\ref{fig:ks_pp} and Table~\ref{tab:ks_pp} show, the particle method reproduces comparable reporting-time concentration: its reconstructed $S(t)$ brackets the grid baseline (at $t=2\times10^{-4}$, $S\approx1.3\times10^3$ and $2.7\times10^3$ for the base and refined particle runs against $2.0\times10^3$ and $2.9\times10^3$ for $n=256,512$).  The reconstructed peak is strongly bandwidth- and resolution-sensitive---it rises from $7\times10^4$ to $3\times10^5$ as the particle bandwidth $K$ goes $5\to10$, and from $8\times10^4$ to $6\times10^5$ as the grid goes $128\to512$---whereas the reconstruction-free core radii $R_{0.5},R_{0.8}$ collapse along nearly grid-independent curves.  The particle $(N,K)\to(4N,2K)$ refinement gives $t_{\rm gap}(1.05)\approx8\times10^{-6}$, but because it refines the particle number and the Fourier bandwidth together it measures reconstruction-bandwidth sensitivity and is reported separately from the grid $t_b$.
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\linewidth]{figure/ks_concentration_diag.pdf}
-\caption{Grid-free concentration diagnostics.  Left: the second moment of the cell cloud decreases by about a factor of six.  Right: the local particle count in a fixed ball of radius $0.05$ about the centroid grows by about $4.5\times$.  These diagnostics measure approach toward concentration, not a blow-up time.}
-\label{fig:ks_concentration_diag}
-\end{figure}
-
-\paragraph{Core-local resolution diagnostics.}
-For a more resolution-sensitive diagnostic, we also run the parabolic--elliptic reduction $-\Delta v+v=u$ on a core-adaptive Fourier window, using the same concentrated initial profile.  We track the reconstructed peak $P_{K,N}(t)=\|P_K\mu_t^N\|_\infty$, the reconstructed norm $S_{K,N}(t)=\|P_K\mu_t^N\|_{L^2}$, and reconstruction-free core radii $R_q(t)$.  Snapshots are recorded at $t=5\times10^{-5}$, $10^{-4}$, $1.5\times10^{-4}$, $5\times10^{-4}$, $10^{-3}$, $2\times10^{-3}$, and $4\times10^{-3}$.
-
-Figures~\ref{fig:ldg_snapshots}--\ref{fig:ldg_curves} show that the inner half-mass radius decreases from about $0.091$ to about $0.06$ by $t=4\times10^{-3}$.  The reconstructed peak grows with bandwidth, approximately $1.7\times10^3$ for $K=5$ and $2.8\times10^3$ for $K=10$, so the peak itself is not treated as a converged blow-up diagnostic.  To quantify the onset of under-resolution we report
-\[
- t_{\rm gap}(N,K)=\inf\{t:S_{2K,4N}(t)/S_{K,N}(t)\ge\theta\}.
-\]
-Table~\ref{tab:ldg_tgap} should be read exactly as this definition states: it marks when the reconstructed $L^2$ norm becomes sensitive to resolution, not when the PDE blows up.
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{figure/ldg_snapshots.pdf}
-\caption{Core-adaptive parabolic--elliptic Keller--Segel diagnostics: reconstructed contours of $u$ over the reporting times.  The field sharpens into a concentrating peak, consistent with the grid-based concentration literature.}
-\label{fig:ldg_snapshots}
-\end{figure}
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{figure/ldg_curves.pdf}
-\caption{Resolution diagnostics for the refined $(N,K)=(6.4\times10^5,10)$ run: reconstructed $L^2$ norm, reconstructed peak, and squared core radii.  The core radius collapse is reconstruction-free; the peak remains bandwidth-sensitive.}
-\label{fig:ldg_curves}
+\includegraphics[width=\linewidth]{figure/ks_pp_baseline.pdf}
+\caption{Fully parabolic--parabolic Keller--Segel concentration benchmark.  Top: deterministic grid-baseline cell density $u$ at the LDG reporting times (core zoom; annotated reconstructed peak).  Bottom: the reconstructed norm $S(t)=\|u\|_{L^2}$, the reconstructed peak $\|u\|_\infty$, and the reconstruction-free core radius $R_{0.8}(t)$, for the grid refinements $n=128,256,512$ (solid) and the particle base/refined runs (dashed).  The norm and peak grow with resolution and bandwidth, while the core radius collapses along nearly resolution-independent curves.}
+\label{fig:ks_pp}
 \end{figure}
 
 \begin{table}[t]
 \centering
-\caption{Resolution-gap focusing indicator $t_{\rm gap}(N,K)=\inf\{t:S_{2K,4N}(t)/S_{K,N}(t)\ge\theta\}$ for two refinement pairs.  The indicator marks the onset of under-resolution, not a blow-up time.}
-\label{tab:ldg_tgap}
-\begin{tabular}{c c c c c}
+\caption{Fully parabolic--parabolic Keller--Segel concentration benchmark (initial data $u_0=840e^{-84|\mathbf x|^2}$, $v_0=420e^{-42|\mathbf x|^2}$, $M_u=10\pi$).  The grid baseline conserves cell mass and stays nonnegative.  The resolution-gap time uses~\eqref{equ:tb} on the indicated pair; the particle entry is a reconstruction-bandwidth gap (refining $N$ and $K$ together) and is not the same indicator as the grid $t_b$.  All gap times are numerical resolution indicators, not continuum blow-up times.}
+\label{tab:ks_pp}
+\begin{tabular}{l c c c c c}
 \toprule
-base $(N,K)$ & refined $(4N,2K)$ & $t_{\rm gap}(\theta=1.05)$ & $t_{\rm gap}(\theta=1.10)$ & $\max_t S_{2K,4N}/S_{K,N}$ \\
+method (resolution) & mass drift & $u_{\min}\!\ge\!0$ & $S(2{\times}10^{-4})$ & peak$(2{\times}10^{-4})$ & gap time $(\theta{=}1.05)$ \\
 \midrule
-$(4\times10^4,5)$ & $(1.6\times10^5,10)$ & $3.0\times10^{-3}$ & -- & 1.08 \\
-$(1.6\times10^5,5)$ & $(6.4\times10^5,10)$ & $2.5\times10^{-3}$ & $3.8\times10^{-3}$ & 1.11 \\
+FVM $n=128$ & $7{\times}10^{-16}$ & yes & $1.32{\times}10^3$ & $8.0{\times}10^4$ & -- \\
+FVM $n=256$ & $3{\times}10^{-16}$ & yes & $1.98{\times}10^3$ & $2.2{\times}10^5$ & $3.5{\times}10^{-5}$ ($128{\to}256$) \\
+FVM $n=512$ & $5{\times}10^{-16}$ & yes & $2.94{\times}10^3$ & $6.0{\times}10^5$ & $5.0{\times}10^{-5}$ ($256{\to}512$) \\
+particle $(2{\times}10^4,5)$ & exact & -- & $1.27{\times}10^3$ & $7.2{\times}10^4$ & -- \\
+particle $(8{\times}10^4,10)$ & exact & -- & $2.69{\times}10^3$ & $3.3{\times}10^5$ & $8{\times}10^{-6}$ (bandwidth) \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\paragraph{LDG-aligned parabolic--parabolic comparison.}
-To align the concentration test with the local discontinuous Galerkin (LDG) study of Li, Shu, and Yang~\cite{li2017local}, we repeat it for the \emph{full} parabolic--parabolic system~\eqref{equ:case1}, with the dynamic chemical carried by its own particle cloud and produced by the injection kernel of Section~\ref{sec:injection}, using the same concentrated initial condition $u_0=840\exp[-84|\mathbf x|^2]$, $v_0=420\exp[-42|\mathbf x|^2]$ and the same reporting times $t=6\times10^{-5},\,1.2\times10^{-4},\,2.0\times10^{-4}$ as that study.  This is a particle-field, resolution-diagnostic comparison, not a claim of singular blow-up-time convergence: our periodic, core-adaptive Fourier reconstruction differs from the homogeneous-Neumann LDG discretization, but over these very short reporting times the Gaussian core remains far from the window boundary, so the boundary mismatch is negligible.  The cell mass is conserved exactly and the chemical mass follows the injection balance $M_v(t)=M_u(0)+[M_v(0)-M_u(0)]e^{-t}$ to a maximum relative error below $10^{-4}$.  A base run $(N,K)=(2\times10^4,5)$ and a refined run $(8\times10^4,10)$ give a resolution-gap focusing time $t_{\rm gap}(\theta=1.05)\approx8\times10^{-6}$ and $t_{\rm gap}(\theta=1.10)\approx1.2\times10^{-5}$, so the gap opens before the first reported snapshot, consistent with the strongly supercritical mass; as in the parabolic--elliptic case the reconstruction-free core radii $R_{0.5},R_{0.8}$ collapse and stabilize while the reconstructed peak keeps rising with bandwidth and is treated as bandwidth-sensitive.
+\subsection{Core-local diagnostics for numerical blow-up proxies}
+\label{sec:ks_core}
 
-\subsection{Local reconstruction diagnostics: spectrum for the background, residuals for the core}
-\label{sec:hybrid_recon}
+The concentration test raises a representation question: which diagnostics of the approach to a singular measure are reliable, and which are artifacts of the bandwidth-limited reconstruction?  Using the data of Section~\ref{sec:ks} we separate three families: the global reconstructed norm $S_{L^2}$ and peak; a core-localized norm $S^{\rm core}(t)=\|u\|_{L^2(W(t))}$ on the particle-detected window $W(t)=B(x_c,3R_{0.8})$; and the reconstruction-free core radii $R_{0.5},R_{0.8}$ taken directly from cell masses (grid) or particle quantiles, with no reconstruction.
 
-The branching mechanism adapts the particle measure, but reconstructing a concentrating measure is a separate approximation problem.  The concentration tests above already show its signature: the reconstruction-free core radius is stable while the reconstructed peak and $L^2$ norm remain bandwidth-sensitive.  A uniform increase of the global Fourier bandwidth is inefficient---it spends degrees of freedom over the whole domain, while the bandwidth sensitivity is localized near the particle core or growth islands.  We therefore test two diagnostic reconstructions on \emph{saved} particle snapshots, with the local window inferred from the particle cloud (weighted centroid and quantile radii), not from the reference field.  The first keeps a low global spectrum $P_{K_g}\mu$ and adds, only inside the detected window and only as a residual over that global low field, either a high-resolution local spectral window or a local Gaussian blob.  The second view retains the residual particles that the global spectrum fails to explain, with an explicit acceptance probability and a Horvitz--Thompson correction; the resulting accept rate is an objective indicator of where reconstruction resolution is needed, and it is an enrichment rate, not a particle-dynamics resampling step.
-
-On a concentrated Keller--Segel core---an exact Gaussian profile of mass $10\pi$ and width $a=84$, for which the peak, $L^2$ norm, and radii are known analytically---a global bandwidth $K_g=8$ under-resolves the peak by $13\%$, while a global $K=40$ reconstruction and the hybrid local-window reconstruction both recover it to about $1\%$; the hybrid keeps the \emph{global} bandwidth at $K_g=8$ and spends the high resolution only on the particle-detected window.  The half-mass and $80\%$ core radii are reconstruction-free and match the analytic values to three digits.  On a saved cloud of separated Gaussian growth islands (released with the code), reconstructing the mass inside a half-height island disk by integrating a low-$K$ global Fourier field over that disk is catastrophic for the sharp islands---the relative island-mass error approaches unity because the low-$K$ field smears each island far beyond the disk---whereas particle counting is reconstruction-free and accurate, and a local spectral window recovers counting accuracy.  These diagnostics are not a new adaptive solver; they separate two forms of adaptivity---branching adapts the measure where mass is created, while local reconstruction adapts the field representation where the particle cloud indicates unresolved concentration---and they suggest that a hybrid Monte Carlo / deterministic-function-approximation strategy is the natural scalable direction, whose analysis is beyond the scope of this paper.
+Figure~\ref{fig:ks_core} summarizes the outcome.  The core radii collapse smoothly and nearly identically across grid resolutions and between the grid and particle methods: this is the robust, reconstruction-free signal of pre-singular concentration.  Core-localizing the norm, by contrast, does not sharpen the resolution-gap proxy: for the resolving grid baseline the concentrating field carries essentially all of its $L^2$ mass inside the core, so $S^{\rm core}\equiv S_{L^2}$ and $t_b^{\rm core}\equiv t_b^{\rm global}$ to plotting accuracy.  Finally, fitting the radius collapse to a candidate concentration time $R_q(t)^2\approx C_q(T_*-t)$ does give a $T_*$ of order $10^{-4}$, comparable to the LDG numerical blow-up window, but $T_*$ is not stable: across fit windows it spreads by factors of $1.4$ to $4.5$, and the radii saturate at the grid or bandwidth scale, contaminating the late part of the fit.  We therefore treat $T_*$ as an order-of-magnitude indicator only and do not quote a continuum blow-up time.  The reliable conclusions are the reconstruction-free radius collapse and the resolution-gap onset; the reconstructed peak, the global $L^2$-gap time, and the radius-fit $T_*$ are all resolution-, bandwidth-, or window-sensitive.
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\linewidth]{figure/hybrid_reconstruction.pdf}
-\caption{Local reconstruction diagnostics on a concentrated Keller--Segel core.  Panels: global low-$K_g$ reconstruction; the hybrid reconstruction (low global spectrum plus a local spectral window); the core line profile (low-$K$, high-$K$, hybrid, and exact); retained residual particles in the particle-detected window; and the reconstruction cost (global modes) versus the reconstructed-peak error.  The hybrid recovers the high-$K$ core accuracy while keeping the global bandwidth low.}
-\label{fig:hybrid_recon}
+\includegraphics[width=\linewidth]{figure/ks_core_proxy.pdf}
+\caption{Core-local and reconstruction-free diagnostics for the benchmark of Section~\ref{sec:ks}.  Left: the reconstruction-free radii $R_q(t)^2$ collapse for the grid baseline and the particle method, with the linear fit $R_q^2\approx C_q(T_*-t)$.  Center: the candidate concentration time $T_*$ is of order $10^{-4}$ but window-sensitive (the bar is the range over fit windows; LDG numerical blow-up $\approx1.21\times10^{-4}$ dashed), so no continuum blow-up time is quoted.  Right: for the resolving grid baseline the core-local norm $S^{\rm core}$ coincides with the global $S_{L^2}$, so core-localization does not sharpen the proxy.}
+\label{fig:ks_core}
 \end{figure}
 
 \subsection{Three-dimensional Keller--Segel focusing}
@@ -1359,7 +1290,7 @@ stress test in which the mesh-free representation tracks the pre-blow-up concent
 mesh refinement, in two dimensions and in a self-contained three-dimensional focusing family; these are focusing
 and concentration stress tests, and we make no singular-blow-up-time or universal-critical-mass claim.
 
-The switching-growth experiment clarifies the limitation of global resampling.  Resampling based on a single global ESS can equalize weights while still failing to allocate enough independent lineages to every local growth region: it concentrates lineages on the stale region and loses accuracy in the region that becomes important later, while branching, which is local by construction, allocates particles directly where the source turns on.  The same reaction multiplier that creates mass also creates particles at the location of growth, so branching separates particle-resolution adaptation from any global resampling schedule and gives the lowest global $L^2$ at matched particle-step cost.  This does not remove the need for reconstruction resolution.  The concentration and island tests indicate that such refinement should be applied to the reconstruction, not uniformly to the full domain: a natural multiscale reconstruction is a coarse global spectrum for the smooth background plus a local residual blob, local residual spectrum, or retained residual particles in particle-detected cores and growth islands.  In this view the Monte-Carlo particles carry and branch the finite measure, while deterministic quadrature or function approximation is used selectively where the global spectrum becomes resolution-sensitive; our hybrid-reconstruction diagnostics (Section~\ref{sec:hybrid_recon}) make this localization explicit but stop short of feeding it back into the solver, which we leave to future work.
+The switching-growth experiment clarifies the limitation of global resampling.  Resampling based on a single global ESS can equalize weights while still failing to allocate enough independent lineages to every local growth region: it concentrates lineages on the stale region and loses accuracy in the region that becomes important later, while branching, which is local by construction, allocates particles directly where the source turns on.  The same reaction multiplier that creates mass also creates particles at the location of growth, so branching separates particle-resolution adaptation from any global resampling schedule and gives the lowest global $L^2$ at matched particle-step cost.  This does not remove the need for reconstruction resolution.  The concentration and island tests indicate that such refinement should be applied to the reconstruction, not uniformly to the full domain: a natural multiscale reconstruction is a coarse global spectrum for the smooth background plus a local residual blob, local residual spectrum, or retained residual particles in particle-detected cores and growth islands.  In this view the Monte-Carlo particles carry and branch the finite measure, while deterministic quadrature or function approximation is used selectively where the global spectrum becomes resolution-sensitive; our hybrid-reconstruction diagnostics (Appendix~\ref{sec:hybrid_recon}) make this localization explicit but stop short of feeding it back into the solver, which we leave to future work.
 
 Several limitations frame the scope of these conclusions and point to future work. The analysis is carried out
 for the projected, regularized dynamics under regularity and localization assumptions and before the singular
@@ -1827,6 +1758,121 @@ $k_{\max}=1$).  Left: the reconstructed one-dimensional marginal of each of the 
 exact marginal $(1+a\cos z)/2\pi$ (dashed).  Middle and right: the reconstructed and exact two-dimensional
 marginals of $(z_1,z_2)$, on a common colour scale.}
 \label{fig:highdim_mms_marg}
+\end{figure}
+
+\section{Coupled parabolic--parabolic Keller--Segel: implementation and concentration checks}
+\label{app:coupled_pp}
+
+This appendix collects the implementation checks for the coupled Keller--Segel solver used in Section~\ref{sec:ks}; they validate the algorithm but are not the main comparison.
+
+\paragraph{Mass-balance and finite-difference check.}
+We first solve
+\begin{equation}
+ u_t-\nabla\cdot(\nabla u-u\nabla v)=0,
+ \qquad
+ v_t-\Delta v=u-v,
+ \qquad \mathbf x\in[0,2\pi]^2,
+\label{equ:case1pp}
+\end{equation}
+with periodic boundary conditions and smooth data $u_0(\mathbf x)=\sin^2(x_1)\cos^2(x_2)$, $v_0(\mathbf x)=\cos x_1+\cos x_2+2$.  Since the cell equation is conservative, $\int u\,dx=\pi^2$, and the chemical mass satisfies $M_v(t)=\pi^2+[M_v(0)-\pi^2]e^{-t}$.  The chemical source $u-v$ is realized by the cross-species injection kernel of Section~\ref{sec:injection} and Eq.~\eqref{equ:injection}: each transported chemical particle survives with probability $e^{-\tau}$, and each transported cell particle injects a new chemical particle at its position with mean $(1-e^{-\tau})\omega_u/\omega_v$.  Figure~\ref{fig:total_mass} shows that the chemical mass follows the balance identity to sampling accuracy (maximum relative error of $M_v(t)$ below $1.4\%$, cell mass conserved exactly).  Figures~\ref{fig:fd_comparison_u}--\ref{fig:fd_comparison_v} compare the particle fields with a finite-difference reference, and Fig.~\ref{fig:convergence_error} shows the expected $N^{-1/2}$ trend against a high-particle reference.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.7\linewidth]{figure/total_mass.pdf}
+\caption{Mass-balance test for the conservative Keller--Segel system.  The chemical mass follows the exact balance law to sampling accuracy.}
+\label{fig:total_mass}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{figure/case1_u.pdf}
+\caption{Conservative Keller--Segel test: comparison of the cell field $u$ from the particle method and from a finite-difference reference.}
+\label{fig:fd_comparison_u}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{figure/case1_v.pdf}
+\caption{Conservative Keller--Segel test: comparison of the chemical field $v$ from the particle method and from a finite-difference reference.}
+\label{fig:fd_comparison_v}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.7\linewidth]{figure/case1_err.pdf}
+\caption{Relative $L^2$ error of $u$ and $v$ versus initial particle count.  The reference solution uses $N_0=320{,}000$, and both fields show the expected sampling trend.}
+\label{fig:convergence_error}
+\end{figure}
+
+\paragraph{Early particle concentration diagnostics.}
+With the concentrated data $u_0=840\exp[-84|\mathbf x|^2]$, $v_0=420\exp[-42|\mathbf x|^2]$ of Section~\ref{sec:ks}, Figs.~\ref{fig:case2_u}--\ref{fig:comparison} show rapid peak formation and compare the particle reconstruction with uniform-grid finite-difference solutions; the finite-difference peak sharpens with mesh refinement while the particle reconstruction is stable over the tested particle counts.  Figure~\ref{fig:ks_concentration_diag} reports grid-free concentration diagnostics: the second moment about the cell centroid decreases by about a factor of six and the local particle count in a fixed ball of radius $0.05$ grows by about $4.5\times$, with the curves overlapping for $N=4\times10^4,1.6\times10^5,6.4\times10^5$.
+
+\begin{figure}
+\centering
+\includegraphics[width=0.7\linewidth]{figure/case2_u.pdf}
+\caption{Pre-singular concentration test: particle approximation of $u$ at early times.  The cell density concentrates rapidly while remaining stable over the tested particle counts.}
+\label{fig:case2_u}
+\end{figure}
+
+\begin{figure}
+\centering
+\includegraphics[width=0.8\linewidth]{figure/comparison.pdf}
+\caption{Pre-singular concentration test at $t=5\times10^{-5}$: particle approximation compared with finite-difference approximations on three uniform grids.}
+\label{fig:comparison}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figure/ks_concentration_diag.pdf}
+\caption{Grid-free concentration diagnostics.  Left: the second moment of the cell cloud decreases by about a factor of six.  Right: the local particle count in a fixed ball of radius $0.05$ about the centroid grows by about $4.5\times$.  These diagnostics measure approach toward concentration, not a blow-up time.}
+\label{fig:ks_concentration_diag}
+\end{figure}
+
+\section{Parabolic--elliptic core-adaptive resolution diagnostics}
+\label{app:pe_core}
+
+For a more resolution-sensitive variant we run the parabolic--elliptic reduction $-\Delta v+v=u$ on a core-adaptive Fourier window, using the same concentrated profile as Section~\ref{sec:ks}.  We track the reconstructed peak, the reconstructed norm $S_{K,N}(t)=\|P_K\mu_t^N\|_{L^2}$, and reconstruction-free core radii.  Figures~\ref{fig:ldg_snapshots}--\ref{fig:ldg_curves} show the inner half-mass radius decreasing from about $0.091$ to about $0.06$ by $t=4\times10^{-3}$; the reconstructed peak grows with bandwidth (about $1.7\times10^3$ for $K=5$, $2.8\times10^3$ for $K=10$), so it is not a converged blow-up diagnostic.  The onset of under-resolution is quantified by $t_{\rm gap}(N,K)=\inf\{t:S_{2K,4N}(t)/S_{K,N}(t)\ge\theta\}$ (Table~\ref{tab:ldg_tgap}), which marks when the reconstructed $L^2$ norm becomes resolution-sensitive, not when the PDE blows up.  This parabolic--elliptic variant is kept only as a diagnostic record; the main concentration benchmark in Section~\ref{sec:ks} is the fully parabolic--parabolic system.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figure/ldg_snapshots.pdf}
+\caption{Core-adaptive parabolic--elliptic Keller--Segel diagnostics: reconstructed contours of $u$ over the reporting times.}
+\label{fig:ldg_snapshots}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figure/ldg_curves.pdf}
+\caption{Resolution diagnostics for the refined $(N,K)=(6.4\times10^5,10)$ run: reconstructed $L^2$ norm, reconstructed peak, and squared core radii.  The core radius collapse is reconstruction-free; the peak remains bandwidth-sensitive.}
+\label{fig:ldg_curves}
+\end{figure}
+
+\begin{table}[t]
+\centering
+\caption{Resolution-gap focusing indicator $t_{\rm gap}(N,K)=\inf\{t:S_{2K,4N}(t)/S_{K,N}(t)\ge\theta\}$ for two refinement pairs of the parabolic--elliptic variant.  The indicator marks the onset of under-resolution, not a blow-up time.}
+\label{tab:ldg_tgap}
+\begin{tabular}{c c c c c}
+\toprule
+base $(N,K)$ & refined $(4N,2K)$ & $t_{\rm gap}(\theta=1.05)$ & $t_{\rm gap}(\theta=1.10)$ & $\max_t S_{2K,4N}/S_{K,N}$ \\
+\midrule
+$(4\times10^4,5)$ & $(1.6\times10^5,10)$ & $3.0\times10^{-3}$ & -- & 1.08 \\
+$(1.6\times10^5,5)$ & $(6.4\times10^5,10)$ & $2.5\times10^{-3}$ & $3.8\times10^{-3}$ & 1.11 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Local reconstruction diagnostics: spectrum for the background, residuals for the core}
+\label{sec:hybrid_recon}
+
+The branching mechanism adapts the particle measure, but reconstructing a concentrating measure is a separate approximation problem, as the concentration tests show: the reconstruction-free core radius is stable while the reconstructed peak and $L^2$ norm remain bandwidth-sensitive.  A uniform increase of the global Fourier bandwidth is inefficient---it spends degrees of freedom over the whole domain, while the bandwidth sensitivity is localized near the particle core or growth islands.  We therefore test two diagnostic reconstructions on \emph{saved} particle snapshots, with the local window inferred from the particle cloud (weighted centroid and quantile radii), not from the reference field.  The first keeps a low global spectrum $P_{K_g}\mu$ and adds, only inside the detected window and only as a residual over that global low field, either a high-resolution local spectral window or a local Gaussian blob.  The second retains the residual particles that the global spectrum fails to explain, with an explicit acceptance probability and a Horvitz--Thompson correction; the accept rate is an objective indicator of where reconstruction resolution is needed, and it is an enrichment rate, not a particle-dynamics resampling step.
+
+On a concentrated Keller--Segel core---an exact Gaussian of mass $10\pi$ and width $a=84$, for which the peak, $L^2$ norm, and radii are known analytically---a global bandwidth $K_g=8$ under-resolves the peak by $13\%$, while a global $K=40$ reconstruction and the hybrid local-window reconstruction both recover it to about $1\%$, the hybrid keeping the global bandwidth at $K_g=8$ and spending the high resolution only on the particle-detected window.  The half-mass and $80\%$ core radii are reconstruction-free and match the analytic values to three digits.  These diagnostics are not a new adaptive solver; they separate two forms of adaptivity---branching adapts the measure where mass is created, while local reconstruction adapts the field representation where the particle cloud indicates unresolved concentration---and suggest that a hybrid Monte Carlo / deterministic-function-approximation strategy is the natural scalable direction, whose analysis is beyond the scope of this paper.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figure/hybrid_reconstruction.pdf}
+\caption{Local reconstruction diagnostics on a concentrated Keller--Segel core.  Panels: global low-$K_g$ reconstruction; the hybrid reconstruction (low global spectrum plus a local spectral window); the core line profile (low-$K$, high-$K$, hybrid, and exact); retained residual particles in the particle-detected window; and the reconstruction cost (global modes) versus the reconstructed-peak error.  The hybrid recovers the high-$K$ core accuracy while keeping the global bandwidth low.}
+\label{fig:hybrid_recon}
 \end{figure}
 
 \section{Reconstruction-bandwidth and smoothing audit}

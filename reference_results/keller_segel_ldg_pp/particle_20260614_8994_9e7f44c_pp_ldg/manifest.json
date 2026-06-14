@@ -1,0 +1,22 @@
+{
+  "run_id": "20260614_8994_9e7f44c_pp_ldg",
+  "git_hash": "9e7f44c",
+  "date": "2026-06-14",
+  "system": "fully parabolic-parabolic Keller-Segel: u_t=div(grad u - u grad v), v_t=Delta v + u - v",
+  "ic": "u0=840 exp(-84 r^2), v0=420 exp(-42 r^2) (M_u=10*pi, supercritical)",
+  "report_times": [
+    6e-05,
+    0.00012,
+    0.0002
+  ],
+  "python": "3.12.7",
+  "numpy": "2.4.4",
+  "kind": "particle pp diagnostics (copied from ldg_comparison for traceability)",
+  "solver": "experiments/keller_segel/ldg_comparison/simulation.py",
+  "source_run": "reference_results/ldg_comparison/20260613_1922_92c0226_pp_inject_ldg_base20k_K5_ref80k_K10",
+  "base": "N=20000,K=5,tau=1e-6",
+  "refined": "N=80000,K=10,tau=2.5e-7",
+  "reaction": "v decay+inject minimum-variance integer kernel (no (u-v)/v quotient)",
+  "bc": "core-adaptive periodic Fourier window (LDG-aligned, not strict Neumann)",
+  "tgap_note": "t_gap(1.05)=8e-6 is a reconstruction-bandwidth gap (changes N AND K=5->10); not the grid t_b"
+}

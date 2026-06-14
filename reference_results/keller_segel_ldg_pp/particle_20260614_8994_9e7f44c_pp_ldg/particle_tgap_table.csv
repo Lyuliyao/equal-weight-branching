@@ -1,0 +1,2 @@
+N_base,K_base,N_ref,K_ref,t_gap_1.05,t_gap_1.10,ratio_max,ratio_final,base_csv,ref_csv
+20000,5,80000,10,8e-06,1.2e-05,2.7102609405920766,2.107088590248298,diag_N20000_K5_tau1e-06_q0.8_seed0.csv,diag_N80000_K10_tau2e-07_q0.8_seed0.csv

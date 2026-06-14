@@ -1,0 +1,36 @@
+{
+  "run_id": "20260614_8994_9e7f44c_pp_ldg",
+  "git_hash": "9e7f44c",
+  "date": "2026-06-14",
+  "system": "fully parabolic-parabolic Keller-Segel: u_t=div(grad u - u grad v), v_t=Delta v + u - v",
+  "ic": "u0=840 exp(-84 r^2), v0=420 exp(-42 r^2) (M_u=10*pi, supercritical)",
+  "report_times": [
+    6e-05,
+    0.00012,
+    0.0002
+  ],
+  "python": "3.12.7",
+  "numpy": "2.4.4",
+  "kind": "grid FVM baseline",
+  "bc": "Neumann on [-0.5,0.5]^2 (periodic~Neumann, tail e^-21 negligible)",
+  "scheme": "positivity-preserving upwind FVM + central diffusion, explicit Euler, cfl=0.25",
+  "grids": [
+    128,
+    256,
+    512
+  ],
+  "tb_global": {
+    "128->256": {
+      "1.05": 3.46e-05,
+      "1.10": 5.26e-05
+    },
+    "256->512": {
+      "1.05": 5.01e-05,
+      "1.10": 7.62e-05
+    }
+  },
+  "positivity": "u_min>=0 (~1e-16)",
+  "mass_drift": "<7e-16",
+  "note": "t_b is a resolution-gap proxy (resolution-dependent), NOT a continuum blow-up time",
+  "command": "python fvm_baseline.py --n {128,256,512} --T 2e-4 --cfl 0.25"
+}
