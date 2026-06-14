@@ -867,7 +867,12 @@ where $\mu_u^{*},\mu_v^{*}$ are the transported cell and chemical measures.  We 
 
 The numerical section is organized around the claims that the method is meant to support.  Section~\ref{sec:mms} verifies the observable convergence rates on a smooth problem with an exact solution.  Sections~\ref{sec:branch_vs_weight} and~\ref{sec:switch} are the controlled representation comparisons: the transport discretization, initial particles, reconstruction, and Brownian increments are shared, and only the reaction representation is changed.  Sections~\ref{sec:ks} and~\ref{sec:ks3d} then test the same particle-field machinery in two- and three-dimensional Keller--Segel concentration regimes.  The six-dimensional kinetic test is placed last, in Section~\ref{sec:kinetic_ks}, because its role is to show how the same reaction step transfers to a high-dimensional phase-space model once the field reconstruction is kept low-dimensional.
 
-Unless stated otherwise, errors are computed from the reconstructed physical field, $K$ denotes the Fourier bandwidth per spatial direction, and reported stochastic errors are averages over the stated seeds.  In all weighted-versus-branching comparisons the methods use common initial particles and common transport random numbers; therefore the comparison isolates the reaction representation rather than the transport noise.  The full run scripts, configurations, and reference CSV outputs are kept with the released code, while the paper reports only the diagnostics needed to support the claims.
+Unless stated otherwise, errors are computed from the reconstructed physical field, $K$ denotes the Fourier bandwidth per spatial direction, and reported stochastic errors are averages over the stated seeds.  Throughout, the reported $L^2$ errors are \emph{relative} errors of the reconstructed field $u_h^{N,K}=P_K\mu_t^N$ against the deterministic reference $u_{\rm ref}$ on the evaluation grid $\{x_j\}$ with cell size $\Delta x^d$,
+\begin{equation}
+E_{L^2}(t)=\frac{\bigl(\Delta x^d\sum_j |u_h^{N,K}(t,x_j)-u_{\rm ref}(t,x_j)|^2\bigr)^{1/2}}{\bigl(\Delta x^d\sum_j |u_{\rm ref}(t,x_j)|^2\bigr)^{1/2}},
+\label{equ:l2def}
+\end{equation}
+and for a local diagnostic region $B$ the same expression with the sums restricted to grid cells $x_j\in B$, denoted $E_{L^2(B)}(t)$.  These are relative errors of the reconstructed field, not direct distances between raw empirical measures.  In all weighted-versus-branching comparisons the methods use common initial particles and common transport random numbers; therefore the comparison isolates the reaction representation rather than the transport noise.  The full run scripts, configurations, and reference CSV outputs are kept with the released code, while the paper reports only the diagnostics needed to support the claims.
 
 \subsection{Manufactured-solution verification}
 \label{sec:mms}
@@ -1048,7 +1053,7 @@ minimum-variance branching & $0.203\pm0.051$ & $0.170\pm0.136$ & $0.174\pm0.022$
 \begin{figure}[t]
 \centering
 \includegraphics[width=\linewidth]{figure/switch_snapshots.pdf}
-\caption{Switching-growth benchmark at $T=1.2$, after growth has moved from $\mathbf x_A$ to $\mathbf x_B$.  The weighted reconstruction is dominated by a few large weights; systematic resampling and minimum-variance branching both recover smoother fields, with the smallest second-stage error obtained by branching.}
+\caption{Switching-growth benchmark at $T=1.2$.  Top row: full-domain reconstructed fields after the source has moved from $\mathbf x_A$ to $\mathbf x_B$.  Middle and bottom rows: magnified views of the old growth region $B_A$ and the new growth region $B_B$, with the local diagnostic sets marked (solid circle $B_A$, dashed circle $B_B$) and the final-time local $L^2$ error from Table~\ref{tab:switch} annotated.  Global ESS resampling gives the smallest error in $B_A$, where it has concentrated the fixed particle budget before the switch, but it is markedly less accurate in the second-stage region $B_B$.  Equal-weight branching preserves more surviving lineages and reconstructs the new growth region more accurately, consistent with Table~\ref{tab:switch}.}
 \label{fig:switch}
 \end{figure}
 

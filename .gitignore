@@ -22,6 +22,9 @@ staged_mi_seed_*.out
 !reference_results/**/figures/*.svg
 !reference_results/**/snapshots/*.npz
 !reference_results/**/residual_particles/*.npz
+# switching-growth Figure 6 inputs (kept so the figure regenerates from saved data)
+!reference_results/switch/fields_seed0.npz
+!reference_results/switch/switch_snapshots_zoom.pdf
 # figure-regeneration inputs and reproducibility clouds (kept; seed-0 only)
 !reference_results/multi_island/**/fields_ref.npz
 !reference_results/multi_island/**/fields_seed0.npz
