@@ -74,6 +74,7 @@ cd ../../highdim                           && python experiment.py --smoke    # 
 | Branch-vs-weighted table + snapshots/nESS/L²/boxplot (§5.2) | `cd experiments/branch_vs_weighted && python experiment.py && python plot.py` |
 | Cost-matched resampling rows of the §5.2 table | `cd experiments/branch_vs_weighted && python cost_match.py` (weighted cost-match) and `python cost_match_resample.py --N0 38000` (the ESS-resample cost-matched row; CSV under `reference_results/branch_vs_weighted/cost_match_resample/`) |
 | Switching-growth table + ancestor diversity (§5.3) | `cd experiments/branch_vs_weighted && python experiment_switch.py` |
+| Switching-growth Figure 6 (full domain + A/B microscope zooms) | `cd experiments/branch_vs_weighted && python plot_switch.py` (reads `reference_results/switch/` saved data only; overwrites `paper/figure/switch_snapshots.pdf`; no-clip row-wise color scale recorded in the plot_data) |
 | 6D field-coupled kinetic KS table + figures (§5.4) | `cd experiments/kinetic_ks && sbatch run_me "--config config_pilot.json" && python plot_kinetic.py --results_dir results/pilot` |
 | KS mass balance (§5.5) | `cd experiments/keller_segel/mass_balance && python simulation.py <N>` |
 | KS 2D concentration vs finite difference (§5.5) | `cd experiments/keller_segel/concentration && python simulation.py <N>` (reference: `python finite_difference.py`) |

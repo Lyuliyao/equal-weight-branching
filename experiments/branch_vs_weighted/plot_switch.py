@@ -74,8 +74,11 @@ def main():
     locL2 = final_local_L2(os.path.join(RD, "metrics.csv"))
 
     fields = {k: d[k] for k, _ in COLS}
-    # row-wise color scales
-    full_vmax = max(np.percentile(fields[k], 99.7) for k, _ in COLS)
+    # Row-wise color scales use the TRUE per-row maximum over all method panels
+    # (NO percentile clipping), so the weighted degeneracy spike is shown at full
+    # intensity rather than hidden. Recorded as clip_policy="none" in plot_data.
+    clip_policy = "none (row-wise true max over all method panels; weighted spike not clipped)"
+    full_vmax = max(np.max(fields[k]) for k, _ in COLS)
 
     def zoom_mask(cx):
         return ((np.abs(XX - cx) <= R_ZOOM) & (np.abs(YY) <= R_ZOOM))
@@ -126,7 +129,7 @@ def main():
              reference=fields["reference"], weighted=fields["weighted"],
              weighted_ess=fields["weighted_ess"], minvar=fields["minvar"],
              cA=np.array(CA), cB=np.array(CB), sigma=SIGMA, eta=ETA, R_B=R_B, R_zoom=R_ZOOM,
-             full_vmax=full_vmax, a_vmax=a_vmax, b_vmax=b_vmax,
+             full_vmax=full_vmax, a_vmax=a_vmax, b_vmax=b_vmax, clip_policy=clip_policy,
              locL2_weighted_BA=locL2["weighted"]["BA"], locL2_weighted_BB=locL2["weighted"]["BB"],
              locL2_ess_BA=locL2["weighted_ess"]["BA"], locL2_ess_BB=locL2["weighted_ess"]["BB"],
              locL2_minvar_BA=locL2["minvar"]["BA"], locL2_minvar_BB=locL2["minvar"]["BB"])
