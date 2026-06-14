@@ -64,6 +64,8 @@ if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
 from adaptive_window import compute_window, density_coeffs_y  # noqa: E402
+from particle_dg_readout import (  # noqa: E402  LDG-matched P1 DG readout (Version A)
+    project_particles_to_p1dg, dg_l2_norm, dg_inner_product, dg_peak)
 from field_pp import (  # noqa: E402
     grad_v_from_cloud, recon_peak, recon_l2, recon_field_grid,
 )
@@ -258,6 +260,10 @@ def run(args):
               + ["N_0.5", "N_0.8", "N_0.9", "R50_over_heff",
                  "peak_PK_u", "peak_PK_v", "S_L2_u", "S_L2",
                  "outside_v_frac", "drift_cfl", "n_birth", "n_death"])
+    dg_ns = list(args.dg_readout_n)
+    for nd in dg_ns:                  # Version A: LDG-matched P1 DG readout columns
+        header += [f"S_dg_raw_{nd}", f"S_dg_cross_{nd}", f"peak_dg_{nd}",
+                   f"ppc_{nd}", f"empty_{nd}"]
     out_csv = os.path.join(args.outdir, f"diag_{tag}.csv")
     rows = []
     saved_report = set()
@@ -297,6 +303,19 @@ def run(args):
                + [counts[0.5], counts[0.8], counts[0.9], R50_over_heff,
                   peak, peak_v, S_L2_u, S_L2_u,        # S_L2 == S_L2_u alias
                   outside_v_frac, drift_cfl, int(n_birth), int(n_death)])
+        # ---- Version A: LDG-matched P1 DG readout from the u-cloud ----
+        if dg_ns:
+            Xu = np.asarray(X1); wpp = MASS / N0       # equal per-particle u mass
+            wu = np.full(Xu.shape[0], wpp)
+            half = Xu.shape[0] // 2
+            for nd in dg_ns:
+                cf, dgd = project_particles_to_p1dg(Xu, wu, nd)
+                ca, da = project_particles_to_p1dg(Xu[:half], wu[:half] * 2, nd)
+                cb, _ = project_particles_to_p1dg(Xu[half:], wu[half:] * 2, nd)
+                s2x = dg_inner_product(ca, cb, da["dx"], da["dy"])
+                row += [dg_l2_norm(cf, dgd["dx"], dgd["dy"]),
+                        float(np.sqrt(max(s2x, 0.0))), dg_peak(cf),
+                        dgd["ppc_mean"], dgd["empty_cell_fraction"]]
         rows.append(row)
         csv_writer.writerow(row)          # incremental flush (walltime-kill safe)
         csv_fh.flush()
@@ -444,6 +463,9 @@ def build_parser():
     p.add_argument("--D", type=float, default=1.0)
     p.add_argument("--L_min", type=float, default=1e-3)
     p.add_argument("--q_window", type=float, default=0.8)
+    p.add_argument("--dg_readout_n", type=int, nargs="*", default=[],
+                   help="LDG-matched P1 DG readout (Version A) at these diagnostic "
+                        "resolutions n on [-0.5,0.5]^2 (e.g. 40 80 160); empty = off")
     p.add_argument("--a_u", type=float, default=84.0, help="u0 ~ exp(-a_u |x|^2)")
     p.add_argument("--a_v", type=float, default=42.0, help="v0 ~ exp(-a_v |x|^2)")
     p.add_argument("--diag_grid", type=int, default=65,
