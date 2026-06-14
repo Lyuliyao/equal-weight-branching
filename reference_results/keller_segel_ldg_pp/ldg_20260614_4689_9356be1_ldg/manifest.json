@@ -1,0 +1,42 @@
+{
+  "kind": "direct LDG reference (Li-Shu-Yang) for KS Example 5.2",
+  "git_hash": "9356be1",
+  "date": "2026-06-14",
+  "paper": "X.H. Li, C.-W. Shu, Y. Yang, LDG method for the Keller-Segel chemotaxis model, J. Sci. Comput.",
+  "system": "u_t-div(grad u-u grad v)=0, v_t=Lap v+u-v, chi=1, Neumann on [-0.5,0.5]^2",
+  "ic": "u0=840 exp(-84 r^2), v0=420 exp(-42 r^2), M_u=10pi",
+  "report_times": [
+    6e-05,
+    0.00012,
+    0.0002
+  ],
+  "scheme": "P1 modal LDG; alternating fluxes (2.5-2.7); LF chemotaxis (2.8); Zhang-Shu P1 positivity limiter (sec4); SSP-RK3; adaptive dt",
+  "verification": {
+    "heat_order": [
+      2.0,
+      2.03,
+      2.02
+    ],
+    "operator_symmetry": "||L-LT||/||L||=5.5e-17",
+    "chemotaxis_consistency_order": 3.0,
+    "u_mass": "=10pi, drift~1e-14",
+    "positivity": "umin~-1e-11"
+  },
+  "resolutions": [
+    40,
+    80,
+    160,
+    320
+  ],
+  "S_L2_at_2e-4": {
+    "80": 893,
+    "160": 1604,
+    "320": 3274
+  },
+  "tb_1_05": {
+    "80->160": 7.36e-06,
+    "160->320": 7.36e-06
+  },
+  "reference_blowup_time": 0.000121,
+  "note": "tb(N) via uniform-mesh LDG does NOT converge to 1.21e-4 at feasible resolution; the paper defers adaptive-mesh tb(N) for KS to future work. LDG reproduces Example 5.2 concentration (S_L2 grows with N)."
+}
