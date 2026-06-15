@@ -1,0 +1,58 @@
+\documentclass[11pt]{letter}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{parskip}
+
+% \signature{Liyao Lyu \\ (on behalf of all authors)}
+% \address{Liyao Lyu \\ Department of Mathematics \\ University of California, Los Angeles \\ 520 Portola Plaza \\ Los Angeles, CA, USA \\ \texttt{lyuliyao@math.ucla.edu}}
+
+
+\begin{document}
+\begin{letter}{Professor Giacomo \\ Editor-in-Chief \\ Journal of Computational Physics}
+% \opening{Dear Professor [Editor's Name],}
+% \textbf{Subject:} Request for reconsideration of manuscript [Manuscript ID] --- ``A stochastic branching particle method for solving non-conservative reaction--diffusion equations''
+
+\opening{Dear Professor Giacomo,}
+
+% \textbf{Subject:} Request for reconsideration of manuscript [Manuscript ID] --- ``A stochastic branching particle method for solving non-conservative reaction--diffusion equations''
+
+Thank you for handling our manuscript and for forwarding the reviewers' reports. 
+While we fully appreciate the conclusion drawn from these reports, we feel that the second reviewer's reports do not fully reflect the contribution of this work, and the reviewer's main concerns can be clarified through further analysis and additional numerical results. 
+%
+In particular, the standard weighted-particle strategies mentioned by the reviewer may suffer from the large sampling variance, whereas the present methods aim to address this numerical issue. 
+ %
+This is certainly due to our ineffectiveness in communicating our work in the original manuscript.  
+
+
+We are writing to ask whether the editorial board would be willing to \textbf{reconsider the manuscript after a major revision}, or alternatively allow us to \textbf{resubmit} an extensively revised version. 
+%
+%The core novelty is: representing non-conservative reaction terms by a particle-level birth--death process, which yields reduced variance compared with weighted-particle strategies. 
+%
+We briefly outline our planned revisions that should address the major concerns of this work:
+
+
+\textbf{High-dimensional scalability.} We agree that the present particle-based method can exhibit more advantages for high-dimensional problems in comparison with the grid-based methods. In the revised manuscript, we apply the present particle method to high-dimensional non-conservative nonlinear PDEs. Regarding the reconstruction of the probability density function, we agree that the Fourier reconstruction incurs $\mathcal{O}(K^d)$ cost. As noted in the original manuscript, we can use adaptive kernel reconstructions and tree-based fast summation methods for high-dimensional problems. In the revised manuscript, we will implement these methods and include the numerical results.
+
+
+\textbf{Particle population growth.} Reviewer~2's bound $\mathbb{E}[N(t)] \sim N_0 \exp\!\left(\int_0^t \max_x c(x,s)\, ds\right)$ is a worst-case sup-type estimate. In our framework, $\mathbb{E}[N(t)] = N_0\,\|\rho(t,\cdot)\|_{L^1}$, which tracks the $L^1$ mass of the PDE solution. For both Allen--Cahn and Keller--Segel, the $L^1$ mass remains uniformly bounded over the simulation horizon, including the near-blow-up regime where mass concentrates but does not amplify in $L^1$. The revision will state this identity explicitly and report particle-population trajectories across all experiments as direct empirical confirmation.
+
+
+
+\textbf{Methodological novelty.} Reviewer 2's comments motivate an important comparison/advantage of the present method that should be made explicitly: the present particle branching method offers reduced sampling variance compared with weighted-particle strategies.  Specifically, the present method keeps the empirical measure as an unweighted sum of Dirac masses and spawns new particles where the reaction concentrates mass, i.e., the resolution follows the solution. In contrast, weighted strategies fixed the particle number and let a few weights dominate, which causes the effective sample size to collapse and hence large sampling variance in the concentration/near blow-up regions.
+
+We agree that the original manuscript does not yet provide sufficient numerical evidence for this comparison. However, we respectfully believe that this is a matter of inefficient communication rather than a lack of methodological novelty. 
+In the revised manuscript, we will make a quantitative comparison to illustrate the advantage of the present particle-branching method. 
+
+
+% \textbf{Methodological novelty.} Reviewer 2's comments motivate an important comparison that should be made explicitly: whether particle-level ``hard'' branching offers reduced variance or lower cost compared with ``soft'' weighted-particle strategies. We agree that the current manuscript does not yet provide sufficient numerical evidence for this comparison. However, we respectfully believe that this is a matter of quantitative validation rather than a lack of methodological novelty. The proposed method makes a distinct choice: the birth--death process keeps the empirical measure as an unweighted sum of Dirac masses and spawns new particles where the reaction concentrates mass, so resolution follows the solution. Weighted strategies instead leave a fixed ensemble in place and let a few weights dominate, causing effective-sample-size collapse precisely in the concentration and near-blow-up regimes this method targets. The requested comparison would therefore clarify this branching representation is advantageous.
+
+
+
+
+We would be very grateful for an opportunity to demonstrate the strengthened manuscript, and we appreciate any guidance you can offer on the appropriate path forward.
+
+\closing{Sincerely,}
+
+\end{letter}
+
+\end{document}

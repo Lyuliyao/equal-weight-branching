@@ -1,0 +1,191 @@
+\documentclass[12pt]{article}
+\usepackage{color}
+\usepackage{amsmath}
+\usepackage{arxiv}
+\usepackage{lyu}
+\usepackage{xcolor}
+\usepackage{pgfplots}
+\usetikzlibrary{calc}
+\pgfplotsset{compat=1.18}
+\pgfplotsset{colormap={violet}{rgb255=(25,25,122) rgb255=(238,140,238) color=(white)}}
+\usepackage[utf8]{inputenc} % allow utf-8 input
+\usepackage[T1]{fontenc}    % use 8-bit T1 fonts
+\usepackage{hyperref}       % hyperlinks
+\usepackage{url}            % simple URL typesetting
+\usepackage{booktabs}       % professional-quality tables
+\mathchardef\mhyphen="2D
+\usepackage{amsfonts}       % blackboard math symbols
+\usepackage{nicefrac}       % compact symbols for 1/2, etc.
+\usepackage{amsthm}
+\newtheorem{theorem}{Theorem}
+\newtheorem{proposition}{Proposition}[section]
+\newtheorem{corollary}{Corollary}[theorem]
+\newtheorem{lemma}[theorem]{Lemma}
+\usepackage{microtype}      % microtypography
+\usepackage{lipsum}
+\usepackage{comment}
+\usepackage{subcaption}
+\usepackage{graphicx}
+\usepackage{soul}  
+\title{proof}
+\begin{document}
+% =====================================================================
+%  NEW: temporal-discretization error at the particle level.
+%  Place after Proposition 3 (continuous-time particle process) and
+%  before composing the final unified estimate.
+% =====================================================================
+
+\subsection*{Temporal discretization at the particle level}
+% =====================================================================
+%  Temporal-discretization error at the particle level.
+%  Place after Proposition 3 (continuous-time process) and before the
+%  unified estimate. Notation: mu^N(t) = continuous-time process of (24);
+%  mu^N_n = discrete-time output of Algorithm 4 at t_n = n*tau.
+% =====================================================================
+
+\subsection*{Temporal discretization at the particle level}
+
+The weak formulation \eqref{eq:weak-form} and Proposition~3 describe the
+\emph{continuous-time} particle process $\mu^N(t)$: its transport is driven by
+the true Brownian motions $\mathbf W^N_i$ and its reactions by the time-changed
+Poisson processes $\mathcal R^{N,\mathrm{birth}}_i,\mathcal R^{N,\mathrm{death}}_i$,
+with no reference to the step size $\tau$. The implemented algorithm
+(Algorithms~1--2), by contrast, advances in discrete steps and produces the
+measure $\mu^N_n$ at $t_n=n\tau$: one Euler--Maruyama increment
+\eqref{eq:euler-maruyama} for transport and one frozen-rate Poisson branching
+for reaction. Comparing $\mu^N(t_n)$, the continuous process sampled at $t_n$,
+with $\mu^N_n$, the scheme run for $n$ steps, isolates the temporal
+discretization error. The following proposition bounds this gap; combined with
+Propositions~3--4, it closes the error analysis.
+
+\paragraph{Synchronous coupling.}
+We realize $\mu^N_n$ on the \emph{same} probability space as $\mu^N(t)$ by
+sharing the driving randomness:
+\begin{itemize}
+\item[(C1)] the Euler--Maruyama increment over $[t_n,t_{n+1}]$ uses the true
+Brownian increment, $\sigma\sqrt{\tau}\,\boldsymbol\xi^i_{N,n}
+:=\sigma\big(\mathbf W^N_i(t_{n+1})-\mathbf W^N_i(t_n)\big)$ in
+\eqref{eq:euler-maruyama};
+\item[(C2)] the one-step branching of particle $i$ is generated from the same
+Poisson clock $Q^{N,\bullet}_i$ as in \eqref{eq:weak-form}, but with the rate
+\emph{frozen} at the post-transport left-endpoint value
+$c_i=\tilde r(\mathcal P_K\mu^{N,*}_n(\mathbf X^i))$, i.e.\ with cumulative
+intensity $\Lambda^{\mathrm{disc}}_i=e^{c_i\tau}-1$ in place of the
+time-integrated intensity
+$\Lambda^{\mathrm{cont}}_i=\int_{t_n}^{t_{n+1}}\mathbf 1_{S(N,\tau)}(i)\,
+r(\mathcal P_K\mu^N(\tau))\,\mathrm d\tau$.
+\end{itemize}
+Under this coupling the two processes differ \emph{only} through the
+discretization of their generators, not through independent randomness.
+
+\begin{proposition}[Temporal-discretization error of the particle scheme]
+\label{prop:time-particle}
+Let $\mathbb T^d=(\mathbb R/2\pi\mathbb Z)^d$ and $s>d/2+1$. Assume the
+coefficients $\tilde a,\tilde r$ are bounded and Lipschitz with constant
+$C_{b,\mathrm{lip}}$, the particle number is uniformly bounded
+$|\mathcal I(N,t)|\le C_N N$ on $[0,T]$, and the truncated density
+$\mathcal P_K\mu^N(\cdot)$ is Lipschitz in time along the dynamics with a
+constant $C_K$ (so that $t\mapsto r(\mathcal P_K\mu^N(t))$ is $C_K$-Lipschitz).
+Then, under the synchronous coupling (C1)--(C2), there is a constant
+$C_T=C_T(D,C_{b,\mathrm{lip}},C_N,C_K,s,d,T)$, independent of $N$, such that for
+all $t_n\le T$ and $\tau\in(0,\tau_0]$,
+\[
+\Big(\mathbb E\big\|\mu^N(t_n)-\mu^N_n\big\|_{H^{-s}}^2\Big)^{1/2}
+\;\le\; C_T\,\tau .
+\]
+\end{proposition}
+
+\begin{proof}
+Set the coupled defect $\zeta_n:=\mu^N(t_n)-\mu^N_n$ and
+$\mathcal E_n:=\big(\mathbb E\|\zeta_n\|_{H^{-s}}^2\big)^{1/2}$, with
+$\zeta_0=0$ (both processes start from the same empirical measure). We derive a
+one-step recursion $\mathcal E_{n+1}\le(1+C\tau)\mathcal E_n+C\tau^2$ and conclude
+by discrete Gr\"onwall, exactly as in Proposition~2. Fix a test function
+$f\in C^2(\mathbb T^d)$ with $\|f\|_{H^s}\le1$; duality
+$\|\zeta_n\|_{H^{-s}}=\sup_{\|f\|_{H^s}\le1}\langle f,\zeta_n\rangle$ together
+with $s>d/2+1\Rightarrow H^s\hookrightarrow C^2$ controls the pairing throughout.
+
+\smallskip
+\noindent\emph{Step 1 (one-step defect: transport $+$ branching).}
+Over $[t_n,t_{n+1}]$ write
+\[
+\langle f,\zeta_{n+1}\rangle
+=\underbrace{\langle f,\ \mathcal T^{\mathrm{cont}}_\tau\mu^N(t_n)
+-\mathcal T^{\mathrm{EM}}_\tau\mu^N_n\rangle}_{A_n\ (\text{transport})}
++\underbrace{\langle f,\ \mathcal R^{\mathrm{cont}}_\tau\mu^{*}(t_n)
+-\mathcal R^{\mathrm{disc}}_\tau\mu^{N,*}_n\rangle}_{B_n\ (\text{branching})},
+\]
+where $\mathcal T,\mathcal R$ denote the transport and reaction half-steps,
+continuous versus discrete, and $\mu^{*}(t_n),\mu^{N,*}_n$ the corresponding
+post-transport measures.
+
+\smallskip
+\noindent\emph{Step 2 (transport defect $A_n$).}
+For a common particle, the exact diffusion flow and its one EM step share, by
+(C1), the same Brownian increment. Subtracting and using that the drift
+$b=-\tilde a(\mathcal P_K\rho)$ is bounded and Lipschitz (assumption on
+$\tilde a$),
+\[
+\mathbb E\big[A_n^2\mid\mathcal F_n\big]^{1/2}
+\le C\|f\|_{C^2}\Big(\tau^2+\tau\,\|\zeta_n\|_{H^{-s}}\Big),
+\]
+where the $\tau^2$ term is the per-step weak (bias) error of Euler--Maruyama
+against a $C^2$ test function---of local weak order two, the global weak order
+one of EM being recovered after accumulation (Talay--Tubaro
+\cite{TalayTubaro}; Kloeden--Platen \cite{KloedenPlaten})---and the
+$\tau\|\zeta_n\|$ term is the Lipschitz transport of the incoming discrepancy
+$\zeta_n$ through the frozen drift, as in Lemma~2. The synchronous Brownian
+coupling makes the fluctuation of $A_n$ contribute only at the same $\tau^2$
+order, so no $O(N^{-1/2})$ term enters.
+
+\smallskip
+\noindent\emph{Step 3 (branching defect $B_n$).}
+By (C2) the two reaction half-steps are driven by the \emph{same} Poisson clock
+$Q^{N,\bullet}_i$, evaluated at the two cumulative intensities
+$\Lambda^{\mathrm{cont}}_i$ and $\Lambda^{\mathrm{disc}}_i$. Decomposing each jump
+term into its compensator plus a martingale, the martingale parts---built from
+the identical clock---cancel in the coupled difference, leaving only the
+deterministic intensity gap, namely the rate-freezing error
+\[
+\big|\Lambda^{\mathrm{cont}}_i-\Lambda^{\mathrm{disc}}_i\big|
+\le \int_{t_n}^{t_{n+1}}\big|r(\mathcal P_K\mu^N(\tau))-c_i\big|\,\mathrm d\tau
+\;+\;\big|e^{c_i\tau}-1-c_i\tau\big|
+\;\le\; \big(C_K + C_{b,\mathrm{lip}}^2\big)\,\tau^2,
+\]
+the first term being $O(\tau^2)$ by the time-Lipschitz continuity of
+$r(\mathcal P_K\mu^N(\cdot))$ (constant $C_K$) and the second the elementary
+expansion $e^x-1-x=O(x^2)$. Pairing with $f$ and averaging over the
+$\le C_N N$ particles,
+\[
+\mathbb E\big[B_n^2\mid\mathcal F_n\big]^{1/2}
+\le C\|f\|_{C^0}\Big(\tau^2+\tau\,\|\zeta_n\|_{H^{-s}}\Big),
+\]
+where the $\tau\|\zeta_n\|$ term again accounts for the Lipschitz transport of
+$\zeta_n$ through the rate.
+
+\smallskip
+\noindent\emph{Step 4 (one-step recursion).}
+Combining Steps~2--3, taking the supremum over $\|f\|_{H^s}\le1$ and then total
+expectation,
+\[
+\mathcal E_{n+1}\le (1+C\tau)\,\mathcal E_n + C\,\tau^2,\qquad \mathcal E_0=0 .
+\]
+Crucially, the inhomogeneous term is the \emph{deterministic} $O(\tau^2)$ bias
+of Steps~2--3; the synchronous coupling (C1)--(C2) has cancelled the
+$O(N^{-1/2})$ fluctuations between the two processes, so the recursion involves
+no martingale-fluctuation accumulation.
+
+\smallskip
+\noindent\emph{Step 5 (accumulation).}
+Iterating from $\mathcal E_0=0$ over $n\le T/\tau$ steps as in Proposition~2
+(geometric summation with $e^{C\tau}-1\ge C\tau$),
+\[
+\mathcal E_n\le C\tau^2\,\frac{e^{Cn\tau}-1}{e^{C\tau}-1}
+\le \frac{C}{C}\big(e^{CT}-1\big)\,\tau=C_T\,\tau,
+\qquad 0\le n\le T/\tau,
+\]
+which is the claim.
+\end{proof}
+
+
+\end{document}

@@ -1,0 +1,828 @@
+% SIAM Article Template
+\documentclass[review,onefignum,onetabnum]{siamart250211}
+
+% Information that is shared between the article and the supplement
+% (title and author information, macros, packages, etc.) goes into
+% ex_shared.tex. If there is no supplement, this file can be included
+% directly.
+
+\input{ex_shared}
+
+% Optional PDF information
+% \ifpdf
+% \hypersetup{
+%   pdftitle={An Example Article},
+%   pdfauthor={D. Doe, P. T. Frank, and J. E. Smith}
+% }
+% \fi
+
+% The next statement enables references to information in the
+% supplement. See the xr-hyperref package for details.
+
+%% Use \myexternaldocument on Overleaf
+% \myexternaldocument{ex_supplement}
+
+% FundRef data to be entered by SIAM
+%<funding-group>
+%<award-group>
+%<funding-source>
+%<named-content content-type="funder-name"> 
+%</named-content> 
+%<named-content content-type="funder-identifier"> 
+%</named-content>
+%</funding-source>
+%<award-id> </award-id>
+%</award-group>
+%</funding-group>
+\usepackage{lyu}
+\usepackage{algpseudocode}  
+\mathchardef\mhyphen="2D
+
+\begin{document}
+
+\maketitle
+
+% REQUIRED
+\begin{abstract}
+We propose an efficient stochastic branching method for solving parabolic-parabolic Keller-Segel (KS) chemotaxis systems. In this approach, both the cell density and the chemical concentration are modeled as empirical measures of particles. By approximating the original problem linearly through a Kolmogorov forward equation for the particles at each time step, our method provides an effective solution to a system of advection-diffusion-reaction equations. Compared to traditional methods, our approach offers better handling of singularities. We present numerical examples in two-dimensional space to demonstrate the accuracy and effectiveness of the proposed method.
+
+\end{abstract}
+
+% REQUIRED
+\begin{keywords}
+  example, \LaTeX
+\end{keywords}
+
+% REQUIRED
+\begin{AMS}
+65M75, 65C35
+\end{AMS}
+
+
+\section{Introduction}
+The reaction–diffusion–advection type partial differential equations (PDEs) have attracted much interest in physics, biology, and engineering, modeling phenomena ranging from chemical reactions and pattern formation to plasma dynamics and collective behavior in biological systems \cite{hundsdorfer2013numerical}. Traditional mesh-based methods, such as finite difference~\cite{hoff1978stability}, finite element~\cite{codina1998comparison}, and discontinuous Galerkin schemes~\cite{ayuso2009discontinuous,xia2009application}, have achieved great success in solving many of these problems. However, from a numerical perspective, a key challenge in solving such PDEs lies in handling nonlinearities and singular structures in some special cases, for example, the Keller-Segel model. Mesh-based discretizations approximate solutions in function spaces that are not well-suited for capturing blow-up or highly localized behavior, often resulting in reduced accuracy or numerical instabilities.
+
+Particle-based approaches offer a natural alternative by representing solutions as empirical measures, which are particularly effective for problems exhibiting concentration or blow-up phenomena. 
+Existing particle methods, such as the partial in-cell method~\cite{birdsall2018plasma, hockney2021computer} for solving the Vlasov-Poisson equation, are often based on the well-understood underlying physical laws. In this setting, the force acting on each particle is derived from the underlying physical laws, which makes the particle approximation straightforward. By contrast, such explicit physical laws are rarely available for general reaction–diffusion–advection type PDEs, where effective interactions may be highly nonlinear, system-specific, or not well characterized. For example, in many biological and chemical systems, such as chemotaxis, the effective interactions are often poorly understood and difficult to model explicitly, which limits the applicability of traditional particle-based approaches.
+To extend particle-based methods beyond physically motivated settings, blob methods~\cite{craig2016blob,carrillo2019blob,huang2017error} and semi-Lagrangian particle schemes~\cite{qiu2010conservative,qiu2011conservative,qiu2011positivity} have been developed for conservative PDEs.
+% To provide particle-based methods for a more general form of PDEs, recent developments, such as blob methods \cite{craig2016blob,carrillo2019blob,huang2017error} and semi-Lagrangian particle schemes \cite{qiu2010conservative,qiu2011conservative,qiu2011positivity}, have provided accurate and stable discretizations for a variety of conservative PDEs. 
+These approaches rely on the mean-field perspective, in which the empirical measures of interacting particle systems converge to the solution of the original PDE. This mathematical framework establishes a rigorous link between particle dynamics and continuum equations, departing from the former physically motivated methods. However, despite these advances, there is still no unified particle-based framework for systematically discretizing nonlinear and nonconservative PDEs, especially in the presence of singularities or blow-up phenomena.
+
+Machine learning-based numerical PDE algorithms, such as  Deep Galerkin Methods (DGM)~\cite{sirignano2018dgm}, Deep Ritz method~\cite{yu2018deep}, and Mixed Residual method~\cite{lyu2022mim}, have attracted significant attention in recent years. By leveraging the strong representability of neural networks, these methods are particularly promising for solving high-dimensional problems. In the context of particle-based approaches, coupling neural networks with the Feynman-Kac formula~\cite{han2024deep, hutzenthaler2021speed, nguwi2024deep,beck2021deep} or backward stochastic differential equations~\cite{han2017deep, han2018solving, hure2020deep} has also emerged as a powerful strategy for solving a broad class of PDEs. Nevertheless, the approximation capability of neural networks is fundamentally grounded in the universal approximation theorem, which ensures expressiveness only for continuous functions. As a result, neural-network–based solvers may face intrinsic difficulties when dealing with PDEs that develop singularities or blow-up phenomena, where discontinuities or concentration effects play a central role.
+
+In this work, we propose a \textit{stochastic branching method} to address these challenges. 
+At each time step, the original PDE is linearized and approximated by the Kolmogorov forward equation locally. This formulation provides a direct probabilistic representation, in which the connection between the PDE and particle dynamics is naturally embedded in the Kolmogorov forward equation. In contrast to approaches that rely on explicit physical laws or mean-field limit arguments, this framework establishes a systematic particle-based discretization applicable to general nonlinear PDEs. 
+In addition, a birth–death mechanism is introduced to account for the nonconservative nature of the system, allowing particle numbers to evolve consistently with the underlying reaction dynamics.  
+The only step that requires a continuity assumption is the interpolation of the empirical measure, which could be replaced by blob methods in future work. This indicates that the overall framework does not fundamentally rely on continuity, making it naturally suitable for problems with singularities or blow-up phenomena.
+
+We take the Keller-Segel chemotaxis model~\cite{keller1970initiation, patlak1953random} in two spatial dimensions as an example, focusing on the following widely studied formulation:
+\begin{equation}\label{equ:KS}
+\begin{aligned}
+\partial_t u - \nabla \cdot ( \nabla u - \chi(u) \nabla v) &= f_u(u,v), & \bx\in \mathbb{R}^2 , t\in(0,T), \\
+\partial_t v - \Delta v &= f_v(u,v), & \bx\in \mathbb{R}^2 , t\in(0,T),
+\end{aligned}
+\end{equation}
+where $u$ and $v$ represent the cell density and chemical concentration, respectively. For simplicity, we focus on periodic boundary conditions or unbounded domains, though the framework can be extended to more general boundary settings in future research. Chemotaxis is a process in which cells navigate toward areas with favorable chemical concentrations and away from unfavorable ones. 
+The Keller–Segel systems~\eqref{equ:KS} have been extensively studied over the past several decades, with numerous studies addressing both their analytical properties and numerical methods across various cases and dimensions. In two dimensions, it is well understood that both parabolic–elliptic and fully parabolic cases can exhibit finite-time blow-up to a Dirac-delta profile when the initial mass is sufficiently large~\cite{herrero1997blow, perthame2007transport}. Furthermore, in the three-dimensional parabolic–elliptic case, an alternative self-similar blow-up profile of the form $ C(T-t+x^2)^{-1}$ has also been identified in the literature~\cite{giga2011asymptotic,souplet2019blow}. 
+
+On the numerical side, many notable methods have been developed for KS systems. The finite-volume method~\cite{filbet2006finite,chertock2008second} is applied for chemotaxis and haptotaxis models, achieving efficient and accurate simulations. Shen et al.~\cite{shen2020unconditionally} introduced an energy-dissipative and bound-preserving scheme applicable to a broad class of discretizations, subsequently extended by Chen et al.~\cite{chen2022error} to a fully discrete finite element scheme for the 2D parabolic–elliptic KS, which reproduces finite-time blow-up under assumptions analogous to the continuous setting. Liu and Wang~\cite{liu2018positivity} reformulated the equations via the Le Ch\^atelier principle to construct positivity-preserving schemes. Discontinuous Galerkin methods have also been applied to KS systems~\cite{zhong2024direct, li2017local,epshteyn2009new}, in addition to various mesh-based finite element, finite volume, and domain-decomposition techniques for 3D fully parabolic models~\cite{epshteyn2019efficient, strehl2013positivity}. The most relevant work is the recently proposed stochastic interacting particle–field algorithm~\cite{wang2025novel,hu2024stochastic}. However, this approach still circumvents the direct treatment of nonconservative equations at the particle level, limiting its applicability to the broader class of nonlinear nonconservative PDEs.
+
+In summary, we propose a novel stochastic branching method for solving the Keller–Segel chemotaxis model, which overcomes the limitations of traditional numerical methods by efficiently handling singularities and nonlinearities at particle level. A heuristic derivation of the algorithm is presented in the current version and will be discussed in detail in future work. Although our focus here is on the two-dimensional Keller–Segel model, the proposed framework is general and can be applied to a broad class of reaction–diffusion systems, such as the Gray–Scott model, the Allen–Cahn equation, and Schnakenberg pattern formation. Furthermore, by leveraging recent advances in density estimation techniques~\cite{novikov2021tensor, tang2025wavelet, sheng2025approximation, tang2024solving}, our approach can be naturally extended to higher-dimensional systems. The effectiveness of the method is demonstrated through several numerical examples, highlighting both its robustness and potential for generalization.
+
+
+\section{Stochastic branching method}
+To illustrate the main idea, we first consider the scalar reaction–diffusion equation of the form
+\begin{equation}\label{equ:reaction-diffusion}
+\partial_t u = \nabla \cdot \big( a(u)u + \nabla (d(u) u) \big) + r(u)u .
+\end{equation}
+The extension of the proposed method to more complex systems, such as Keller–Segel model in Equation~\eqref{equ:KS}, will be presented in Section~\ref{sec:extension}.
+
+Let $S(N,t)=\{\bX_N^i\}_{i\in\mathcal I(N,t)}$ denote a set of particles at time $t$ whose initial population is $N$, where the particles' indices are numbered consecutively in the index set $\mathcal I(N,t)$ and $\bX_N^i(t)$ denote the position of the $i\mhyphen$th particle. Then it defines the following measure-valued empirical process:
+\begin{equation}
+    t \to \mu^N(t,\intd \bx) =  \frac{1}{N}\sum_{i\in \mathcal I(N,t)}\delta_{\bX_N^i(t)},
+\end{equation}
+where $\delta_\bx $ denotes the Dirac measure at $\bx\in \mathbb {R}^2$.
+
+The core idea of particle-based methods for solving PDEs is to approximate the solution by the limit of the empirical measure
+\[
+\mu(t,\mathrm{d}\bx) = \lim_{N\to\infty} \mu^N(t,\mathrm{d}\bx).
+\]
+Since the equation under consideration is nonconservative, the total mass of the system is not preserved. Consequently, both $\mu^N$ and its limit $\mu$ should be regarded as finite measures rather than probability measures.
+
+
+\subsection{Initial condition and Normalization}
+To connect the solution $u(t,\bx)$ with the measure $\mu(t,\mathrm{d}\bx)=\rho(t,\bx) \intd \bx$, we introduce a linear transformation between them. 
+Without loss of generality, we assume that the initial measure $\mu(0,\cdot)$ is a probability measure with total mass $1$, and define
+\begin{equation*}
+    u(t,\bx)\,\mathrm{d}\bx = Z \,\mu(t,\mathrm{d}\bx),
+\end{equation*}
+where 
+\[
+Z = \int_{\Omega} u(0,\bx)\,\mathrm{d}\bx
+\]
+denotes the total initial mass of $u$.
+Consequently, the initial particle positions should follow the normalized density
+\[
+\rho(0,\bx) = \frac{u(0,\bx)}{Z}.
+\]
+It ensures that we can employ the Metropolis-Hastings algorithm to generate the initial particle set $S(N,0)= \{\bX_0^i\}_{i=1}^{N}$ at the initial time $t=0$.
+As a result, the rescaled equation for $\rho$ satisfies
+\begin{equation}\label{equ:normalized_diffusion_reaction}
+\partial_t \rho 
+= \nabla \cdot \left( \tilde a(\rho)\rho + \nabla \big(\tilde d(\rho)\rho \big)\right) 
+  + \tilde r(\rho)\rho,
+\end{equation}
+where
+\[
+\tilde a(\rho) = a(Z\rho), 
+\qquad \tilde d(\rho) = d(Z\rho), 
+\qquad \tilde r(\rho) = r(Z\rho).
+\]
+
+\subsection{Operator Splitting}
+To approximate the solution of the PDE, we discretize the time interval $[0,T]$ with step size $\tau>0$ and grid points
+\[
+0 = t_0 < t_1 < \cdots < t_M = T.
+\]
+We then employ an operator-splitting strategy that separates the dynamics according to their physical mechanisms. 
+Equation~\eqref{equ:normalized_diffusion_reaction} can be written as
+\begin{equation}
+\partial_t \rho = \mathcal{A}\rho + \mathcal{B}\rho ,
+\end{equation}
+where the operators $\mathcal{A}$ and $\mathcal{B}$ correspond to
+\begin{align}
+\mathcal{A}\rho &= \nabla \cdot \left( \tilde a(\rho)\rho + \nabla \!\big(\tilde d(\rho)\rho \big) \right), \\[4pt]
+\mathcal{B}\rho &= \tilde r(\rho)\rho .
+\end{align}
+Here, $\mathcal{A}$ describes the advection--diffusion dynamics, while $\mathcal{B}$ accounts for the reaction mechanism (e.g., proliferation or death).  The exact solution over one time step can be expressed formally as
+\begin{equation}
+\rho(t,\bx) = \exp\left( t (\mathcal{A} + \mathcal{B}) \right)\rho(0,\bx),
+\qquad \tau = t_{n+1}-t_n .
+\end{equation}
+In practice, the operator $\exp\!\big(\tau(\mathcal{A}+\mathcal{B})\big)$ cannot be evaluated explicitly, 
+we adopt the first-order Lie-Trotter splitting, which is justified by the Trotter product formula:
+\begin{equation}
+\exp\!\left( t (\mathcal{A} + \mathcal{B}) \right) 
+= \lim_{M\to\infty} \Big( \exp\!\left(\tfrac{t}{M} \mathcal{B}\right) 
+                          \exp\!\left(\tfrac{t}{M} \mathcal{A}\right) \Big)^M .
+\end{equation}
+At the discrete level with step size $\tau = t_{n+1}-t_n$, we approximate $\rho(t_{n+1},\cdot)$ by
+\begin{equation}
+\rho_{n+1} = \exp(\tau \mathcal{B}) \exp(\tau \mathcal{A}) \rho_n ,
+\end{equation}
+for $n=0,\cdots,M-1$.
+This scheme provides a simple and efficient first-order approximation; 
+higher-order splittings, such as Strang splitting, may be employed for improved accuracy.
+In practice, this decomposition allows us to design particle-based updates for each subprocess separately:
+\begin{equation}
+\rho_n^\ast = \exp(\tau \mathcal{A})\rho_n, 
+\qquad 
+\rho_{n+1} = \exp(\tau \mathcal{B})\rho_n^\ast .
+\end{equation}
+
+
+
+\subsection{Advection Diffusion Step}
+In this step, we model the movement of particles, where each particle follows a stochastic path determined by both a drift term and a diffusion term. At time step $n$, assume we have a set of particles $S^N_n = \{\bX^i_{N,n}\}_{i\in \mathcal I_n^N}$ whose initial population is $N$, which induce the empirical measure 
+\[
+\mu^N_{n}= \frac{1}{N}\sum_{i\in \mathcal I_n^N}\delta_{\bX_{N,n}^i}
+\] 
+approximates the solution at step $n$ , i.e.,  $\mu_n(\intd \bx) = \rho_n(\bx)\intd \bx$. 
+Our goal is to evolve these particles according to the advection-diffusion transition probability $p(\bx,s;\by,t)$, which leads to an updated empirical measure
+\[\mu_n^{N,*} = \int p(\bx,t_n;\by,t_n+\tau)  \mu_n^N(\intd \bx) =   \frac{1}{N}\sum_{i\in \mathcal I_n^N}\delta_{\bX_{N,n}^{i,*}}
+\]  
+reflecting the action of the advection-diffusion operator on the density.
+By the Kolmogorov forward equation, the transition density $p(\bx,s;\by,t)$ satisfies 
+\begin{equation}
+    \partial_t p = \tilde {\mathcal A }\rho := - \nabla \cdot(b  p) + \frac{1}{2}\nabla^2:(\sigma^T\sigma p) 
+\end{equation}
+with initial condition $\lim_{t\to s^+} p(\bx,s;\cdot,t) = \delta_\bx$. By matching the differential operator $\mathcal A$ in our PDE, we have 
+\begin{equation}
+    b(x) = -\tilde a(\rho^N_n(x)), \quad \frac{1}{2}\sigma(x)^T \sigma(x) = \tilde d(\rho^N_n(x)).
+\end{equation}
+Therefore, the evolution of each particle $\bX^i_n$ as a stochastic process satisfying the It\^o stochastic differential equation
+\begin{equation}\label{equ:overd_langevin}
+    \intd \bX_{N,n}^i = - b(\bX_{N,n}^i) \intd t  + \sigma(\bX_{N,n}^i) \intd \bW^i_{N}(t),
+\end{equation}
+where $\bW^i_{N}(t)$ is a $2\mhyphen$dimensional Brownian motion. 
+In practice, we approximate Equation \eqref{equ:overd_langevin} using an Euler-Maruyama step of size $\tau$, 
+\[
+ \bX_{N,n}^{i,*} = - b(\bX_{N,n}^i) \tau  + \sigma(\bX_{N,n}^i) \sqrt{\tau} \boldsymbol{\xi}^i_{N,n},
+\]
+where $\boldsymbol{\xi}^i_{N,n}$  independent and identically distributed normal random variables, see Algorithm \ref{alg:sde}.
+The computation of $b$ and $\sigma$ might invovle the interpolation of the measure $\mu_n^N$ to $\rho_n^N$, which will be discussed in Section \ref{sec:interpolation}.
+
+\begin{algorithm}
+\caption{SDE Propagation Step}\label{alg:sde}
+\begin{algorithmic}
+\Require Particle set: $S=\{\mathbf{X}^i\}_{i\in\mathcal I}$; time step $\tau>0$
+\Require Drift term $b(\cdot)$
+\Require Diffusion operator $\sigma\in\mathbb R^{2 \times 2}$
+\Ensure Propagated set $S_*=\{\mathbf{X}^{i,*}\}_{i\in\mathcal I}$
+\Procedure{SDE\_Propagate}{$S,\,\tau,\,b,\,\sigma$}
+  \State $S_{*}\gets [\ ]$
+  \For{$i\in\mathcal I$}
+    \State Sample $\boldsymbol{\xi}_i \sim \mathcal N(0,I_d)$ independently
+    \State $\mathbf{X}^{i,*} \gets \mathbf{X}^i \;+\; b(\mathbf{X}^i;\mathcal F)\,\tau \;+\; \sqrt{\tau}\,\sigma\,\boldsymbol{\xi}_i$
+    \State Append $\mathbf{X}^{i,*}$ to $S_{*}$
+  \EndFor
+  \State \Return $S_{*}$
+\EndProcedure
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Brancing Step}
+This step modifies the mass of the empirical measure and may change the number of particles over time. Given the intermediate empirical measure from the advection-diffusion step $\mu_{N,n}^*$, we aim to evolve this measure under the action of the reaction operator $\mathcal  B$ over a time step $\tau$, such that the resulting empirical measure
+\begin{equation}
+    \mu^N_{n+1} = \frac{1}{N} \sum_{i\in \mathcal I (N,(n+1)\tau)} \delta_{\bX^i_{N,n+1}}
+\end{equation}
+approximates the updated density $\mu^N_{n+1}(\intd \bx ) = \rho^N_{n+1}(\bx) \intd \bx = \exp(\mathcal B\tau) \rho_{n}^{N,*}(\bx) \intd \bx = \exp(\mathcal  B\tau) \mu_{n}^{N,*}(\intd \bx)$. Therefore, the particles located at $\bx$, should birth and death with probability $c(\bx)=\tilde r(\rho^*(\bx))$ depending on the positiveness of $\tilde r$.
+To implement this step, we adopt a branching process. For each particle $\bX^i_{n,*}$, we associate a branching (or survival) rate determined by the function $\tilde r $. Specifically, over the interval $[t_n,t_{n+1}]$, each particle undergoes one of the following stochastic events:
+\begin{itemize}
+    \item Survival (no branching): particle $\bX^{i,*}_{N,n}$ survival with probability approximately $\exp(-| c(\bX^{i,*}_{N,n})|\tau)$.
+    \item Death (removal): if $c<0 $, particle $\bX^{i,*}_{N,n}$ dead  with the probability $1-\exp( c(\bX^{i,*}_{N,n})\tau)$.
+    \item Dirth (duplication ): if $ c>0 $, particle $\bX^{i,*}_{N,n}$ duplication with the probability $1-\exp(- c (\bX^{i,*}_{N,n})\tau)$.
+\end{itemize}
+\begin{proposition}
+    Let $S=\{\bX^i\}_{i\in \mathcal I}$ be a set of particles, whose empirical measure is defined as $\mu (\intd \bx) = \frac{1}{N}\sum_{i\in \mathcal I }\delta_{\bX^i}$. If the particles are updated according to the above rules then the updated particle set $S_+=\{ \bX^i_+\}_{i\in {\mathcal I}_+}$ and corresponding  measure $ \mu_+ (\intd \bx) = \frac{1}{N}\sum_{i\in  {\mathcal  I}_+}\delta_{ \bX^i_+}$ should satisfies 
+    \begin{equation}
+        \mathbb E [\left<f, \mu_+\right>] =   \left<f,\exp( c(\bx)\tau)\mu\right>,
+    \end{equation}
+    for all $f\in C^2_b(\mathbb R)$ as $\tau\to 0$.
+\end{proposition}
+\begin{proof}
+    For any test function $f\in C^2_b(\mathbb R^+, \mathbb R^2)$, we have
+\begin{equation}
+\begin{aligned}
+     & \mathbb E\left[\left<f,  \mu_+\right>\right]
+    \\=& \frac{1}{N} \sum_{i\in \mathcal I ,c(\bX^i)>0} 
+    \left[\exp(- c(\bX^i)\tau)f(\bX^i) + (1-\exp( -c(\bX^i)\tau))2f(\bX^i)\right]\\
+    & + \frac{1}{N} \sum_{i\in \mathcal I , c(\bX^i)<0}
+    \exp( c(\bX^i)\tau)f(\bX^i) \\
+    =& \frac{1}{N}\sum_{i\in \mathcal I ,c(\bX^i)>0} 
+    \left(
+    (2-\exp(- c(\bX^i)\tau)f(\bX^i))
+    \right) \\
+    & + \frac{1}{N}\sum_{i\in \mathcal I , c(\bX^i)<0}\left(
+    \exp( c(\bX^i)\tau)f(\bX^i) \right)\\
+    = & \frac{1}{N}\sum_{i\in \mathcal I}\exp( c(\bX^i)\tau)f(\bX^i) + o(\tau^2)
+    = \mathbb E\left[\left<f,\exp( c\tau)\mu\right>\right].
+\end{aligned}
+\end{equation}
+The first equality follows from the fact that the expected population size after a birth event is $2$, while after a death event it is $0$.
+% where the first equality comes from the expectation number of population after birth is $2$ and death if $0$. 
+\end{proof}
+
+By choosing $c(\bx)=\tilde r(\rho^*(\bx))$, this process realizes the operator $\exp(\mathcal B\tau)$ at the particle level. We show the process in Algorithm \ref{alg:birthdeath}
+
+\begin{algorithm}
+\caption{Birth--Death Step}\label{alg:birthdeath}
+\begin{algorithmic}
+\Require Propagated particles $S=\{\mathbf X^{i}\}_{i\in\mathcal I}$, time step $\tau>0$, rate function $r:\mathbb R^2\to\mathbb R$
+\Ensure Post-branching set $S_{+}=\{\mathbf X^{i}\}_{i\in\mathcal I_{+}}$
+\Procedure{Birth\_Death}{$S,\,\tau,\,r(\cdot)$}
+    \State $S_{n+1}\gets [\ ]$
+    \For{$i\in\mathcal I$}
+        \State $r_i \gets r(\mathbf X^{i})$
+        \If{$r_i>0$} \Comment{birth}
+            \State Append $\mathbf X^{i}$ to $S_{+}$ \Comment{keep parent}
+            \State $p_{\mathrm{birth}} \gets 1-\exp(-r_i\,\tau)$
+            \State With probability $p_{\mathrm{birth}}$, append a duplicate of $\mathbf X^{i}$ to $S_{+}$
+        \ElsIf{$r_i<0$} \Comment{death}
+            \State $p_{\mathrm{survive}}\gets \exp(r_i\,\tau)$ 
+            \State With probability $p_{\mathrm{survive}}$, append $\mathbf X^{i}$ to $S_{+}$
+            \State \quad (otherwise the particle is removed)
+        \Else \Comment{$r_i=0$}
+            \State Append $\mathbf X^{i}$ to $S_{+}$
+        \EndIf
+    \EndFor
+    \State \Return $S_{+}$
+\EndProcedure
+\end{algorithmic}
+\end{algorithm}
+
+
+\subsection{Nonlinear Interpolation}
+\label{sec:interpolation}
+To evaluate the functions $\tilde a(\rho)$ ,  $\tilde d(\rho)$ , and $\tilde r(\rho)$ , that govern the drift, diffusion, and reaction dynamics in our particle-based scheme, we must first reconstruct the continuous density 
+$\rho$ from its empirical measure. Specifically, given an empirical measure
+\[
+\mu^N_n= \frac{1}{N}\sum_{i\in \mathcal I^N_n}\delta_{\bX_{N,n}^i},
+\] 
+we seek a smooth approximation of $\rho^N_n$ that allows pointwise evaluation and differentiation as required by the operators.
+
+In this work, we choose to interpolate the empirical distribution into the Fourier space. That is, we project the density onto a finite set of Fourier basis functions, allowing for efficient representation and differentiation. The Fourier coefficients are computed from the particle locations $\bX_{N,n}^i$ in periodical boudary condition $\Omega=[-\pi,\pi]^2$ and the reconstructed density 
+$\rho_n(t,x)$ is obtained from the Fourier coefficients. To be more specific, we define a Fourier interpolation operator $\mathcal F_K$
+that maps the empirical particle distribution into a truncated Fourier representation 
+\[
+\rho^N_n(\bx) = \mathcal{F}_K(\mu^N_n)(\bx) 
+          = \sum_{k_1,k_2\leq K} \hat{\rho}_n(k_1,k_2)\,\phi_{k_1}(\bx_1)\phi_{k_2}(\bx_2),
+\]
+where the basis functions are chosen as
+\[
+\phi_k(x) =
+\begin{cases}
+1, & k=0, \\
+\cos(k  x), & k \in \mathbb{Z}_+, \\
+\sin(k  x), & k \in \mathbb{Z}_- .
+\end{cases}
+\]
+
+The Fourier coefficients are computed directly from the empirical measure:
+\[
+\hat{\rho}_n(k_1,k_2) = \int_\Omega \phi_{k_1}(y_1)\phi_{k_2}(y_2)\,\mu^N_n(\intd\by) 
+= \frac{1}{N}\sum_{i\in S(N,n\tau)} \phi_{k_1}(\bX_{N,    n,1}^{i})\phi_{k_2}(\bX_{N,n,2}^{i}).
+\]
+The process is shown in Algorithm \ref{alg:interpolate}
+This choice is motivated by the simplicity and spectral accuracy of Fourier methods for smooth periodic functions. However, we note that other functional spaces, such as polynomial bases, wavelets, or kernel-based representations, could offer better adaptability in non-periodic or highly localized settings. We leave the exploration of such alternatives to future work.
+
+\begin{algorithm}
+\caption{Interpolation Step (fixed-$N$ normalization)}\label{alg:interpolate}
+\begin{algorithmic}
+\Require Particle set: $S=\{ \mathbf{X}^i \}_{i\in \mathcal{I}}$; fixed initial population $N$; truncation index set $\mathcal{M}_K$; domain descriptor $\Omega$; basis $\{\psi_m\}_{m\in\mathcal{M}_K}$ with (optionally) known gradients $\{\nabla\psi_m\}_{m\in\mathcal{M}_K}$
+\Ensure Truncated field $\tilde{\rho}_n(\mathbf{x})$ (and, if needed, $\nabla\tilde{\rho}_n(\mathbf{x})$)
+\Procedure{Interpolate}{$S_n,\,N,\,\mathcal{M}_K,\,\Omega,\,\{\psi_m\}$}
+    \State \textbf{(Coefficient projection with fixed-$N$ normalization)}
+    \State For each $m\in\mathcal{M}_K$, set
+    \[
+      a_m \;\gets\; \frac{1}{N}\sum_{i\in\mathcal{I}} \psi_m\!\big(\mathbf{X}^i\big).
+    \]
+    \State \textbf{(Series assembly)}
+    \[
+      \tilde{\rho}_n(\mathbf{x}) \;\gets\; \sum_{m\in\mathcal{M}_K} a_m\,\psi_m(\mathbf{x}).
+    \]
+    \State \textbf{(Optional gradients for drift/evaluation)}
+    \If{gradients are required and $\{\nabla\psi_m\}$ are available}
+      \[
+        \nabla\tilde{\rho}_n(\mathbf{x}) \;\gets\; \sum_{m\in\mathcal{M}_K} a_m\,\nabla\psi_m(\mathbf{x}).
+      \]
+    \EndIf
+    \State \Return $\tilde{\rho}_n$ (and $\nabla\tilde{\rho}_n$ if computed)
+\EndProcedure
+\end{algorithmic}
+\end{algorithm}
+
+\section{Heuristic derivation of the limit dynamics}
+The connection between the proposed algorithm and the underlying PDE can be understood through a mean-field approximation. To highlight the essential idea, we restrict our attention to a simple linear case. Our goal is to provide a heuristic derivation showing that the limiting dynamics of the algorithm converge to the target PDE.
+\[
+\partial_t u = \nabla \cdot (b(x)u + \frac{1}{2}\sigma^2(x) \nabla u) + r(x)u.
+\]
+The correspond dynamics is described by a stochastic differential equation. For $i\in \mathcal I(N,t)$
+\[
+\intd \bX^i_N(t) = b(\bX^i_N(t))\intd t  + \sigma(\bX^i_N(t)) \intd \bW^i(t).
+\]
+Also, any particle $i\in \mathcal I(N,t)$ at position $\bX^i_N(t)$ at time $t$ will induce discontinuous changes to the population by giving birth a particle $i^*\in \mathcal I(N,t)$ at $\bX^i_N$ with intensity $r(x)$ if $r(x)>0$ and die with intensity $-r(x)$ of $r(x)<0$. It induced the following two point process for $\sigma\in \mathbb R^+$ 
+\[
+\begin{aligned}
+   \mathcal R^{i^*,birth}_N( \sigma) = Q^{i,birth}_N \left(\int_{0}^{ \sigma} \mathbf 1 _{S(N,\tau)}(i)r(\bX^i_N(\tau))\intd \tau\right),\\
+    \mathcal R^{i^*,death}_N( \sigma) = Q^{i,death}_N \left(-\int_{0}^{\sigma} \mathbf 1 _{S(N,\tau)}(i)r(\bX^i_N(\tau))\intd \tau\right), 
+\end{aligned}
+\]
+where $Q^{i,birth}_N$, $Q^{i,death}_N$ are independent standard Poisson processes. 
+Using It\^o's fomula, we have for $f\in C^{1,2}_b(\mathbb R^+,\mathbb R^2)$
+\begin{equation*}
+    \begin{aligned}
+        \langle f(t,\cdot),\mu^N(t,\cdot)\rangle = &\langle f(0,\cdot), \mu^N(0,\cdot)\rangle - \int_0^t\langle b(\cdot)\cdot \nabla f (\tau,\cdot) ,\mu^N(\tau,\cdot)\rangle\intd \tau \\
+        &+ \int_0^t\langle \frac{1}{2}\nabla \cdot \sigma(x) \nabla f(\tau,\cdot),\mu^N(\tau,\cdot)\rangle \intd \tau\\
+        &+ \int_0^t\langle \frac{\partial}{\partial \tau} f(\tau,\cdot),\mu^N(\tau,\cdot)\rangle \intd\tau\\
+        &+ \frac{1}{N} \int_0^t \sum_{i\in \mathcal I (N,\tau)} \sigma(\bX_N^i(\tau)) \nabla f(\tau,\bX_N^i(\tau))\cdot \intd \bW_N^i(\tau)\\
+        &+  \frac{1}{N} \int_0^t \sum_{i\in \mathcal I (N,\tau), r(\bX^i_N(\tau))>0} f(\tau,\bX_N^i(\tau))\mathcal R_N^{i^*,birth}(\intd \tau)\\
+        &-  \frac{1}{N} \int_0^t \sum_{i\in \mathcal I (N,\tau), r(\bX^i_N(\tau))<0} f(\tau,\bX_N^i(\tau)) \mathcal R_N^{i^*,death}(\intd \tau)
+    \end{aligned}
+\end{equation*}
+One defines 
+\begin{equation*}
+    \begin{aligned}
+        \mathcal M^1(t,f) =& \frac{1}{N} \int_0^t \sum_{i\in \mathcal I(N,\tau)} \sigma(\bX_N^i(\tau)) \nabla f(\tau,\bX_N^i(\tau))\cdot \intd \bW_N^i(\tau)\\
+        \mathcal M^2(t,f) =& \frac{1}{N} \int_0^t \sum_{i\in \mathcal I(N,\tau), r(\bX^i_N(\tau))>0} f(\tau,\bX_N^i(\tau))\left(\mathcal R_N^{i^*,birth}(\intd \tau) -r(\bX_N^i(\tau))\intd \tau\right)\\
+        \mathcal M^3(t,f) =& \frac{1}{N} \int_0^t \sum_{i\in \mathcal I(N,\tau), r(\bX^i_N(\tau))<0} f(\tau,\bX_N^i(\tau)) \left(\mathcal R_N^{i^*,death}(\intd \tau)-r(\bX_N^i(\tau))\intd \tau\right).
+    \end{aligned}
+\end{equation*}
+We notice that 
+\begin{equation}
+\begin{aligned}
+    \mathbb E\left[ \left(\mathcal M^1(t,f) \right)^2\right] &= \frac{1}{N^2} \int_0^t \sum_{i\in \mathcal I(N,\tau)}  \left|\sigma(\bX^i_N(\tau))\nabla f(\tau,\bX_N^i(\tau))\right|^2 \intd \tau \\
+    & \leq \frac{C_{f',\sigma}t}{N},
+\end{aligned}
+\end{equation}
+where $C_{f',\sigma}$ is a constant only dependent on the gradient of $f$ and $\sigma$
+and also 
+\begin{equation*}
+    \begin{aligned}
+       \mathbb E\left[ \left(\mathcal M^2(t,f) \right)^2\right] &= \frac{1}{N^2}  \mathbb E\left[ \int_0^t \sum_{i\in \mathcal I(N,\tau), r(\bX^i_N(\tau))>0}  f(\tau,\bX_N^i(\tau))\mathcal R_N^{i^*,birth}(\intd \tau) \cdot\right.\\
+    & \qquad \left.\int_0^{t'} \sum_{j\in \mathcal I(N,\tau), r(\bX^j_N(\tau'))>0}  f(\tau,\bX_N^j(\tau'))\mathcal R_N^{j^*,birth}(\intd \tau')\right]\\
+       & - \frac{2}{N^2} \mathbb E\left[\int_0^t \sum_{i\in \mathcal I(N,\tau), r(\bX^i_N(\tau))>0}  f(\tau,\bX_N^i(\tau))\mathcal R_N^{i^*,birth}(\intd \tau)\right.\\
+    & \qquad \left.\int_0^{t'} \sum_{j\in \mathcal I(N,\tau), r(\bX^j_N(\tau'))>0}  f(\tau,\bX_N^j(\tau'))r(\bX_N^j(\tau'))\intd \tau'\right]\\
+       & + \frac{1}{N^2} \left(\int_0^{t} \sum_{i\in \mathcal I(N,\tau), r(\bX^i_N(\tau))>0}  f(\tau,\bX_N^i(\tau))r(\bX_N^i(\tau))\intd \tau\right)^2\\
+       & = \frac{1}{N^2}I_1-\frac{2}{N^2}I_2+\frac{1}{N^2}I_3.
+    \end{aligned}
+\end{equation*}
+For $I_1$, we have 
+\begin{equation*}
+    \begin{aligned}
+        I_1 =& \sum_{i\in \mathcal I(N,\tau), r(\bX^i_N(\tau))>0}\int_0^{t}f^2(\tau,\bX_N^i(\tau))r(\bX_N^i(\tau)) \intd \tau\\
+        &+\left(\int_0^{t} \sum_{i\in \mathcal I(N,\tau), r(\bX^i_N(\tau))>0}  f(\tau,\bX_N^i(\tau))r(\bX_N^i(\tau))\intd \tau\right)^2.
+    \end{aligned}
+\end{equation*}
+For $I_2$, we have
+\begin{equation*}
+    \begin{aligned}
+        I_2 &= \left(\int_0^{t} \sum_{i\in \mathcal I(N,\tau), r(\bX^i_N(\tau))>0}  f(\tau,\bX_N^i(\tau))r(\bX_N^i(\tau))\intd \tau\right)^2.
+    \end{aligned}
+\end{equation*}
+Therefore, we have
+$$
+\begin{aligned}
+\mathbb E\left[ \left(\mathcal M^2(t,f) \right)^2\right] &= \frac{1}{N^2}\sum_{i\in \mathcal I(N,\tau), r(\bX^i_N(\tau))>0}\int_0^{t}f^2(\tau,\bX_N^i(\tau))r(\bX_N^i(\tau)) \intd \tau\\
+    & = \frac{t C_{f,r}}{N},
+\end{aligned}
+$$
+where $C_{f,r}$ is a constant dependent on $f$ and $r$. Similarly we can show that 
+$$
+\begin{aligned}
+\mathbb E\left[ \left(\mathcal M^3(t,f) \right)^2\right] 
+    & = \frac{t C_{f,r}}{N},
+\end{aligned}
+$$
+As a result, we have
+\begin{equation*}
+    \begin{aligned}
+         \langle f(t,\cdot),\mu^N(t,\cdot)\rangle = &\langle f(0,\cdot), \mu^N(0,\cdot)\rangle \\
+         & + \int_0^t\langle -b(\cdot)\cdot \nabla f (\tau,\cdot) + \frac{1}{2}\nabla\cdot\left( \sigma(\cdot) \nabla f(\tau,\cdot)\right) + r(\cdot) ,\mu^N(\tau,\cdot)\rangle \intd \tau\\
+         & + \int_0^t\langle \frac{\partial}{\partial \tau} f(\tau,\cdot),\mu^N(\tau,\cdot)\rangle \intd \tau \\
+         & + \mathcal M^1+\mathcal M^2 + \mathcal M^3.
+    \end{aligned}
+\end{equation*}
+By taking $N\to \infty$ a least formally, we have $\mathcal M^1,\mathcal M^2,\mathcal M^3\to 0 $, under the smoothness and boundedness assumption of $f$ and $r$, i.e.
+\begin{equation*}
+    \begin{aligned}
+         \langle f(t,\cdot),\mu(t,\cdot)\rangle = &\langle f(0,\cdot), \mu^N(0,\cdot)\rangle \\
+         &  +\int_0^t\langle -b(\cdot)\cdot \nabla f (\tau,\cdot) + \frac{1}{2} \nabla \cdot \sigma \nabla f(\tau,\cdot) +r(\cdot),\mu(\tau,\cdot)\rangle\intd \tau\\
+         & + \int_0^t\langle \frac{\partial}{\partial \tau} f(\tau,\cdot) ,\mu(\tau,\cdot)\rangle\intd \tau,
+    \end{aligned}
+\end{equation*}
+where $\mu(t,\intd\bx)= \lim_{N\to\infty}\mu^N(t,\intd \bx)$ and the convergence rate should be $\frac{1}{\sqrt{N}}$.
+The numerical details to implement this can be seen in Algorithm \ref{alg:linear}.
+\begin{algorithm}
+    \caption{Stochastic Branching for linear scalar reaction-diffusion-advection equation} \label{alg:linear}
+    \begin{algorithmic}
+        \Require Initial condition of PDE $u_0(\bx)$, domain descriptor $\Omega$;
+        \Require Fixed initial population size $N$
+        \Require Time step $\tau>0$, horizon $T$; trunction $\mathcal M_K$; basis $\{\psi_m\}_{m\in\mathcal M_K}$
+        \Require Driven term $b(\bx)$
+        \Require Diffusion strength $\sigma(\bx)$
+        \Require Reaction maps $r(\bx)$
+        \Ensure  Solution set of PDE $\mathcal U = \{u_n\}_{n=0}^{T/\tau}$
+        \Procedure{Stochastic\_Branching}{$u_0$,$N$,$\tau$,$\mathcal M_K$,$\{\psi_m\}$,$b$,$\sigma$,$r$}
+        \State \textbf{Initialization}
+        \State $n\gets 0$
+        \State Precomputed normalization constants  $Z\gets \int_\Omega u_0(\bx)\intd \bx$  (either numerically or analytically).
+        \State Generate $N$ initial particle positions set $S_0=\{\bX^i_0\}$ according to the distributions $\rho_0=\frac{u_0}{Z}$ and using the Metropolis--Hastings algorithm.
+        \State \textbf{Interpolate (fixed-$N$):}
+        \State $\tilde\rho_0 \gets \textsc{Interpolate}(S_0,N,\mathcal M_K,\{\psi_m\})$
+        \State Append $\tilde u_0 = Z\tilde \rho_0$ into $\mathcal U$
+        \While {$n\tau<T$}
+            \State \textbf{SDE propagation:}
+            \State $S_n^*\gets \textsc{SDE\_Propagate}(S_n,\tau,b,\sigma)$
+            \State \textbf{Birth--Death:}
+            \State $S_{n+1}\gets \textsc{Birth\_Death}(S_{n},\tau,r)$
+            \State \textbf{refresh fields:}
+            \State $\tilde\rho_{n+1} \gets \textsc{Interpolate}(S_{n+1},N,\mathcal M_K,\{\psi_m\})$
+            \State Append $\tilde u_{n+1} = Z\tilde \rho_{n+1}$ into $\mathcal U$
+            \State $n\gets n+1$
+        \EndWhile
+        \State \Return $\mathcal U$
+        \EndProcedure
+    \end{algorithmic}
+\end{algorithm}
+\section{Extension to PDE system}
+\label{sec:extension}
+To solve PDE systems like Equation \eqref{equ:KS}, we introduce two sets of particles $\bX^i(t)$ and $\bY^i(t)$. Therefore, empirical distribution $\rho_u(t,\intd \bx ) = \mu_u(t,\intd \bx) =  \frac{1}{N_{x,0}}\sum_{i=1}^{N_{x,n}}\delta_{\bX_n^i} $ and $\rho_v(t,\intd \bx ) = \mu_v(t,\intd \bx) =  \frac{1}{N_{y,0}}\sum_{i=1}^{N_{y,n}}\delta_{\bY_n^i}$ are used to approximate $u$ and $v$ separately, by 
+\begin{equation}
+    u(t,\bx) =  Z_u \rho_u(t,\bx), \quad v(t,\bx) =  Z_v \rho_v(t,\bx),
+\end{equation}
+where $Z_u = \int_\Omega u(0,\bx) \intd \bx$ and $Z_v = \int_\Omega v(0,\bx) \intd \bx$. Therefore, the dynamics of \eqref{equ:KS} can be written as 
+% \begin{equation}
+% \begin{aligned}
+%     \partial_t u - \nabla \cdot ( \nabla u - \chi(u) \nabla v) &= f_u(u,v),  & x\in \mathbb R^2 ,t\in(0,T),\\
+%     v_t -\Delta v & = f_v(u,v),  &x\in \mathbb R^2 , t\in(0,T),
+%     \end{aligned}
+% \end{equation}
+\begin{equation}
+    \begin{aligned}
+        \partial_t \rho_u =  \mathcal A_u \rho_u + \mathcal B_u \rho_u,\\
+        \partial_t \rho_v =  \mathcal A_v \rho_v + \mathcal B_v \rho_v
+    \end{aligned}
+\end{equation}
+where $\mathcal A_u \rho = \nabla \cdot ( \nabla \rho - \frac{Z_v}{Z_u} \chi(Z_u\rho) \nabla \rho_v)$ , $\mathcal A_v \rho = \Delta \rho$, $\mathcal B_u \rho_u  = f_u(Z_u\rho_u,Z_v \rho_v)$ and $B_v \rho_v = f_v(Z_u\rho_u,Z_v \rho_v)$. Similar to before, we can approximate the solution by operator splitting. 
+\begin{equation}
+    \begin{aligned}
+        \rho_{u,n}^*  =  \exp(\mathcal A_u\tau) \rho_{u,n}, \quad 
+         \rho_{v,n}^*  =  \exp(\mathcal A_v\tau) \rho_{v,n},  \\
+         \rho_{u,n+1} =  \exp(\mathcal B_u\tau) \rho_{u,n}^*,  \quad 
+         \rho_{v,n+1}  =  \exp(\mathcal B_v\tau) \rho_{v,n}^*,   \\
+    \end{aligned}
+\end{equation}
+where by matching parameters, we have $a_u(\bx;\rho_u,\rho_v) =  - \frac{Z_v}{Z_u\rho_u} \chi(Z_u\rho_u) \nabla \rho_v $ and $a_v(\bx;\rho_u,\rho_v)= 0$. For the diffusion part, we have $\sigma_u(\bx;\rho_u) = \sigma_v(\bx;\rho_v) = 1$. For birth and death part, $\tilde r_u (\bx;\rho_u,\rho_v)=  \frac{f_u(Z_u\rho_u,Z_v \rho_v)}{\rho_u}  $ and $\tilde r_v (\bx;\rho_u,\rho_v )=  \frac{f_v(Z_u\rho_u,Z_v \rho_v)}{\rho_v}  $. The detailed algorithm is shown in  Algorithm \ref{alg:ks}.
+
+\begin{algorithm}
+\caption{Stochastic Branching for keller segel equation}\label{alg:ks}
+\begin{algorithmic}
+\Require Initial PDE data $u_0(\bx),\,v_0(\bx)$; domain descriptor $\Omega$
+\Require Fixed initial population sizes $N_u, N_v$
+\Require Time step $\tau>0$, horizon $T$; truncation $\mathcal M_K$; basis $\{\psi_m\}_{m\in\mathcal M_K}$
+\Require Diffusion strengths $\sigma_u(\bx),\,\sigma_v(\bx)$ \hfill (constant or space-dependent)
+\Require Chemotactic coefficient: $\chi$\\
+\Require Normalization constants $Z_u=\int_\Omega u_0\,\mathrm d\bx$, $Z_v=\int_\Omega v_0\,\mathrm d\bx$
+\Require Reaction maps $f_u,f_v:\mathbb R_{\ge 0}\times\mathbb R_{\ge 0}\to\mathbb R$
+\Ensure Discrete KS fields $\mathcal U=\{\tilde u_n\}_{n=0}^{T/\tau}$, $\mathcal V=\{\tilde v_n\}_{n=0}^{T/\tau}$
+\Procedure{KS\_Stochastic\_Branching}{$u_0,v_0,N_u,N_v,\tau,\mathcal M_K,\newline \phantom{\quad\quad \textbf{procesure} \texttt{KS\_Stochastic\_Branching}(}\{\psi_m\},\sigma_u,\sigma_v,\chi,f_u,f_v$}
+  \State \textbf{Initialization}
+  \State $n\gets 0$
+  \State Generate $N_u$ initial particle positions $S_{u,0}=\{\mathbf X^i_0\}$ via MH from $\rho_{u,0}=u_0/Z_u$
+  \State Generate $N_v$ initial particle positions $S_{v,0}=\{\mathbf Y^i_0\}$ via MH from $\rho_{v,0}=v_0/Z_v$
+  \State \textbf{Interpolate (fixed-$N$):}
+  \State $\tilde\rho_{u,0} \gets \textsc{Interpolate}\big(S_{u,0},N_u,\mathcal M_K,\{\psi_m\}\big)$
+  \State $\tilde\rho_{v,0} \gets \textsc{Interpolate}\big(S_{v,0},N_v,\mathcal M_K,\{\psi_m\}\big)$
+  \State Append $\tilde u_0 = Z_u \tilde\rho_{u,0}$ to $\mathcal U$;\quad Append $\tilde v_0 = Z_v \tilde\rho_{v,0}$ to $\mathcal V$
+  \While{$n\tau<T$}
+    \State \textbf{Set KS drifts using non-starred fields}
+    \State $b_u(\bx) \gets -\dfrac{Z_v}{Z_u\,\tilde\rho_{u,n}(\bx)}\,\chi\!\big(Z_u\tilde\rho_{u,n}(\bx)\big)\,\nabla\tilde\rho_{v,n}(\bx)$
+    \State $b_v(\bx) \gets 0$
+    \State \textbf{SDE propagation}
+    \State $S_{u,n,*} \gets \textsc{SDE\_Propagate}\big(S_{u,n},\tau,b_u,\sigma_u\big)$
+    \State $S_{v,n,*} \gets \textsc{SDE\_Propagate}\big(S_{v,n},\tau,b_v,\sigma_v\big)$
+    \State \textbf{Interpolate at starred positions (fixed-$N$)}
+    \State $\tilde\rho_u^* \gets \textsc{Interpolate}\big(S_{u,n,*},N_u,\mathcal M_K,\{\psi_m\}\big)$
+    \State $\tilde\rho_v^* \gets \textsc{Interpolate}\big(S_{v,n,*},N_v,\mathcal M_K,\{\psi_m\}\big)$
+    \State \textbf{Define birth--death rates using starred fields}
+    \State $r_u(\bx) \gets \dfrac{f_u\!\big(Z_u\tilde\rho_u^*(\bx),\,Z_v\tilde\rho_v^*(\bx)\big)}{\tilde\rho_u^*(\bx)}$
+    \State $r_v(\bx) \gets \dfrac{f_v\!\big(Z_u\tilde\rho_u^*(\bx),\,Z_v\tilde\rho_v^*(\bx)\big)}{\tilde\rho_v^*(\bx)}$
+    \State \textbf{Birth--Death (Bernoulli variant)}
+    \State $S_{u,n+1} \gets \textsc{Birth\_Death}\big(S_{u,n,*},\tau,r_u\big)$
+    \State $S_{v,n+1} \gets \textsc{Birth\_Death}\big(S_{v,n,*},\tau,r_v\big)$
+    \State \textbf{Refresh fields for output (fixed-$N$)}
+    \State $\tilde\rho_{u,n+1} \gets \textsc{Interpolate}\big(S_{u,n+1},N_u,\mathcal M_K,\{\psi_m\}\big)$
+    \State $\tilde\rho_{v,n+1} \gets \textsc{Interpolate}\big(S_{v,n+1},N_v,\mathcal M_K,\{\psi_m\}\big)$
+    \State Append $\tilde u_{n+1}=Z_u\tilde\rho_{u,n+1}$ to $\mathcal U$;\quad Append $\tilde v_{n+1}=Z_v\tilde\rho_{v,n+1}$ to $\mathcal V$
+    \State $n\gets n+1$
+  \EndWhile
+  \State \Return $\mathcal U,\ \mathcal V$
+\EndProcedure
+\end{algorithmic}
+\end{algorithm}
+
+
+
+% \begin{algorithm}
+% \caption{Stochastic Branching Method for the KS Equation}\label{alg:cap}
+% \begin{algorithmic}
+% \Require Initial population size $N_{x,0}, N_{y,0}$, time step size $\tau$, current step $n = 0$, and Fourier mode truncation $K$.
+% \Require Precomputed normalization constants $Z_u$ and $Z_v$ (either numerically or analytically).
+% \State Generate $N_{x,0}$ and $N_{y,0}$ initial particle positions 
+% $\{\bX^i_0\}$ and $\{\bY^i_0\}$ according to the distributions 
+% $\rho_u$ and $\rho_v$, respectively, using the Metropolis--Hastings algorithm.
+% \State Interpolate the particle positions $\bX^i_n$ and $\bY^i_n$ onto Fourier modes up to the truncation $K$ to obtain the Fourier representations $\tilde{\rho}_u$ and $\tilde{\rho}_v$.
+
+% \While{$n \tau < T$} \Comment{Assuming $T \mid \tau$}
+%     \State Update the positions of the particles:
+%     \For{$i=1$ to $N_{x,n}$}
+%         \[
+%         \bX^i_{n,*} = \bX^i_n - \frac{Z_v}{Z_u \tilde{\rho}_u(\bX^i_n)} \chi(Z_u \tilde{\rho}_u(\bX^i_n)) \nabla \tilde{\rho}_v(\bX^i_n) \tau + \sqrt{2\tau} \xi^{i}_{u,n}
+%         \]
+%         where $\xi^{i}_{u,n} \sim \mathcal{N}(0, \mathbb{I})$.
+%     \EndFor
+%     \For{$i=1$ to $N_{y,n}$}
+%         \[
+%         \bY^i_{n,*} = \bY^i_n + \sqrt{2\tau} \xi^{i}_{v,n}
+%         \]
+%         where $\xi^{i}_{v,n} \sim \mathcal{N}(0, \mathbb{I})$.
+%     \EndFor
+
+%     \State Interpolate the updated positions $\bX^i_{n,*}$ and $\bY^i_{n,*}$ onto Fourier modes up to truncation $K$ to obtain the Fourier representations $\tilde{\rho}_u^*$ and $\tilde{\rho}_v^*$.
+
+%     \For{$i=1$ to $N_{x,n}$}
+%         \State Compute the branching rate $\tilde{r}_u^i = \frac{f_u(Z_u \rho_u(\bX^i_{n,*}), Z_v \rho_v(\bX^i_{n,*}))}{\rho_u(\bX^i_{n,*})}$.
+%         \If{$\tilde{r}_u^i > 0$}
+%             \State Duplicate $\bX^i_{n,*}$ with probability $1 - \exp(-\tilde{r}_u^i \tau)$.
+%         \ElsIf{$\tilde{r}_u^i < 0$}
+%             \State Kill $\bX^i_{n,*}$ with probability $1 - \exp(\tilde{r}_u^i \tau)$.
+%         \EndIf
+%     \EndFor
+
+%     \For{$i=1$ to $N_{y,n}$}
+%         \State Compute the branching rate $\tilde{r}_v^i = \frac{f_v(Z_u \rho_u(\bY^i_{n,*}), Z_v \rho_v(\bY^i_{n,*}))}{\rho_v(\bY^i_{n,*})}$.
+%         \If{$\tilde{r}_v^i > 0$}
+%             \State Duplicate $\bY^i_{n,*}$ with probability $1 - \exp(-\tilde{r}_v^i \tau)$.
+%         \ElsIf{$\tilde{r}_v^i < 0$}
+%             \State Kill $\bY^i_{n,*}$ with probability $1 - \exp(\tilde{r}_v^i \tau)$.
+%         \EndIf
+%     \EndFor
+
+%     \State Update the population sizes: $N_{x,n+1}$ and $N_{y,n+1}$.
+%     \State Increment the step: $n = n + 1$.
+% \EndWhile
+% \end{algorithmic}
+% \end{algorithm}
+
+% \section{Kolmogorov forward equation and }
+% Recall (overdamped) Langevin diffusion is the solution of the following stochastic differential equation,
+% where $\bX_t \in \mathbb R^d$ and .  The probability density function $\rho(t)$ of \eqref{equ:overd_langevin} solves the Kolmogorov forward equation on $\mathbb R^d$
+% \begin{equation} \label{equ:FPE}
+%     \partial_t  \rho =  \nabla \cdot ( \nabla \rho +\rho \bF).
+% \end{equation}
+% The main idea of the work is to use the branching process to approximate the evolution of the nonlinearity locally. Before combing with the Langevin dynamics, let us consider the pure branching process given by 
+% \begin{equation}
+%     \partial_t \rho =  V(x) \rho. 
+% \end{equation}
+% It can be viewed as an infinite system of ordinary differential equations with index $x\in \mathbb R^d$ without any spatial derivative. 
+% If $V(t,x) > 0$, then particles located at $x$ undergo duplication, representing local exponential growth. Conversely, if $V(t,x)<0$, particles at 
+% $x$ are removed, corresponding to exponential decay. In this way, the pure branching process encodes a pointwise multiplicative effect on the density, without involving any spatial interactions.
+% Combining the Langevin dynamics with the branching process yields the following equation for the evolution of the probability density: 
+% \begin{equation} \label{equ:FPE_BDL}
+% \partial_t \rho = \nabla \cdot ( \nabla \rho + \rho \bF ) + V(x) \rho, 
+% \end{equation} 
+% where the first term represents diffusion and drift due to the Langevin process, and the second term captures local growth or decay of mass driven by the branching mechanism.
+
+% The solution of \eqref{equ:FPE_BDL} can be approximated by the empirical measure $\mu^{N}_t$ of a collection of interacting particles $\{x_t^i\}_{i=1}^{N_t}$ evolving as followings $\mu^{N}_t = \frac{1}{N} \sum_{i=1}^{N_t} \delta_{x_t^i} $:
+% \begin{enumerate}
+%     \item[Step 1:] Between birth/death events, each particle $\bX^i_t$ diffuses independently according to \eqref{equ:overd_langevin}.
+%     \item[Step 2:] Each particle also has an independent instantaneous birth-death rate $V(\bX_t^i).$
+% \end{enumerate}
+% Therefore, we can approximate the solution of \eqref{equ:FPE_BDL} by a density estimation.  Unlike the classical mesh-based method, this approach does not require spatial discretization. This is the key reason why this method is promising to overcome the curse of dimensionality in high-dimensional PDEs.
+
+
+% \begin{proposition}
+% Let $\mu^N_t$ be the empirical measure of particles defined above. Assume that $\mu_0^N \rightharpoonup \rho_0$ as $N\to \infty$. Then for all $t\in (0,\infty)$, we have $\mu^N_t \to \rho_t$, where $\rho_t$ solves \eqref{equ:FPE_BDL} with initial condition $\rho_0$
+% \end{proposition}
+% \begin{proof}
+%     First, we notice that the evolution of $\mu^N_t$ is Markovian since the particles $\bX^i_t$ are, and these particles are interchangeable. Following the proof in \cite{rotskoff2019global}, we want to derive the generator and the backward Kolmogorov equation of the measure-valued Markov process. Let's define for some smooth functional $\Psi:\mathcal P  (\mathbb R ^d) \to \mathbb R $, the generator $\mathcal L_N$
+%     \[
+%     (\mathcal L_N \Psi ) (\mu^N) := \lim_{t\to 0^+} \frac{\mathbb E_0 \Psi ( \mu_t^N) - \Psi(\mu^N)}{t},
+%     \]
+%     where $\mathbb E_0 $ denotes the expectation of $\Psi(\mu^N_t)$ conditioned on that $\mu_0^N=\mu^N$. To compute the limit, notice that if particle $\bX_t^i$ is killed at time $t$, the changes this indeuced on $\mu^N_t$ is 
+%     \[
+%     \mu^N_t =  \mu_{t_-}^N - \frac{1}{N} \delta_{\bX^i}.
+%     \]
+%     Similarly if particle $\bX_t^i$ is duplicated at time $t$, the changes this indeuced on $\mu^N_t$ is 
+%     \[
+%     \mu^N_t =  \mu_{t_-}^N + \frac{1}{N} \delta_{\bX^i}.
+%     \]
+%     If we account for the rate at which these events occur, as well as the effect of the diffusion process, we can explicitly compute the generator 
+%     \[
+%     \begin{aligned}
+%     (\mathcal L _N \Psi)(\mu^N) =& \frac{1}{N} \sum_i ^N \int \left( 
+%     \bF(\bX^i) \cdot \nabla D_{\mu^N} \Psi(\bX^i)  
+%     + \Delta D_{\mu^N} \Psi(\bX^i)
+%     \right) \delta_{\bX^i}(\intd x) \\
+%     &+ \frac{1}{N} \sum_{i=1}^N \int V(\bX^i) \delta_{\bX^i}(\intd x)\left(\Psi(\mu^N + \frac{1}{N} \text{sign} V(\bX^i)\delta_{\bX^i} ) - \Psi(\mu^N)\right),
+%     \end{aligned}
+%     \]
+%     where the functional derivative $D_\mu \Psi$ is the function from $\mathbb R^d \to \mathbb R$ defined by that for any signed measure $\nu$ with $\int \nu(\intd x)= 0  $, 
+%     \[
+%     \lim_{\epsilon \to 0 } \frac{\Psi(\mu+\epsilon\nu)-\Psi(\mu)}{\epsilon} = \int D_\mu\Psi(x)\nu(\intd x).
+%     \]
+%     By the definition of the empirical measure $\mu^N$, the generator $\mathcal L_N$ can be rewritten as 
+%     \[
+%     \begin{aligned}
+%     (\mathcal L _N \Psi)(\mu^N) =& \int \left( 
+%     \bF(x) \cdot \nabla D_{\mu^N} \Psi(x)  
+%     + \Delta D_{\mu^N} \Psi(x)
+%     \right) \mu^N(\intd x)  \\
+%     +&  \int V(x) \mu^N(\intd x) \left(\Psi(\mu^N + \frac{1}{N} \text{sign} V(x)\delta_{x} ) - \Psi(\mu^N)\right) ,
+%     \end{aligned}
+%     \]
+% \end{proof}
+% \section{Stochastic Branching method}
+% In this work, we aim to extend the above framework to fully nonlinear PDEs. A natural strategy is to adopt an iterative scheme that treats the nonlinear equation as a linear one at each iteration, conditioned on the current estimate of the solution. Specifically, at each time $t$, the equation \eqref{equ:KS} can be approximated by the following linearized system: 
+% \begin{equation}
+% \begin{aligned}
+%     \partial_t \rho_u &=  \nabla \cdot \left ( \bF_u(t,x) \rho_u +\nabla \rho_u \right) + V_u(t,x) \rho_u,\\
+%     \partial_t \rho_v &=  \nabla \cdot \left ( \bF_v(t,x) \rho_v +\nabla \rho_v \right) + V_v(t,x) \rho_v,
+% \end{aligned}
+% \end{equation}
+% where the drift and reaction terms are given by $\bF_u =  -\frac{\chi(u)}{u}\nabla v, \bF_v = 0, V_u = \frac{f_u(u,v)}{u}$ and $V_v= \frac{f_v(u,v)}{v}$. At each iteration, the fields $u$ and $v$ are reconstructed from the particle densities as  $u = C_u \rho_u$ and $v= C_v\rho_v$, where $C_u = \int u(0,\bx)\intd \bx$ and $C_v = \int v(0,\bx)\intd \bx$ are normalization constants.
+
+\section{Numerical Examples}
+In this section, we present numerical examples in two-dimensional space to verify the accuracy of our method.
+
+
+\textbf{Case 1:} We begin by solving the following problem in a periodic domain $\Omega = [0, 2\pi] \times [0, 2\pi]$:
+\begin{equation} \label{equ:case1}
+\begin{aligned}
+&u_t - \nabla \cdot \left(\nabla u - u \nabla v \right) = 0  , &\quad \bx \in \Omega , t > 0, \\
+&v_t - \Delta v = u - v , & \quad \bx \in \Omega, t > 0.
+\end{aligned}
+\end{equation}
+The system is subject to periodic boundary conditions, with initial conditions given by:
+$$
+u_0 (\bx) =  \sin^2(\bx_1) \cos^2(\bx_2), \quad v_0(\bx) =  \cos(\bx_1) + \cos(\bx_2) + 2.
+$$
+The temporal evolution of the total mass of $v$ is characterized by
+$$
+M(t) = \int v(t,\bx) \, \intd \bx.
+$$
+It can be shown that the rate of change of the mass is given by
+$$
+\dot{M}(t) = -M(t) + \int u(x,0) \, dx = -M(t) + \pi^2.
+$$
+We present the numerical reuslts for $M(t)$, comparing our method with the exact solution in Figure~\ref{fig:total_mass}.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.8\linewidth]{figure/total_mass.pdf}
+\caption{Time evolution of the total mass of $v$ for different numbers of particles. The left panel shows the total mass over time, while the right panel displays the corresponding error in the total mass.}
+\label{fig:total_mass}
+\end{figure}
+
+Additionally, we compare our particle-based method with finite difference method with a grid of $100 \times 100$ points. The result for $u(t)$ and $v(t)$ at $t = 0.0, 0.1, 0.2, 0.3, 0.4$ are shown in Figures~\ref{fig:fd_comparison_u} and~\ref{fig:fd_comparison_v}, respectively. Figure~\ref{fig:convergence_error} illustrates the reduction in relative $L^2$ error as the number of samples increases, showing a clear $1/\sqrt{N}$ convergence rate.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{figure/case1_u.pdf}
+\caption{Comparison of $u$ between the finite difference method with a $100 \times 100$ grid and our particle-based method at $t = 0.0, 0.1, 0.2, 0.3, 0.4$.}
+\label{fig:fd_comparison_u}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{figure/case1_v.pdf}
+\caption{Comparison of $v$ between the finite difference method with a $100 \times 100$ grid and our particle-based method at $t = 0.0, 0.1, 0.2, 0.3, 0.4$.}
+\label{fig:fd_comparison_v}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.8\linewidth]{figure/case1_err.pdf}
+\caption{Relative $L^2$ error of $u$ and $v$ with respect to the number of samples $N_0$, compared with $N_0 = 320,000$.}
+\label{fig:convergence_error}
+\end{figure}
+
+\textbf{Case 2:} For the second case, we solve the system \eqref{equ:case1} with the initial conditions:
+
+$$
+u_0(\bx) = 840 \exp\left(-84 (\bx_1^2 + \bx_2^2)\right), \quad v_0(\bx) = 420 \exp\left(-42(\bx_1^2 + \bx_2^2)\right).
+$$
+
+The result for $u$ is shown in Figure~\ref{fig:case2_u}, where we observe that the solution undergoes a blow-up, a phenomenon that is generally difficult to capture using traditional function spaces. Furthermore, the $L^2$ norm of the numerical solution for different values of $N_0$ is shown in Figure~\ref{fig:case2_l2}, demonstrating that varying $N_0$ results in similar growth patterns, in contrast to the discontinuous Galerkin method \cite{li2017local}, where the solution is highly sensitive to the mesh size.
+
+\begin{figure}
+\centering
+\includegraphics[width=0.8\linewidth]{figure/case2_u.pdf}
+\caption{Numerical approximations of $u$ at $t = 0, 5 \times 10^{-5}, 10^{-4}, 1.5 \times 10^{-4}$.}
+\label{fig:case2_u}
+\end{figure}
+
+\begin{figure}
+\centering
+\includegraphics[width=0.5\linewidth]{figure/case2_L2.pdf}
+\caption{Time evolution of the $L^2$-norm of the numerical approximation for different values of $N_0$.}
+\label{fig:case2_l2}
+\end{figure}
+
+\textbf{Case 3:} Lastly, we examine a fully nonlinear case with logistic growth for the cells, where the interaction between the particles is not known a priori. The system is given by:
+\begin{equation}
+\label{equ:nonliear}
+\begin{aligned}
+&u_t - \nabla \cdot \left(\nabla u - \frac{4u}{1 + u^2} \nabla v \right) = u(1 - u), & \quad \bx \in \Omega, t > 0, \\
+&v_t - \Delta v = u - v, & \quad \bx \in \Omega, t > 0.
+\end{aligned}
+\end{equation}
+The theoretical results of this model can be found in \cite{osaki2002exponential, wang2007classical, wrzosek2004global}. The initial conditions are specified as:
+$$
+    \begin{aligned}
+        u_0(\bx) =&  \exp\left( (\bx_1 - 0.5\pi)^2 + (\bx_2 - 0.5\pi)^2 \right) + \exp\left( (\bx_1 - \pi)^2 + (\bx_2 - \pi)^2 \right) \\
+        &+ \exp\left( (\bx_1 - 1.5\pi)^2 + (\bx_2 - 1.5\pi)^2 \right), \\
+        v_0(\bx) =&  \exp\left( (\bx_1 - 0.4\pi)^2 + (\bx_2 - 0.4\pi)^2 \right) + \exp\left( (\bx_1 - 0.8\pi)^2 + (\bx_2 - 0.8\pi)^2 \right) \\
+        &+ \exp\left( (\bx_1 - 1.2\pi)^2 + (\bx_2 - 1.2\pi)^2 \right) + \exp\left( (\bx_1 - 1.6\pi)^2 + (\bx_2 - 1.6\pi)^2 \right).
+    \end{aligned}
+$$
+Since both the birth and death of cells, as well as the chemical concentrations $f_u$ and $f_v$, are non-zero, the particle method proposed in \cite{wang2025novel}, which only accounts for advection and diffusion, has limited capability in addressing these effects.  In contrast, our method is sufficiently general to handle these additional complexities.
+Figures~\ref{fig:case3_u} and~\ref{fig:case3_v} display the time evolution of the solutions $u$ and $v$, respectively, obtained using both the particle-based and finite difference methods.
+
+\begin{figure}
+\centering
+\includegraphics[width=0.8\linewidth]{figure/case3_u.pdf}
+\caption{Time evolution of the solution $u$ computed using the particle-based and finite difference methods.}
+\label{fig:case3_u}
+\end{figure}
+
+\begin{figure}
+\centering
+\includegraphics[width=0.8\linewidth]{figure/case3_v.pdf}
+\caption{Time evolution of the solution $v$ computed using the particle-based and finite difference methods.}
+\label{fig:case3_v}
+\end{figure}
+
+\section{Discussion}
+The framework presented here offers a fresh particle-based approach to solving reaction–diffusion–advection equations. Unlike traditional particle or Lagrangian schemes, our method is not restricted to conservation laws and is able to capture aggregation and focusing phenomena in the density variable with high fidelity. This highlights its potential as a useful tool for studying a broad class of nonlinear transport and interaction problems.
+
+From the theoretical perspective, the current work provides heuristic intuition primarily in the linear case. Developing a rigorous convergence theory in more general nonlinear settings remains a challenging but exciting direction for future research. On the numerical side, while the interpolation of measures poses difficulties in high-dimensional problems, this limitation also points to promising avenues for methodological innovation. In particular, Fourier interpolation combined with low-rank approximations~\cite{tang2025solving} could provide a powerful mechanism for scaling the algorithm efficiently to higher dimensions.
+
+
+
+
+
+\bibliographystyle{siamplain}
+\bibliography{main}
+\end{document}
