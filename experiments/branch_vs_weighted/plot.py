@@ -16,7 +16,9 @@ import os, sys, csv
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")
+import matplotlib as mpl
 import matplotlib.pyplot as plt
+from matplotlib.ticker import NullFormatter
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
@@ -24,6 +26,11 @@ sys.path.insert(0, os.path.join(REPO, "experiments"))
 from paper_style import apply_style, fig_size, TEXTWIDTH_IN, METHOD_COLORS, METHOD_LABELS
 
 apply_style()
+# Both figures are included at 0.4\linewidth side by side, so generate BOTH at the same
+# SQUARE physical size -> equal displayed size and consistent font scaling at 0.4 width.
+mpl.rcParams.update({"axes.labelsize": 8.5, "xtick.labelsize": 8, "ytick.labelsize": 8,
+                     "legend.fontsize": 7.5})
+FIG_S = 0.46 * TEXTWIDTH_IN          # square side, in inches
 RD = os.path.join(REPO, "reference_results", "branch_vs_weighted")
 FIGDIR = os.path.join(REPO, "paper", "figure")
 METHODS = ["weighted", "poisson", "minvar"]
@@ -61,14 +68,15 @@ def plot_snapshots(rows=None):
     panels = [("reference", "reference"), ("weighted", "weighted"),
               ("weighted_ess", "weighted + ESS"), ("minvar", "min.-variance")]
     vmax = max(float(np.max(d[k])) for k, _ in panels)
-    fig, axes = plt.subplots(2, 2, figsize=(0.62 * TEXTWIDTH_IN, 0.66 * TEXTWIDTH_IN),
-                             constrained_layout=True)
+    fig, axes = plt.subplots(2, 2, figsize=(FIG_S, FIG_S), constrained_layout=True)
     for ax, (key, title) in zip(axes.ravel(), panels):
         im = ax.imshow(d[key], origin="lower", extent=ext, vmin=0, vmax=vmax,
                        cmap="viridis", aspect="equal")
-        ax.set_title(title, fontsize=8)
+        ax.set_title(title, fontsize=8, pad=2)
         ax.set_xticks([]); ax.set_yticks([]); ax.grid(False)
-    cb = fig.colorbar(im, ax=axes, shrink=0.9, pad=0.02, aspect=22)
+    # colorbar on the LEFT; extra pad so the bottom-left panel title clears the bar/ticks
+    cb = fig.colorbar(im, ax=axes, location="left", shrink=0.92, pad=0.08, aspect=22)
+    cb.set_ticks([0, 200, 400, 600])          # sparse, readable tick set
     cb.ax.tick_params(labelsize=7)
     _save(fig, "snapshots_final.pdf")
     plt.close(fig)
@@ -120,11 +128,13 @@ def plot_l2(rows):
     """Fig. 4: relative L2 error vs time for weighted, weighted+ESS, min.-variance
     (same initial budget N0=2e4).  Weighted/minvar from metrics.csv; ESS from
     fig52_ess_l2_vs_t.csv."""
-    fig, ax = plt.subplots(figsize=fig_size(0.5, aspect=0.92), constrained_layout=True)
+    # square AXES BOX (set_box_aspect) so the plot reads the same shape/size as the square
+    # snapshot panels at 0.4\linewidth.  Short labels keep the legend inside the box.
+    fig, ax = plt.subplots(figsize=(FIG_S, FIG_S), constrained_layout=True)
     ax.set_box_aspect(1)
-    series = [("weighted", METHOD_COLORS["weighted"], METHOD_LABELS["weighted"]),
-              ("__ess__", ESS_COLOR, ESS_LABEL),
-              ("minvar", METHOD_COLORS["minvar"], METHOD_LABELS["minvar"])]
+    series = [("weighted", METHOD_COLORS["weighted"], "weighted"),
+              ("__ess__", ESS_COLOR, "weighted + ESS"),
+              ("minvar", METHOD_COLORS["minvar"], "min.-variance")]
     for m, color, label in series:
         if m == "__ess__":
             t, mu, sd = _ess_seed_avg()
@@ -133,9 +143,18 @@ def plot_l2(rows):
         ax.semilogy(t, mu, color=color, lw=1.3, label=label)
         ax.fill_between(t, np.maximum(mu - sd, 1e-12), mu + sd, color=color, alpha=0.18, lw=0)
     ax.set_xlabel(r"$t$"); ax.set_ylabel(r"relative $L^2$ error")
+    # log-y with several labelled dec'l ticks (data span ~0.04--0.35 -> one decade only,
+    # so set explicit math-formatted ticks instead of a single 10^-1)
+    ax.set_ylim(0.035, 0.42)
+    ax.set_yticks([0.04, 0.06, 0.1, 0.2, 0.3])
+    ax.set_yticklabels([r"$0.04$", r"$0.06$", r"$0.1$", r"$0.2$", r"$0.3$"])
+    ax.yaxis.set_minor_formatter(NullFormatter())
     ax.legend(loc="lower left", fontsize=7.5, frameon=False, handlelength=1.4,
-              borderaxespad=0.5, labelspacing=0.3)
-    _save(fig, "l2_vs_t.pdf")
+              borderaxespad=0.4, labelspacing=0.3)
+    # save at the full SQUARE figsize (no tight crop) so the square box is centred and the
+    # two figures display at the same size at 0.4\linewidth
+    with mpl.rc_context({"savefig.bbox": "standard"}):
+        _save(fig, "l2_vs_t.pdf")
     plt.close(fig)
 
 
