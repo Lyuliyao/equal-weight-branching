@@ -1,0 +1,38 @@
+#!/bin/bash
+#SBATCH --job-name=sf_blob_sweep
+#SBATCH --array=0-23
+#SBATCH --time=02:00:00
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=16G
+#SBATCH --partition=general-short
+#SBATCH --output=%x_%a_%A.out
+#
+# Blob-residual solver-field sweep (solver-hybrid blob plan §7.1), one (config,seed)
+# per array task.  Compares the global-K Fourier drift, the best spectral Form-I
+# residual (Kl=24, taper_hi=0.25), and the eta_h BLOB residual at several frac_L
+# bandwidths (h=c_h*L bracketing the L/Kl~0.042 spectral scale), plus one
+# spacing-rule blob (the plan's noisy regime).  Logs the CORRECTED dual CFL
+# (drift_cfl_solver_field vs drift_cfl_fourier_diag).
+#
+#   RUNDIR=/.../reference_results/keller_segel_ldg_pp/sf_blob_<run_id> \
+#       sbatch run_solver_field_blob_sweep.sb
+#
+PY=/mnt/home/lyuliyao/.conda/envs/heat/bin/python
+EXPDIR=/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching/experiments/keller_segel/ldg_comparison
+cd "$EXPDIR" || exit 1
+: "${RUNDIR:?set RUNDIR to the output path}"
+
+cfg=$(( SLURM_ARRAY_TASK_ID / 4 ))
+seed=$(( SLURM_ARRAY_TASK_ID % 4 ))
+case $cfg in
+  0) NAME=current_fourier;     FLAGS="--solver_field current_fourier" ;;
+  1) NAME=spectral_taper0.25;  FLAGS="--solver_field two_level_spectral_residual --Kg 8 --Kl 24 --hybrid_taper_hi 0.25" ;;
+  2) NAME=blob_fracL_ch0.04;   FLAGS="--solver_field two_level_blob_residual --Kg 8 --blob_h_rule frac_L --blob_ch 0.04" ;;
+  3) NAME=blob_fracL_ch0.06;   FLAGS="--solver_field two_level_blob_residual --Kg 8 --blob_h_rule frac_L --blob_ch 0.06" ;;
+  4) NAME=blob_fracL_ch0.09;   FLAGS="--solver_field two_level_blob_residual --Kg 8 --blob_h_rule frac_L --blob_ch 0.09" ;;
+  5) NAME=blob_corespacing_ch1.2; FLAGS="--solver_field two_level_blob_residual --Kg 8 --blob_h_rule core_spacing --blob_ch 1.2" ;;
+esac
+
+$PY simulation.py --N 80000 --K 10 --tau 2.5e-7 --n_steps 800 --seed $seed \
+    --report_times 6e-5 1.2e-4 2e-4 $FLAGS --diag_every 4 --dg_readout_n 80 160 \
+    --outdir "${RUNDIR}/${NAME}_seed${seed}"

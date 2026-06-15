@@ -67,6 +67,7 @@ from adaptive_window import compute_window, density_coeffs_y  # noqa: E402
 from particle_dg_readout import (  # noqa: E402  LDG-matched P1 DG readout (Version A)
     project_particles_to_p1dg, dg_l2_norm, dg_inner_product, dg_peak)
 from hybrid_vfield import HybridVField  # noqa: E402  solver-level residual v-field
+from blob_residual_vfield import BlobResidualVField  # noqa: E402  blob-residual field
 from field_pp import (  # noqa: E402
     grad_v_from_cloud, recon_peak, recon_l2, recon_field_grid,
 )
@@ -149,6 +150,56 @@ def coeffs_v_on_window(X2, x_c, L, K, N0, mask_outside):
         coeff_v = density_coeffs_y(Yv, K)
         mass_v_eff = N2 / N0 * MASS
     return coeff_v, float(mass_v_eff), outside_frac
+
+
+# ---------------------------------------------------------------------------
+# SOLVER FIELD dispatch (shared by the transport step AND diagnostics so the
+# logged solver-field CFL matches the field that actually drives -- and aborts --
+# the u-particles; plan §5).  Returns (gradv_u, info) with gradv_u = +grad v_hat
+# at the u-cloud for the SELECTED solver field.
+# ---------------------------------------------------------------------------
+def compute_solver_gradv(args, X1, X2, x_c, L, M_v_eff, coeff_v, taper_s):
+    info = {"mode": "current_fourier", "h": np.nan, "residual_E": np.nan}
+    mode = args.solver_field
+    # single-K Fourier (default), or any mode with an empty v-cloud -> fall back
+    if mode == "current_fourier" or int(X2.shape[0]) == 0:
+        return grad_v_from_cloud(X1, coeff_v, x_c, L, M_v_eff, taper_s=taper_s), info
+    # in-window v-cloud (same masking convention as coeffs_v_on_window)
+    Yv = (np.asarray(X2) - np.asarray(x_c)) * (np.pi / L)
+    inb = np.max(np.abs(Yv), axis=1) <= np.pi
+    Xin = jnp.asarray(np.asarray(X2)[inb])
+    if int(Xin.shape[0]) == 0:
+        info["mode"] = "current_fourier(empty_window)"
+        return grad_v_from_cloud(X1, coeff_v, x_c, L, M_v_eff, taper_s=taper_s), info
+    if mode == "two_level_spectral_residual":
+        ts_hi = None if args.hybrid_taper_hi < 0 else args.hybrid_taper_hi
+        hyb = HybridVField(Xin, x_c, L, M_v_eff, args.Kg, args.Kl, taper_s=taper_s,
+                           frac_in=args.hybrid_frac_in, frac_out=args.hybrid_frac_out,
+                           taper_s_hi=ts_hi)
+        info["mode"] = mode
+        return hyb.grad(X1), info
+    if mode == "two_level_blob_residual":
+        # robustness gate: a degenerate (tiny) in-window v-cloud makes the blob a
+        # shot-noise spike; fall back to the smooth single-K field instead.
+        if int(Xin.shape[0]) < int(args.blob_min_count):
+            info["mode"] = "blob(degenerate_fallback)"
+            return grad_v_from_cloud(X1, coeff_v, x_c, L, M_v_eff, taper_s=taper_s), info
+        R_for_h = N_for_h = None
+        if args.blob_h_rule in ("core_spacing", "inner_spacing"):
+            q = 0.8 if args.blob_h_rule == "core_spacing" else 0.2
+            r = jnp.sqrt(jnp.sum((X1 - x_c) ** 2, axis=1))
+            R_for_h = float(jnp.quantile(r, q))
+            N_for_h = int(jnp.sum(r <= R_for_h))
+        blob = BlobResidualVField(
+            Xin, x_c, L, M_v_eff, args.Kg, taper_s=taper_s,
+            frac_in=args.hybrid_frac_in, frac_out=args.hybrid_frac_out,
+            h_rule=args.blob_h_rule, c_h=args.blob_ch,
+            R_for_h=R_for_h, N_for_h=N_for_h,
+            n_quad=(None if args.blob_n_quad <= 0 else args.blob_n_quad))
+        d = blob.diagnostics()
+        info.update(mode=mode, h=d["h"], residual_E=d["residual_energy_fraction"])
+        return blob.grad(X1), info
+    raise ValueError(f"unknown --solver_field {mode}")
 
 
 # ---------------------------------------------------------------------------
@@ -260,7 +311,13 @@ def run(args):
               + [f"R_{q}" for q in qs]                       # R_0.5 R_0.8 R_0.9 R_0.99
               + ["N_0.5", "N_0.8", "N_0.9", "R50_over_heff",
                  "peak_PK_u", "peak_PK_v", "S_L2_u", "S_L2",
-                 "outside_v_frac", "drift_cfl", "n_birth", "n_death"])
+                 "outside_v_frac", "drift_cfl", "n_birth", "n_death",
+                 # plan §5: log the SELECTED solver field's CFL (== drift_cfl, the
+                 # guard quantity) AND the single-K Fourier diagnostic separately,
+                 # so a hybrid run's drift is no longer conflated with the Fourier diag.
+                 "drift_cfl_solver_field", "drift_cfl_fourier_diag",
+                 "max_grad_solver_field", "max_grad_fourier_diag",
+                 "solver_field_mode", "solver_field_h", "solver_field_residual_E"])
     dg_ns = list(args.dg_readout_n)
     for nd in dg_ns:                  # Version A: LDG-matched P1 DG readout columns
         header += [f"S_dg_raw_{nd}", f"S_dg_cross_{nd}", f"peak_dg_{nd}",
@@ -294,16 +351,26 @@ def run(args):
         coeff_v, M_v_eff, outside_v_frac = coeffs_v_on_window(
             X2, x_c, L, args.K, N0, mask_v_outside)
         peak_v = float(recon_peak(coeff_v, x_c, L, M_v_eff, n_grid=args.diag_grid))
-        gradv_u = grad_v_from_cloud(X1, coeff_v, x_c, L, M_v_eff, taper_s=taper_s)
-        max_gv = float(jnp.max(jnp.sqrt(jnp.sum(gradv_u ** 2, axis=1)))) \
+        # Fourier diagnostic gradient (single-K, the previous `drift_cfl` meaning) ...
+        gradv_fourier = grad_v_from_cloud(X1, coeff_v, x_c, L, M_v_eff, taper_s=taper_s)
+        max_gv_f = float(jnp.max(jnp.sqrt(jnp.sum(gradv_fourier ** 2, axis=1)))) \
             if N1 > 0 else np.nan
-        drift_cfl = chi * max_gv * tau / np.sqrt(2.0 * tau)
+        cfl_fourier = chi * max_gv_f * tau / np.sqrt(2.0 * tau)
+        # ... and the SELECTED solver field gradient (what actually drives/aborts).
+        gradv_solver, sf_info = compute_solver_gradv(
+            args, X1, X2, x_c, L, M_v_eff, coeff_v, taper_s)
+        max_gv_s = float(jnp.max(jnp.sqrt(jnp.sum(gradv_solver ** 2, axis=1)))) \
+            if N1 > 0 else np.nan
+        cfl_solver = chi * max_gv_s * tau / np.sqrt(2.0 * tau)
+        drift_cfl = cfl_solver                       # `drift_cfl` == guard quantity
         row = ([i, i * tau, N0, args.K, M_u, M_v, float(x_c[0]), float(x_c[1]),
                 L, h_eff, S_u, R2]
                + [radii[q] for q in qs]
                + [counts[0.5], counts[0.8], counts[0.9], R50_over_heff,
                   peak, peak_v, S_L2_u, S_L2_u,        # S_L2 == S_L2_u alias
-                  outside_v_frac, drift_cfl, int(n_birth), int(n_death)])
+                  outside_v_frac, drift_cfl, int(n_birth), int(n_death),
+                  cfl_solver, cfl_fourier, max_gv_s, max_gv_f,
+                  sf_info["mode"], sf_info["h"], sf_info["residual_E"]])
         # ---- Version A: LDG-matched P1 DG readout from the u-cloud ----
         if dg_ns:
             Xu = np.asarray(X1); wpp = MASS / N0       # equal per-particle u mass
@@ -395,22 +462,10 @@ def run(args):
         coeff_v, M_v_eff, _ = coeffs_v_on_window(
             X2, x_c, L, args.K, N0, mask_v_outside)
 
-        # ---- 2b. SOLVER FIELD: grad v_hat for the u-drift (Form I hybrid optional)
-        if args.solver_field == "two_level_spectral_residual":
-            Yv = (np.asarray(X2) - np.asarray(x_c)) * (np.pi / L)
-            inb = np.max(np.abs(Yv), axis=1) <= np.pi          # in-window v-particles
-            Xin = jnp.asarray(np.asarray(X2)[inb])
-            if int(Xin.shape[0]) > 0:
-                ts_hi = None if args.hybrid_taper_hi < 0 else args.hybrid_taper_hi
-                hyb = HybridVField(Xin, x_c, L, M_v_eff, args.Kg, args.Kl,
-                                   taper_s=taper_s, frac_in=args.hybrid_frac_in,
-                                   frac_out=args.hybrid_frac_out, taper_s_hi=ts_hi)
-                gradv_u = hyb.grad(X1)
-            else:
-                gradv_u = grad_v_from_cloud(X1, coeff_v, x_c, L, M_v_eff, taper_s=taper_s)
-        else:
-            gradv_u = grad_v_from_cloud(X1, coeff_v, x_c, L, M_v_eff, taper_s=taper_s)
-        # ---- 2c. GUARD: drift CFL blow-out --------------------------------
+        # ---- 2b. SOLVER FIELD: grad v_hat for the u-drift (shared dispatch) -
+        gradv_u, sf_info = compute_solver_gradv(
+            args, X1, X2, x_c, L, M_v_eff, coeff_v, taper_s)
+        # ---- 2c. GUARD: drift CFL blow-out (on the ACTUAL solver field) ----
         gradv_chk = gradv_u
         if not bool(jnp.all(jnp.isfinite(gradv_chk))):
             print(f"[WARN] step {i}: non-finite grad v detected; stopping loop "
@@ -418,12 +473,37 @@ def run(args):
             aborted = True
             break
         if int(X1.shape[0]) > 0:
-            max_gv = float(jnp.max(jnp.sqrt(jnp.sum(gradv_chk ** 2, axis=1))))
+            gmag = jnp.sqrt(jnp.sum(gradv_chk ** 2, axis=1))
+            max_gv = float(jnp.max(gmag))
             drift_cfl = chi * max_gv * tau / np.sqrt(2.0 * tau)
             if drift_cfl > cfl_abort:
-                print(f"[WARN] step {i}: drift_cfl={drift_cfl:.3e} exceeds "
-                      f"--cfl_abort={cfl_abort:.3e}; stopping loop gracefully and "
-                      f"writing diagnostics computed so far.", flush=True)
+                # plan §5.1: dump abort diagnostics distinguishing a true inner-core
+                # drift from a one-particle solver-field noise spike.
+                imax = int(jnp.argmax(gmag))
+                gv_fourier = grad_v_from_cloud(X1, coeff_v, x_c, L, M_v_eff,
+                                               taper_s=taper_s)
+                max_gv_f = float(jnp.max(jnp.sqrt(jnp.sum(gv_fourier ** 2, axis=1))))
+                abort_info = {
+                    "step": i, "t": i * tau, "solver_field": sf_info["mode"],
+                    "drift_cfl_solver_field": drift_cfl,
+                    "drift_cfl_fourier_diag": chi * max_gv_f * tau / np.sqrt(2.0 * tau),
+                    "max_grad_solver_field": max_gv,
+                    "max_grad_fourier_diag": max_gv_f,
+                    "particle_index_max_grad": imax,
+                    "position_max_grad": [float(X1[imax, 0]), float(X1[imax, 1])],
+                    "solver_field_h": sf_info["h"],
+                    "solver_field_residual_E": sf_info["residual_E"],
+                    "L": float(L), "x_c": [float(x_c[0]), float(x_c[1])],
+                }
+                try:
+                    json.dump(abort_info,
+                              open(os.path.join(args.outdir, "abort_diagnostics.json"), "w"),
+                              indent=2)
+                except Exception:
+                    pass
+                print(f"[WARN] step {i}: drift_cfl={drift_cfl:.3e} ({sf_info['mode']}) "
+                      f"exceeds --cfl_abort={cfl_abort:.3e}; stopping loop gracefully "
+                      f"and writing diagnostics computed so far.", flush=True)
                 aborted = True
                 break
 
@@ -483,10 +563,13 @@ def build_parser():
                    help="LDG-matched P1 DG readout (Version A) at these diagnostic "
                         "resolutions n on [-0.5,0.5]^2 (e.g. 40 80 160); empty = off")
     p.add_argument("--solver_field", default="current_fourier",
-                   choices=["current_fourier", "two_level_spectral_residual"],
+                   choices=["current_fourier", "two_level_spectral_residual",
+                            "two_level_blob_residual"],
                    help="reconstruction used INSIDE the time step for the chemotactic "
-                        "drift grad v (current_fourier = single-K; two_level = Form I "
-                        "global Kg + local Kl residual on the core window)")
+                        "drift grad v (current_fourier = single-K; two_level_spectral "
+                        "= Form I global Kg + local Kl SPECTRUM residual; "
+                        "two_level_blob = global Kg + local eta_h BLOB residual, the "
+                        "smoother local operator)")
     p.add_argument("--Kg", type=int, default=8, help="global low bandwidth (hybrid)")
     p.add_argument("--Kl", type=int, default=24, help="local high bandwidth (hybrid)")
     p.add_argument("--hybrid_frac_in", type=float, default=0.5)
@@ -494,6 +577,19 @@ def build_parser():
     p.add_argument("--hybrid_taper_hi", type=float, default=-1.0,
                    help="separate low-pass width for the high-Kl core part (the "
                         "Gaussian-blob/damping knob); <0 = use --filter_s for both")
+    # --- two_level_blob_residual knobs (eta_h Gaussian blob local operator) ---
+    p.add_argument("--blob_h_rule", default="frac_L",
+                   choices=["frac_L", "core_spacing", "inner_spacing"],
+                   help="blob bandwidth rule: frac_L h=c_h*L (default; reaches the "
+                        "smoother-than-Kl regime), core_spacing h=c_h*R0.8/sqrt(N0.8), "
+                        "inner_spacing h=c_h*R0.2/sqrt(N0.2)")
+    p.add_argument("--blob_ch", type=float, default=0.06,
+                   help="blob bandwidth coefficient c_h (frac_L default 0.06 ~ 1.4/Kl)")
+    p.add_argument("--blob_n_quad", type=int, default=-1,
+                   help="blob FFT-grid points/axis; <=0 = auto (~h/3 spacing, clamped)")
+    p.add_argument("--blob_min_count", type=int, default=100,
+                   help="min in-window v-particles to build the blob field; below "
+                        "this, fall back to the smooth single-K field (degeneracy guard)")
     p.add_argument("--a_u", type=float, default=84.0, help="u0 ~ exp(-a_u |x|^2)")
     p.add_argument("--a_v", type=float, default=42.0, help="v0 ~ exp(-a_v |x|^2)")
     p.add_argument("--diag_grid", type=int, default=65,

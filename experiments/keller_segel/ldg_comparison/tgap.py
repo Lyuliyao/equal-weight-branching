@@ -37,7 +37,15 @@ import numpy as np
 def load_diag(path):
     with open(path) as f:
         r = list(csv.DictReader(f))
-    return {k: np.array([float(x[k]) for x in r]) for k in r[0]}
+    # skip non-float columns (e.g. the string `solver_field_mode` added for the
+    # solver-field diagnostics); this loader only uses numeric columns.
+    out = {}
+    for k in r[0]:
+        try:
+            out[k] = np.array([float(x[k]) for x in r])
+        except (ValueError, TypeError):
+            out[k] = np.array([x[k] for x in r])
+    return out
 
 
 def common_grid(t_base, t_ref, n=None):

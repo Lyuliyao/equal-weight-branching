@@ -47,7 +47,14 @@ def load_diag(results_dir):
     path = cands[0]
     with open(path) as f:
         r = list(csv.DictReader(f))
-    cols = {k: np.array([float(x[k]) for x in r]) for k in r[0]}
+    # skip non-float columns (e.g. the string `solver_field_mode`); only numeric
+    # columns are used downstream.
+    cols = {}
+    for k in r[0]:
+        try:
+            cols[k] = np.array([float(x[k]) for x in r])
+        except (ValueError, TypeError):
+            cols[k] = np.array([x[k] for x in r])
     return cols, os.path.basename(path)
 
 

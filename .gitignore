@@ -60,3 +60,9 @@ reference_results/keller_segel_ldg_pp/solver_field_sweep_*/*/run.log
 reference_results/keller_segel_ldg_pp/sf_taper_*/*/snapshots/*.npz
 reference_results/keller_segel_ldg_pp/sf_taper_*/*.log
 reference_results/keller_segel_ldg_pp/sf_taper_*/*/run.log
+# sf_blob sweep (blob-residual solver field): same policy
+reference_results/keller_segel_ldg_pp/sf_blob_*/*/snapshots/*.npz
+reference_results/keller_segel_ldg_pp/sf_blob_*/*.log
+reference_results/keller_segel_ldg_pp/sf_blob_*/*/run.log
+# SLURM array stdout for the blob sweep
+sf_blob_sweep_*.out
