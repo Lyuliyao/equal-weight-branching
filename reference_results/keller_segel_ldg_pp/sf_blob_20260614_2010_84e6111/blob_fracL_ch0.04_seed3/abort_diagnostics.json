@@ -1,0 +1,21 @@
+{
+  "step": 705,
+  "t": 0.00017625,
+  "solver_field": "two_level_blob_residual",
+  "drift_cfl_solver_field": 5.312577285419236,
+  "drift_cfl_fourier_diag": 1.3008798961273373,
+  "max_grad_solver_field": 15026.23769639025,
+  "max_grad_fourier_diag": 3679.4439842435672,
+  "particle_index_max_grad": 2346,
+  "position_max_grad": [
+    0.05289717799845504,
+    -0.024767796032293277
+  ],
+  "solver_field_h": 0.004368426279748704,
+  "solver_field_residual_E": 0.03652732343858027,
+  "L": 0.1092106569937176,
+  "x_c": [
+    0.003971157297601418,
+    0.0017937579202658065
+  ]
+}
