@@ -82,6 +82,8 @@ def main():
                 continue
             if fr["quantity"] != "Rq2" or fr["valid_fit"] != "True":
                 continue
+            if fr.get("q_set") not in (None, "", "0.1,0.2,0.3"):
+                continue
             q = float(fr["q"]); a = float(fr["alpha"]); b = -float(fr["beta"])
             w0, w1 = float(fr["window_start"]), float(fr["window_end"])
             tt = np.linspace(w0, w1, 20)
@@ -96,6 +98,8 @@ def main():
     for fr in fits:
         if fr["method"] != "LDG" or fr["quantity"] != "Rq2":
             continue
+        if fr.get("q_set") not in (None, "", "0.1,0.2,0.3"):
+            continue
         if fr["valid_fit"] != "True":
             continue
         N = int(float(fr["resolution"])); q = float(fr["q"]); T = float(fr["T_est"])
@@ -109,12 +113,19 @@ def main():
         ax.legend(fontsize=6)
     fig.tight_layout(); savefig_multi(fig, os.path.join(figdir, "core_Tq_scatter")); plt.close(fig)
 
-    # ---- Fig 3: T_core(N) summary with spread bars ----
-    fig, ax = plt.subplots(figsize=(3.7, 2.9))
+    # ---- Fig 3: T_core(N) summary, default q-set; particle uses SEED BOOTSTRAP CI ----
+    fig, ax = plt.subplots(figsize=(3.9, 2.9))
     srows = list(csv.DictReader(open(os.path.join(args.fitdir, "core_fit_summary.csv"))))
-    xs, meds, los, his = [], [], [], []
+    bpath = os.path.join(args.fitdir, "core_fit_bootstrap.csv")
+    boot = list(csv.DictReader(open(bpath))) if os.path.exists(bpath) else []
+    def boot_ci(method, N):
+        for b in boot:
+            if b["method"] == method and b["resolution"] == str(N) and b["q_set"] == "0.1,0.2,0.3":
+                return float(b["T_boot_median"]), float(b["T_boot_p10"]), float(b["T_boot_p90"])
+        return None
+    xs, meds, los, his, cols = [], [], [], [], []
     for r in srows:
-        if r["quantity"] != "T_core":
+        if r["quantity"] != "T_core" or r.get("q_set") != "0.1,0.2,0.3":
             continue
         try:
             med = float(r["T_median"]); p10 = float(r["T_p10"]); p90 = float(r["T_p90"])
@@ -122,16 +133,42 @@ def main():
             continue
         if not np.isfinite(med):
             continue
-        lab = f"{r['method'][:4]}{r['resolution']}"
-        xs.append(lab); meds.append(med * 1e4); los.append((med - p10) * 1e4); his.append((p90 - med) * 1e4)
-    if xs:
-        ax.errorbar(range(len(xs)), meds, yerr=[los, his], fmt="o", capsize=3, color="k")
-        ax.set_xticks(range(len(xs))); ax.set_xticklabels(xs, rotation=30, ha="right", fontsize=6)
-    ax.axhspan(1.21, 1.21, color="0.6")  # LDG numerical blow-up scale marker
+        ci = boot_ci(r["method"], r["resolution"]) if r["method"] == "particle" else None
+        if ci is not None:                       # particle: seed-bootstrap CI (the honest band)
+            med, p10, p90 = ci
+            cols.append("#2ca02c")
+        else:
+            cols.append("k")
+        xs.append(f"{r['method'][:4]}{r['resolution']}")
+        meds.append(med * 1e4); los.append((med - p10) * 1e4); his.append((p90 - med) * 1e4)
+    for i in range(len(xs)):
+        ax.errorbar(i, meds[i], yerr=[[los[i]], [his[i]]], fmt="o", capsize=3, color=cols[i])
+    ax.set_xticks(range(len(xs))); ax.set_xticklabels(xs, rotation=30, ha="right", fontsize=6)
     ax.axhline(1.21, color="0.6", ls="-.", lw=0.8); ax.text(0, 1.23, "LDG $t_b\\sim$1.21", fontsize=6, color="0.5")
     ax.set_ylabel(r"$T_{core}\,[\times10^{-4}]$")
-    ax.set_title("(c) $T_{core}$ median + [p10,p90]")
+    ax.set_title("(c) $T_{core}$: LDG q/window spread, particle seed-bootstrap CI")
     fig.tight_layout(); savefig_multi(fig, os.path.join(figdir, "core_T_summary")); plt.close(fig)
+
+    # ---- Fig 5: q-set sensitivity (LDG N=320 + particle N=3.2e5) ----
+    fig, ax = plt.subplots(figsize=(3.9, 2.9))
+    qset_order = ["0.1,0.2,0.3", "0.2,0.3", "0.2", "0.3"]
+    for method, N, col, mk in (("LDG", "320", "#d62728", "s"), ("particle", "320000", "#2ca02c", "o")):
+        xs2, ys2 = [], []
+        for qs in qset_order:
+            for r in srows:
+                if r["quantity"] == "T_core" and r["method"] == method and r["resolution"] == N and r["q_set"] == qs:
+                    try:
+                        v = float(r["T_median"])
+                    except ValueError:
+                        v = np.nan
+                    if np.isfinite(v):
+                        xs2.append(qset_order.index(qs)); ys2.append(v * 1e4)
+        ax.plot(xs2, ys2, marker=mk, color=col, lw=1.0, label=f"{method} N={N}")
+    ax.axhline(1.21, color="0.6", ls="-.", lw=0.8)
+    ax.set_xticks(range(len(qset_order))); ax.set_xticklabels(qset_order, rotation=20, fontsize=6)
+    ax.set_xlabel("q-set"); ax.set_ylabel(r"$T_{core}\,[\times10^{-4}]$")
+    ax.set_title("(e) q-set sensitivity"); ax.legend(fontsize=6)
+    fig.tight_layout(); savefig_multi(fig, os.path.join(figdir, "core_T_qset_sensitivity")); plt.close(fig)
 
     # ---- Fig 4: core-halo separation R_0.8/R_0.2 ----
     fig, ax = plt.subplots(figsize=(3.7, 2.9))

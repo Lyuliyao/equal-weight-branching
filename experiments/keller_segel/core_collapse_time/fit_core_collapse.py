@@ -1,22 +1,30 @@
 """
-Core-collapse-time fit T_core from mass-quantile radii (core_collapse plan §3,7,8).
+Core-collapse-time fit T_core from mass-quantile radii (core_collapse plan §3,7,8;
+repaired per "Next experiments" Experiment A: seed common-grid, seed bootstrap, q-sets).
 ==================================================================================
 
-Fit  R_q(t)^2 = alpha_q - beta_q t  on late-time windows; T_q = alpha_q/beta_q is
-the radius-extrapolated collapse time.  Aggregate over q in {0.1,0.2,0.3} and over
-fitting windows:  T_core = median,  spread = [p10,p90],  relative_spread.
-Secondary: T_L2 from S^{-2} = a - b t, T_peak from peak^{-1} = a - b t.
+Fit  R_q(t)^2 = alpha_q - beta_q t  on late-time windows; T_q = alpha_q/beta_q.
+Aggregate over q in a q-set and over fitting windows: T_core = median, [p10,p90].
+Secondary: T_L2 from S^{-2}, T_peak from peak^{-1}.
 
-Stability gates (§7) decide `valid_quote`:
-  * each fit: beta>0, R^2>=R2_min, T_est>window_end, T_est<=far*window_end;
-  * quantile+window consistency: relative_spread = (p90-p10)/median <= spread_max.
+Particle seed handling (A1/A2): each seed's R_q(t) is interpolated to a COMMON grid
+(dt) within its own time coverage; the seed-mean uses only times where at least
+`min_seed_coverage` seeds are present, and a fitting window is valid for the particle
+ENSEMBLE only if every sampled time in it has n_seed_eff >= min_seed_coverage.  The
+quoted particle uncertainty is a SEED BOOTSTRAP (resample seeds with replacement),
+not only the q/window spread.
 
-Applied FIRST to the fixed-flux LDG reference (Step 1).  Particle runs optional.
+q-set sensitivity (A3): pass several --q_sets; each gets its own summary so a single
+particle T_core is quoted only if it is q-set-stable.
+
+Stability gates (§7): per fit beta>0, R^2>=r2_min, T>window_end, T<=far*window_end;
+quotable only if n>=3 valid fits AND relative_spread<=spread_max.
 
 Usage:
-  python fit_core_collapse.py --ldg_dir <core_collapse_run>/ldg \
-     [--particle_root <core_collapse_run>/particle] \
-     [--mass raw] [--outdir <core_collapse_run>]
+  python fit_core_collapse.py --ldg_dir <run>/ldg [--particle_root <run>/particle] \
+     [--mass raw] [--q_sets "0.1,0.2,0.3" "0.2,0.3" "0.2" "0.3"] \
+     [--bootstrap_seeds 1000] [--min_seed_coverage 3] [--common_grid_dt 1e-6] \
+     [--outdir <run>]
 """
 import os
 import csv
@@ -27,11 +35,12 @@ import argparse
 import numpy as np
 
 DEF_WINDOWS = [(4e-5, 9e-5), (5e-5, 1.0e-4), (6e-5, 1.1e-4), (7e-5, 1.2e-4)]
-Q_CORE = [0.1, 0.2, 0.3]
+DEF_QSETS = [[0.1, 0.2, 0.3], [0.2, 0.3], [0.2], [0.3]]
+ALL_Q = [0.05, 0.1, 0.2, 0.3, 0.5, 0.8]
 
 
+# --------------------------------------------------------------------------- fits
 def lin_fit(t, y):
-    """Fit y = a + b t (least squares); return a, b, R^2 (NaN if <2 finite pts)."""
     t = np.asarray(t, float); y = np.asarray(y, float)
     ok = np.isfinite(t) & np.isfinite(y) & (y > 0)
     t, y = t[ok], y[ok]
@@ -41,19 +50,26 @@ def lin_fit(t, y):
     coef, *_ = np.linalg.lstsq(A, y, rcond=None)
     a, b = float(coef[0]), float(coef[1])
     yhat = a + b * t
-    ss_res = float(np.sum((y - yhat) ** 2))
-    ss_tot = float(np.sum((y - np.mean(y)) ** 2))
+    ss_res = float(np.sum((y - yhat) ** 2)); ss_tot = float(np.sum((y - np.mean(y)) ** 2))
     r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else np.nan
     return a, b, r2, len(t)
 
 
-def fit_quantity(t, y, windows, r2_min=0.9, far=10.0):
-    """Fit y(t)=a-b t (linear) per window; T = a/(-b) = -a/b.  Returns list of dicts."""
+def fit_quantity(t, y, windows, r2_min=0.9, far=10.0, coverage=None, min_cov=1):
+    """Fit y(t)=a-b t per window; T=-a/b.  If `coverage` (n_seed_eff on the same grid
+    as t) is given, a window is skipped unless coverage>=min_cov over all its points."""
     rows = []
     for (w0, w1) in windows:
         sel = (t >= w0) & (t <= w1)
+        if coverage is not None:
+            covsel = coverage[sel]
+            if covsel.size == 0 or np.any(covsel < min_cov):
+                rows.append(dict(window_start=w0, window_end=w1, alpha=np.nan, beta=np.nan,
+                                 T_est=np.nan, R2_fit=np.nan, n_points=int(sel.sum()),
+                                 valid_fit=False, invalid_reason="seed coverage<min"))
+                continue
         a, b, r2, npts = lin_fit(t[sel], y[sel])
-        beta = -b if np.isfinite(b) else np.nan        # y decreasing -> b<0 -> beta>0
+        beta = -b if np.isfinite(b) else np.nan
         T = (-a / b) if (np.isfinite(b) and b != 0) else np.nan
         valid = bool(np.isfinite(T) and beta > 0 and np.isfinite(r2) and r2 >= r2_min
                      and T > w1 and T <= far * w1 and npts >= 5)
@@ -69,26 +85,36 @@ def fit_quantity(t, y, windows, r2_min=0.9, far=10.0):
                 reason = "T absurdly far"
             elif npts < 5:
                 reason = "too few points"
-        rows.append(dict(window_start=w0, window_end=w1, alpha=a, beta=beta,
-                         T_est=T, R2_fit=r2, n_points=npts, valid_fit=valid,
-                         invalid_reason=reason))
+        rows.append(dict(window_start=w0, window_end=w1, alpha=a, beta=beta, T_est=T,
+                         R2_fit=r2, n_points=npts, valid_fit=valid, invalid_reason=reason))
     return rows
 
 
-def aggregate(T_list, spread_max=0.25):
+def aggregate(T_list):
     Ts = np.array([t for t in T_list if np.isfinite(t)], float)
     if len(Ts) == 0:
         return dict(T_median=np.nan, T_p10=np.nan, T_p90=np.nan, T_min=np.nan,
                     T_max=np.nan, relative_spread=np.nan, n=0)
-    med = float(np.median(Ts))
-    p10, p90 = float(np.percentile(Ts, 10)), float(np.percentile(Ts, 90))
-    rel = (p90 - p10) / med if med != 0 else np.nan
+    med = float(np.median(Ts)); p10, p90 = float(np.percentile(Ts, 10)), float(np.percentile(Ts, 90))
     return dict(T_median=med, T_p10=p10, T_p90=p90, T_min=float(Ts.min()),
-                T_max=float(Ts.max()), relative_spread=rel, n=len(Ts))
+                T_max=float(Ts.max()), relative_spread=(p90 - p10) / med if med else np.nan, n=len(Ts))
 
 
+def core_T_from_curves(t, Rdict, qset, windows, r2_min, coverage=None, min_cov=1):
+    """Return (list of valid T_est, all fit rows) for a q-set given R_q(t) curves."""
+    T_all, rows = [], []
+    for q in qset:
+        if q not in Rdict:
+            continue
+        for fr in fit_quantity(t, Rdict[q] ** 2, windows, r2_min, coverage=coverage, min_cov=min_cov):
+            fr = dict(fr, q=q); rows.append(fr)
+            if fr["valid_fit"]:
+                T_all.append(fr["T_est"])
+    return T_all, rows
+
+
+# --------------------------------------------------------------------------- IO
 def load_ldg(ldg_dir, mass):
-    """Return {N: dict(t, R{q}, S_L2, peak)} from ldg_core_radii_N<N>.csv."""
     out = {}
     for f in sorted(glob.glob(os.path.join(ldg_dir, "N*", "ldg_core_radii_N*.csv"))):
         r = list(csv.DictReader(open(f)))
@@ -98,35 +124,34 @@ def load_ldg(ldg_dir, mass):
         t = np.array([float(x["t"]) for x in r])
         d = dict(t=t, S_L2=np.array([float(x["S_L2"]) for x in r]),
                  peak=np.array([float(x["peak"]) for x in r]), R={})
-        for q in [0.05, 0.1, 0.2, 0.3, 0.5, 0.8]:
-            col = f"R_{q}_{mass}"
-            if col in r[0]:
-                d["R"][q] = np.array([float(x[col]) for x in r])
+        for q in ALL_Q:
+            c = f"R_{q}_{mass}"
+            if c in r[0]:
+                d["R"][q] = np.array([float(x[c]) for x in r])
         out[N] = d
     return out
 
 
-def load_particle(part_root, qs):
-    """Return {(N): list of seed dicts} from particle diag_*.csv grouped by N."""
+def load_particle_seeds(part_root, qs, config="current_fourier"):
+    """{N: [seed dicts]} with per-seed t, R_q, S_dg, peak (NO length filtering)."""
     out = {}
-    for d in sorted(glob.glob(os.path.join(part_root, "*N*seed*"))):
+    for d in sorted(glob.glob(os.path.join(part_root, f"{config}_N*seed*"))):
         cs = glob.glob(os.path.join(d, "diag_*.csv"))
         if not cs:
             continue
         rows = list(csv.DictReader(open(cs[0])))
         if not rows:
             continue
-        base = os.path.basename(d)
         try:
-            N = int(base.split("_N")[1].split("_")[0])
+            N = int(os.path.basename(d).split("_N")[1].split("_")[0])
         except (IndexError, ValueError):
             continue
         t = np.array([float(x["t"]) for x in rows])
         rec = dict(t=t, R={})
         for q in qs:
-            col = f"R_{q}"
-            if col in rows[0]:
-                rec["R"][q] = np.array([float(x[col]) for x in rows])
+            c = f"R_{q}"
+            if c in rows[0]:
+                rec["R"][q] = np.array([float(x[c]) for x in rows])
         rec["S_dg"] = (np.array([float(x.get("S_dg_cross_160", "nan")) for x in rows])
                        if "S_dg_cross_160" in rows[0] else None)
         rec["peak"] = (np.array([float(x.get("peak_PK_u", "nan")) for x in rows])
@@ -135,124 +160,191 @@ def load_particle(part_root, qs):
     return out
 
 
+def seed_mean_common_grid(seeds, qs, dt, min_cov):
+    """Interpolate each seed to a common grid (within its own coverage), return
+    t_grid, {q: seed-mean R}, {q: (n_seed,n_grid) array for bootstrap}, n_seed_eff(t)."""
+    t_end = max(s["t"][-1] for s in seeds)
+    grid = np.arange(0.0, t_end + 0.5 * dt, dt)
+    per_q = {}
+    for q in qs:
+        mats = []
+        for s in seeds:
+            if q not in s["R"]:
+                continue
+            y = np.interp(grid, s["t"], s["R"][q], left=s["R"][q][0], right=np.nan)
+            y[grid > s["t"][-1] + 1e-12] = np.nan
+            mats.append(y)
+        per_q[q] = np.vstack(mats) if mats else None
+    # n_seed_eff(t): seeds present (use q=min available as proxy; all q share seed times)
+    ref = next((per_q[q] for q in qs if per_q.get(q) is not None), None)
+    n_eff = np.sum(np.isfinite(ref), axis=0) if ref is not None else np.zeros(len(grid))
+    Rmean = {q: (np.nanmean(per_q[q], axis=0) if per_q.get(q) is not None else None) for q in qs}
+    return grid, Rmean, per_q, n_eff
+
+
+# --------------------------------------------------------------------------- main
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ldg_dir", required=True)
     ap.add_argument("--particle_root", default=None)
+    ap.add_argument("--particle_config", default="current_fourier")
     ap.add_argument("--mass", default="raw", choices=["raw", "clip"])
+    ap.add_argument("--q_sets", nargs="+", default=None,
+                    help='e.g. "0.1,0.2,0.3" "0.2,0.3" "0.2" "0.3"')
     ap.add_argument("--r2_min", type=float, default=0.9)
     ap.add_argument("--spread_max", type=float, default=0.25)
+    ap.add_argument("--common_grid_dt", type=float, default=1.0e-6)
+    ap.add_argument("--min_seed_coverage", type=int, default=3)
+    ap.add_argument("--bootstrap_seeds", type=int, default=1000)
+    ap.add_argument("--boot_rng", type=int, default=12345)
     ap.add_argument("--outdir", default=None)
     args = ap.parse_args()
     outdir = args.outdir or os.path.dirname(os.path.abspath(args.ldg_dir))
+    os.makedirs(outdir, exist_ok=True)
     windows = DEF_WINDOWS
+    qsets = ([[float(x) for x in s.split(",")] for s in args.q_sets] if args.q_sets else DEF_QSETS)
+    rng = np.random.default_rng(args.boot_rng)
 
-    all_rows = []
-    summary_rows = []
+    all_rows, summary_rows, boot_rows = [], [], []
 
-    def add_method(method, resolution, t, Rdict, S, peak):
-        # primary: T_core from R_q^2, q in Q_CORE
-        T_all = []
-        for q in Q_CORE:
-            if q not in Rdict:
+    def secondary(method, res, t, S, peak, cov=None):
+        for qty, y in (("T_L2", (1.0 / np.maximum(S, 1e-300) ** 2) if S is not None else None),
+                       ("T_peak", (1.0 / np.maximum(peak, 1e-300)) if peak is not None else None)):
+            if y is None:
                 continue
-            y = Rdict[q] ** 2
-            for fr in fit_quantity(t, y, windows, args.r2_min):
-                fr.update(method=method, resolution=resolution, seed_group="ens",
-                          q=q, quantity="Rq2")
-                all_rows.append(fr)
+            Ts = []
+            for fr in fit_quantity(t, y, windows, args.r2_min, coverage=cov, min_cov=args.min_seed_coverage):
+                all_rows.append(dict(fr, method=method, resolution=res, seed_group="ens",
+                                     q=(-1 if qty == "T_L2" else -2), quantity=qty.replace("T_", "")))
                 if fr["valid_fit"]:
-                    T_all.append(fr["T_est"])
-        agg = aggregate(T_all, args.spread_max)
-        valid_quote = bool(agg["n"] >= 3 and np.isfinite(agg["relative_spread"])
-                           and agg["relative_spread"] <= args.spread_max)
-        summary_rows.append(dict(method=method, resolution=resolution, quantity="T_core",
-                                 q_set="0.1,0.2,0.3", window_set=str(windows), **agg,
-                                 valid_quote=valid_quote,
-                                 decision=("quotable" if valid_quote else
-                                           "unstable (spread>%.2f or <3 valid fits)" % args.spread_max)))
-        # secondary: T_L2 from S^{-2}
-        if S is not None:
-            TL = []
-            for fr in fit_quantity(t, 1.0 / np.maximum(S, 1e-300) ** 2, windows, args.r2_min):
-                fr.update(method=method, resolution=resolution, seed_group="ens",
-                          q=-1, quantity="Sminus2")
-                all_rows.append(fr)
-                if fr["valid_fit"]:
-                    TL.append(fr["T_est"])
-            aL = aggregate(TL, args.spread_max)
-            summary_rows.append(dict(method=method, resolution=resolution, quantity="T_L2",
-                                     q_set="-", window_set=str(windows), **aL,
-                                     valid_quote=bool(aL["n"] >= 2), decision="secondary"))
-        # secondary: T_peak from peak^{-1}
-        if peak is not None:
-            TP = []
-            for fr in fit_quantity(t, 1.0 / np.maximum(peak, 1e-300), windows, args.r2_min):
-                fr.update(method=method, resolution=resolution, seed_group="ens",
-                          q=-2, quantity="peakminus1")
-                all_rows.append(fr)
-                if fr["valid_fit"]:
-                    TP.append(fr["T_est"])
-            aP = aggregate(TP, args.spread_max)
-            summary_rows.append(dict(method=method, resolution=resolution, quantity="T_peak",
-                                     q_set="-", window_set=str(windows), **aP,
-                                     valid_quote=bool(aP["n"] >= 2), decision="secondary"))
+                    Ts.append(fr["T_est"])
+            ag = aggregate(Ts)
+            summary_rows.append(dict(method=method, resolution=res, quantity=qty, q_set="-",
+                                     window_set="def", **ag, valid_quote=bool(ag["n"] >= 2),
+                                     decision="secondary"))
 
-    # ---- LDG ----
+    # ---------- LDG (no seeds; coverage None) ----------
     ldg = load_ldg(args.ldg_dir, args.mass)
     for N in sorted(ldg):
         d = ldg[N]
-        add_method("LDG", N, d["t"], d["R"], d["S_L2"], d["peak"])
+        for qset in qsets:
+            T_all, rows = core_T_from_curves(d["t"], d["R"], qset, windows, args.r2_min)
+            for fr in rows:
+                all_rows.append(dict(fr, method="LDG", resolution=N, seed_group="-",
+                                     quantity="Rq2", q_set=",".join(map(str, qset))))
+            ag = aggregate(T_all)
+            n_tot = len(qset) * len(windows)
+            vq = bool(ag["n"] >= 3 and np.isfinite(ag["relative_spread"]) and ag["relative_spread"] <= args.spread_max)
+            summary_rows.append(dict(method="LDG", resolution=N, quantity="T_core",
+                                     q_set=",".join(map(str, qset)), window_set=f"{ag['n']}/{n_tot} valid",
+                                     **ag, valid_quote=vq,
+                                     decision=("quotable" if vq else "unstable/insufficient")))
+        secondary("LDG", N, d["t"], d["S_L2"], d["peak"])
 
-    # ---- particle (optional; seed-mean radii) ----
+    # ---------- particle (common grid + seed bootstrap) ----------
     if args.particle_root and os.path.isdir(args.particle_root):
-        part = load_particle(args.particle_root, Q_CORE)
+        part = load_particle_seeds(args.particle_root, ALL_Q, args.particle_config)
         for N in sorted(part):
             seeds = part[N]
-            t0 = seeds[0]["t"]
-            Rdict = {}
-            for q in Q_CORE:
-                arrs = [s["R"][q] for s in seeds if q in s["R"] and len(s["R"][q]) == len(t0)]
-                if arrs:
-                    Rdict[q] = np.nanmean(np.vstack(arrs), axis=0)
-            S = None; pk = None
-            sdgs = [s["S_dg"] for s in seeds if s.get("S_dg") is not None and len(s["S_dg"]) == len(t0)]
-            if sdgs:
-                S = np.nanmean(np.vstack(sdgs), axis=0)
-            pks = [s["peak"] for s in seeds if s.get("peak") is not None and len(s["peak"]) == len(t0)]
-            if pks:
-                pk = np.nanmean(np.vstack(pks), axis=0)
-            add_method("particle", N, t0, Rdict, S, pk)
+            grid, Rmean, per_q, n_eff = seed_mean_common_grid(seeds, ALL_Q, args.common_grid_dt,
+                                                              args.min_seed_coverage)
+            # secondary on seed-mean DG (interpolate each seed to the common grid first)
+            Smean = None
+            sdg_seeds = [s for s in seeds if s.get("S_dg") is not None]
+            if sdg_seeds:
+                mats = []
+                for s in sdg_seeds:
+                    y = np.interp(grid, s["t"], s["S_dg"], left=s["S_dg"][0], right=np.nan)
+                    y[grid > s["t"][-1] + 1e-12] = np.nan
+                    mats.append(y)
+                Smean = np.nanmean(np.vstack(mats), axis=0)
+            for qset in qsets:
+                T_all, rows = core_T_from_curves(grid, Rmean, qset, windows, args.r2_min,
+                                                 coverage=n_eff, min_cov=args.min_seed_coverage)
+                for fr in rows:
+                    all_rows.append(dict(fr, method="particle", resolution=N, seed_group="mean",
+                                         quantity="Rq2", q_set=",".join(map(str, qset))))
+                ag = aggregate(T_all)
+                # SEED BOOTSTRAP: resample seeds, rebuild mean, refit T_core median
+                nb = args.bootstrap_seeds
+                boots = []
+                nseed = len(seeds)
+                min_cov_eff = []
+                for _ in range(nb):
+                    idx = rng.integers(0, nseed, nseed)
+                    bseeds = [seeds[k] for k in idx]
+                    g2, Rm2, _, ne2 = seed_mean_common_grid(bseeds, qset, args.common_grid_dt,
+                                                            args.min_seed_coverage)
+                    Tb, _ = core_T_from_curves(g2, Rm2, qset, windows, args.r2_min,
+                                               coverage=ne2, min_cov=args.min_seed_coverage)
+                    if Tb:
+                        boots.append(float(np.median(Tb)))
+                boots = np.array(boots, float)
+                bmed = float(np.median(boots)) if boots.size else np.nan
+                bp10 = float(np.percentile(boots, 5)) if boots.size else np.nan
+                bp90 = float(np.percentile(boots, 95)) if boots.size else np.nan
+                # min n_seed_eff over the fitted windows
+                wmask = (grid >= windows[0][0]) & (grid <= windows[-1][1])
+                nse_min = int(np.min(n_eff[wmask])) if np.any(wmask) else 0
+                vq = bool(ag["n"] >= 3 and np.isfinite(ag["relative_spread"]) and ag["relative_spread"] <= args.spread_max)
+                summary_rows.append(dict(method="particle", resolution=N, quantity="T_core",
+                                         q_set=",".join(map(str, qset)),
+                                         window_set=f"{ag['n']}/{len(qset)*len(windows)} valid",
+                                         **ag, valid_quote=vq,
+                                         decision=("quotable" if vq else "unstable/insufficient")))
+                boot_rows.append(dict(method="particle", resolution=N, q_set=",".join(map(str, qset)),
+                                      n_seed=nseed, n_boot_valid=int(boots.size),
+                                      T_qwindow_median=ag["T_median"], T_qwindow_p10=ag["T_p10"],
+                                      T_qwindow_p90=ag["T_p90"], T_boot_median=bmed,
+                                      T_boot_p10=bp10, T_boot_p90=bp90,
+                                      n_seed_eff_min_in_windows=nse_min))
+            secondary("particle", N, grid, Smean, None, cov=n_eff)
 
-    # ---- write ----
-    os.makedirs(outdir, exist_ok=True)
-    acols = ["method", "resolution", "seed_group", "q", "window_start", "window_end",
-             "quantity", "alpha", "beta", "T_est", "R2_fit", "n_points", "valid_fit",
-             "invalid_reason"]
+    # ---------- write ----------
+    acols = ["method", "resolution", "seed_group", "q", "q_set", "window_start", "window_end",
+             "quantity", "alpha", "beta", "T_est", "R2_fit", "n_points", "valid_fit", "invalid_reason"]
     with open(os.path.join(outdir, "core_fit_all.csv"), "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=acols); w.writeheader()
         for r in all_rows:
             w.writerow({c: r.get(c) for c in acols})
-    scols = ["method", "resolution", "quantity", "q_set", "window_set", "T_median",
-             "T_p10", "T_p90", "T_min", "T_max", "relative_spread", "n", "valid_quote",
-             "decision"]
+    scols = ["method", "resolution", "quantity", "q_set", "window_set", "T_median", "T_p10",
+             "T_p90", "T_min", "T_max", "relative_spread", "n", "valid_quote", "decision"]
     with open(os.path.join(outdir, "core_fit_summary.csv"), "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=scols); w.writeheader()
         for r in summary_rows:
             w.writerow({c: r.get(c) for c in scols})
     json.dump(summary_rows, open(os.path.join(outdir, "core_fit_summary.json"), "w"),
               indent=2, default=str)
+    bcols = ["method", "resolution", "q_set", "n_seed", "n_boot_valid", "T_qwindow_median",
+             "T_qwindow_p10", "T_qwindow_p90", "T_boot_median", "T_boot_p10", "T_boot_p90",
+             "n_seed_eff_min_in_windows"]
+    with open(os.path.join(outdir, "core_fit_bootstrap.csv"), "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=bcols); w.writeheader()
+        for r in boot_rows:
+            w.writerow({c: r.get(c) for c in bcols})
+    json.dump(boot_rows, open(os.path.join(outdir, "core_fit_bootstrap.json"), "w"),
+              indent=2, default=str)
 
-    # ---- console ----
-    print(f"\n=== Core-collapse time T_core (mass={args.mass}, windows={windows}) ===")
-    print(f"{'method':<9} {'N':>7} {'quantity':<11} {'T_median':>10} {'[p10':>10} "
-          f"{'p90]':>10} {'rel_spread':>10} {'nfit':>5} {'quote?':>7}")
+    # ---------- console ----------
+    print(f"\n=== T_core (mass={args.mass}, min_seed_cov={args.min_seed_coverage}, "
+          f"bootstrap={args.bootstrap_seeds}) ===")
+    print(f"{'method':<9} {'N':>7} {'q_set':<13} {'T_median':>10} {'rel_spr':>8} "
+          f"{'valid':>7} {'quote?':>6}")
     for r in summary_rows:
-        print(f"{r['method']:<9} {str(r['resolution']):>7} {r['quantity']:<11} "
-              f"{r['T_median']:>10.3e} {r['T_p10']:>10.3e} {r['T_p90']:>10.3e} "
-              f"{r['relative_spread']:>10.3f} {r['n']:>5} {str(r['valid_quote']):>7}")
-    print(f"\nwrote core_fit_all.csv + core_fit_summary.csv/.json to {outdir}")
-    return summary_rows
+        if r["quantity"] != "T_core":
+            continue
+        print(f"{r['method']:<9} {str(r['resolution']):>7} {r['q_set']:<13} "
+              f"{r['T_median']:>10.3e} {r['relative_spread']:>8.3f} {r['window_set']:>7} "
+              f"{str(r['valid_quote']):>6}")
+    if boot_rows:
+        print("\n=== particle SEED BOOTSTRAP T_core ===")
+        print(f"{'N':>7} {'q_set':<13} {'T_boot_med':>11} {'[p5':>10} {'p95]':>10} {'nse_min':>7}")
+        for r in boot_rows:
+            print(f"{str(r['resolution']):>7} {r['q_set']:<13} {r['T_boot_median']:>11.3e} "
+                  f"{r['T_boot_p10']:>10.3e} {r['T_boot_p90']:>10.3e} "
+                  f"{r['n_seed_eff_min_in_windows']:>7}")
+    print(f"\nwrote core_fit_all/summary/bootstrap to {outdir}")
+    return summary_rows, boot_rows
 
 
 if __name__ == "__main__":
