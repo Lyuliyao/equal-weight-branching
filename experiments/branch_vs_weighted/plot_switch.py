@@ -43,8 +43,8 @@ import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.patches import Circle
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes, mark_inset
+from matplotlib.patches import Circle, ConnectionPatch
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 import common_plot_style as cps
@@ -85,15 +85,16 @@ def final_local_L2(metrics_csv):
     return out
 
 
-def add_magnifier(ax, field, extent, center, vmax, loc, edge, ls, label,
+def add_magnifier(ax, field, extent, center, vmax, loc, corner, edge, ls, label,
                   frac=42, label_fs=6.0):
     """A magnifier inset of `field` over the square region around `center` (half=R_ZOOM).
 
-    Shares the supplied local `vmax` (over-concentration saturates), draws the diagnostic
-    circle inside the inset, borders the inset in `edge`/`ls`, and links it to the
-    on-panel region with matching connector lines from the source down to the inset's two
-    TOP corners (a clean wedge that does not cross the inset interior; auto rectangle
-    hidden).  `label` is a small caption inside the inset top.
+    Alignment is by CIRCLE, not by a square box: the same B_A/B_B circle is drawn both on
+    the parent panel (by the caller) and inside this inset, in matching colour/linestyle,
+    and a single connector runs from the on-panel circle CENTRE to the inset `corner`
+    nearest the source -- so the link always originates exactly at the marked circle.
+    Shares the supplied local `vmax` (over-concentration saturates).  `loc` is the inset
+    corner of the panel; `corner` is the inset-axes-fraction point the connector joins.
     """
     cx = center[0]
     axins = inset_axes(ax, width=f"{frac}%", height=f"{frac}%", loc=loc, borderpad=0.7)
@@ -103,13 +104,13 @@ def add_magnifier(ax, field, extent, center, vmax, loc, edge, ls, label,
     axins.set_xticks([]); axins.set_yticks([]); axins.grid(False)
     for s in axins.spines.values():
         s.set_color(edge); s.set_linewidth(1.3); s.set_linestyle(ls)
-    axins.add_patch(Circle(center, R_B, fill=False, edgecolor=edge, lw=1.0, ls=ls))
-    try:
-        pp, _, _ = mark_inset(ax, axins, loc1=2, loc2=1, fc="none", ec=edge,
-                              lw=0.8, ls=ls, alpha=0.9)
-        pp.set_visible(False)
-    except Exception:
-        pass
+    # the alignment circle, magnified inside the inset (same set as the on-panel circle)
+    axins.add_patch(Circle(center, R_B, fill=False, edgecolor=edge, lw=1.2, ls=ls))
+    # single connector from the on-panel circle centre to the inset's nearest corner
+    con = ConnectionPatch(xyA=center, coordsA=ax.transData,
+                          xyB=corner, coordsB=axins.transAxes,
+                          color=edge, lw=0.8, ls=ls, alpha=0.85, zorder=5)
+    ax.add_artist(con)
     if label:
         axins.text(0.5, 0.95, label, transform=axins.transAxes, fontsize=label_fs,
                    color="white", ha="center", va="top",
@@ -150,10 +151,12 @@ def build_figure(layout, fields, extent, locL2, full_vmax, a_vmax, b_vmax):
         else:
             la = rf"$E_A\!=\!{locL2[key]['BA']:.2f}$"
             lb = rf"$E_B\!=\!{locL2[key]['BB']:.2f}$"
-        add_magnifier(ax, fields[key], extent, CA, a_vmax, "lower left",  A_EDGE, A_LS,
-                      la, frac=frac, label_fs=label_fs)
-        add_magnifier(ax, fields[key], extent, CB, b_vmax, "lower right", B_EDGE, B_LS,
-                      lb, frac=frac, label_fs=label_fs)
+        # insets on the DIAGONAL: B_A lower-left, B_B upper-right; each connector joins
+        # the inset corner nearest the (centred) source circle.
+        add_magnifier(ax, fields[key], extent, CA, a_vmax, "lower left", (1.0, 1.0),
+                      A_EDGE, A_LS, la, frac=frac, label_fs=label_fs)
+        add_magnifier(ax, fields[key], extent, CB, b_vmax, "upper right", (0.0, 0.0),
+                      B_EDGE, B_LS, lb, frac=frac, label_fs=label_fs)
     cb = fig.colorbar(im, ax=axlist.tolist() if hasattr(axlist, "tolist") else list(axlist),
                       **cbar_kw)
     cb.set_label(r"full-domain field $u(T{=}1.2,\cdot)$", fontsize=7)
