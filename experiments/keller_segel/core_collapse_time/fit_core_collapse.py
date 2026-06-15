@@ -198,10 +198,13 @@ def main():
     ap.add_argument("--bootstrap_seeds", type=int, default=1000)
     ap.add_argument("--boot_rng", type=int, default=12345)
     ap.add_argument("--outdir", default=None)
+    ap.add_argument("--windows", default=None,
+                    help='override fit windows, e.g. "7e-5:1.15e-4,8e-5:1.18e-4,9e-5:1.2e-4"')
     args = ap.parse_args()
     outdir = args.outdir or os.path.dirname(os.path.abspath(args.ldg_dir))
     os.makedirs(outdir, exist_ok=True)
-    windows = DEF_WINDOWS
+    windows = (DEF_WINDOWS if not args.windows
+               else [tuple(float(x) for x in w.split(":")) for w in args.windows.split(",")])
     qsets = ([[float(x) for x in s.split(",")] for s in args.q_sets] if args.q_sets else DEF_QSETS)
     rng = np.random.default_rng(args.boot_rng)
 

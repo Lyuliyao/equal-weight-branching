@@ -80,7 +80,9 @@ reference_results/keller_segel_ldg_pp/core_collapse_*/particle/*/run.log
 ldg_cr_*.out
 pcct_*.out
 cct_qwin_*.out
-# q_window sensitivity sweep: keep diag CSVs + summary + figures; drop snapshots/logs
-reference_results/keller_segel_ldg_pp/core_collapse_qwindow_*/*/snapshots/
-reference_results/keller_segel_ldg_pp/core_collapse_qwindow_*/*.log
-reference_results/keller_segel_ldg_pp/core_collapse_qwindow_*/*/run.log
+cct_kd_*.out
+ldg_quad_*.out
+# all core_collapse_* sweeps: keep CSVs/summaries/figures; drop snapshots/logs at any depth
+reference_results/keller_segel_ldg_pp/core_collapse_*/**/snapshots/
+reference_results/keller_segel_ldg_pp/core_collapse_*/**/snapshots.npz
+reference_results/keller_segel_ldg_pp/core_collapse_*/**/*.log
