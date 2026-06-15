@@ -43,7 +43,7 @@ import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.patches import Circle, ConnectionPatch
+from matplotlib.patches import Circle
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
@@ -85,16 +85,14 @@ def final_local_L2(metrics_csv):
     return out
 
 
-def add_magnifier(ax, field, extent, center, vmax, loc, corner, edge, ls, label,
-                  frac=42, label_fs=6.0):
+def add_magnifier(ax, field, extent, center, vmax, loc, edge, ls, label,
+                  frac=40, label_fs=6.0):
     """A magnifier inset of `field` over the square region around `center` (half=R_ZOOM).
 
-    Alignment is by CIRCLE, not by a square box: the same B_A/B_B circle is drawn both on
-    the parent panel (by the caller) and inside this inset, in matching colour/linestyle,
-    and a single connector runs from the on-panel circle CENTRE to the inset `corner`
-    nearest the source -- so the link always originates exactly at the marked circle.
-    Shares the supplied local `vmax` (over-concentration saturates).  `loc` is the inset
-    corner of the panel; `corner` is the inset-axes-fraction point the connector joins.
+    Draws the same B_A/B_B circle inside the inset (magnified) that the caller draws on
+    the panel, in matching colour/linestyle; the circle-to-circle connector is added
+    separately by connect_circles() after layout is finalized.  Shares the supplied local
+    `vmax` (over-concentration saturates).  Returns the inset Axes.
     """
     cx = center[0]
     axins = inset_axes(ax, width=f"{frac}%", height=f"{frac}%", loc=loc, borderpad=0.7)
@@ -104,18 +102,35 @@ def add_magnifier(ax, field, extent, center, vmax, loc, corner, edge, ls, label,
     axins.set_xticks([]); axins.set_yticks([]); axins.grid(False)
     for s in axins.spines.values():
         s.set_color(edge); s.set_linewidth(1.3); s.set_linestyle(ls)
-    # the alignment circle, magnified inside the inset (same set as the on-panel circle)
-    axins.add_patch(Circle(center, R_B, fill=False, edgecolor=edge, lw=1.2, ls=ls))
-    # single connector from the on-panel circle centre to the inset's nearest corner
-    con = ConnectionPatch(xyA=center, coordsA=ax.transData,
-                          xyB=corner, coordsB=axins.transAxes,
-                          color=edge, lw=0.8, ls=ls, alpha=0.85, zorder=5)
-    ax.add_artist(con)
+    axins.add_patch(Circle(center, R_B, fill=False, edgecolor=edge, lw=1.5, ls=ls))
     if label:
         axins.text(0.5, 0.95, label, transform=axins.transAxes, fontsize=label_fs,
                    color="white", ha="center", va="top",
                    bbox=dict(boxstyle="round,pad=0.12", fc="black", ec="none", alpha=0.5))
     return axins
+
+
+def connect_circles(fig, ax, axins, center, edge, ls, lw=0.8):
+    """Magnifying-glass link: the two EXTERNAL TANGENT lines between the small on-panel
+    circle and the large magnified circle inside `axins` (a clean cone joining circle to
+    circle, not circle to a square corner).  Must be called AFTER fig.canvas.draw() so the
+    inset's data transform is final.  Lines are placed in figure coordinates.
+    """
+    P1 = np.asarray(ax.transData.transform(center), float)        # small circle centre
+    r1 = abs(ax.transData.transform((center[0] + R_B, center[1]))[0] - P1[0])
+    P2 = np.asarray(axins.transData.transform(center), float)     # big circle centre
+    r2 = abs(axins.transData.transform((center[0] + R_B, center[1]))[0] - P2[0])
+    d = P2 - P1; D = float(np.hypot(*d))
+    if D < 1e-6:
+        return
+    u = d / D; n = np.array([-u[1], u[0]])
+    c = (r1 - r2) / D; s = np.sqrt(max(0.0, 1.0 - c * c))         # external-tangent angle
+    inv = fig.transFigure.inverted()
+    for sign in (1.0, -1.0):
+        m = c * u + sign * s * n                                 # radius direction (both circles)
+        T1 = inv.transform(P1 + r1 * m); T2 = inv.transform(P2 + r2 * m)
+        fig.add_artist(plt.Line2D([T1[0], T2[0]], [T1[1], T2[1]], transform=fig.transFigure,
+                                  color=edge, lw=lw, ls=ls, alpha=0.85, zorder=4))
 
 
 def build_figure(layout, fields, extent, locL2, full_vmax, a_vmax, b_vmax):
@@ -124,25 +139,28 @@ def build_figure(layout, fields, extent, locL2, full_vmax, a_vmax, b_vmax):
         fig, axes = plt.subplots(2, 2, figsize=(TEXTWIDTH_IN, 1.04 * TEXTWIDTH_IN),
                                  constrained_layout=True)
         axlist = axes.ravel()
-        title_fs, frac, label_fs = 8.0, 42, 6.0
+        # smaller insets sit further into the corners so they do not overlap the central
+        # source blobs/circles (esp. important for the cramped 4x1).
+        title_fs, frac, label_fs = 8.0, 38, 6.0
         titles = {k: t for k, t in PANELS}
         cbar_kw = dict(location="right", shrink=0.6, pad=0.012, aspect=30)
     elif layout == "4x1":
         fig, axes = plt.subplots(1, 4, figsize=(TEXTWIDTH_IN, 0.42 * TEXTWIDTH_IN),
                                  constrained_layout=True)
         axlist = axes.ravel()
-        title_fs, frac, label_fs = 6.5, 46, 5.2
+        title_fs, frac, label_fs = 6.5, 34, 5.2
         titles = TITLE_4x1
         cbar_kw = dict(location="bottom", shrink=0.85, pad=0.02, aspect=45)
     else:
         raise ValueError(f"unknown layout {layout!r}")
 
     im = None
+    connectors = []                                   # (ax, axins, center, edge, ls)
     for ax, (key, _) in zip(axlist, PANELS):
         im = ax.imshow(fields[key], origin="lower", extent=extent, vmin=0, vmax=full_vmax,
                        cmap=CMAP, interpolation="bilinear")
-        ax.add_patch(Circle(CA, R_B, fill=False, edgecolor=A_EDGE, lw=1.2, ls=A_LS))
-        ax.add_patch(Circle(CB, R_B, fill=False, edgecolor=B_EDGE, lw=1.2, ls=B_LS))
+        ax.add_patch(Circle(CA, R_B, fill=False, edgecolor=A_EDGE, lw=1.3, ls=A_LS))
+        ax.add_patch(Circle(CB, R_B, fill=False, edgecolor=B_EDGE, lw=1.3, ls=B_LS))
         ax.set_xlim(extent[0], extent[1]); ax.set_ylim(extent[2], extent[3])
         ax.set_xticks([]); ax.set_yticks([]); ax.grid(False)
         ax.set_title(titles[key], fontsize=title_fs, pad=3)
@@ -151,16 +169,23 @@ def build_figure(layout, fields, extent, locL2, full_vmax, a_vmax, b_vmax):
         else:
             la = rf"$E_A\!=\!{locL2[key]['BA']:.2f}$"
             lb = rf"$E_B\!=\!{locL2[key]['BB']:.2f}$"
-        # insets on the DIAGONAL: B_A lower-left, B_B upper-right; each connector joins
-        # the inset corner nearest the (centred) source circle.
-        add_magnifier(ax, fields[key], extent, CA, a_vmax, "lower left", (1.0, 1.0),
-                      A_EDGE, A_LS, la, frac=frac, label_fs=label_fs)
-        add_magnifier(ax, fields[key], extent, CB, b_vmax, "upper right", (0.0, 0.0),
-                      B_EDGE, B_LS, lb, frac=frac, label_fs=label_fs)
+        # insets on the DIAGONAL: B_A lower-left, B_B upper-right.
+        axA = add_magnifier(ax, fields[key], extent, CA, a_vmax, "lower left",
+                            A_EDGE, A_LS, la, frac=frac, label_fs=label_fs)
+        axB = add_magnifier(ax, fields[key], extent, CB, b_vmax, "upper right",
+                            B_EDGE, B_LS, lb, frac=frac, label_fs=label_fs)
+        connectors.append((ax, axA, CA, A_EDGE, A_LS))
+        connectors.append((ax, axB, CB, B_EDGE, B_LS))
     cb = fig.colorbar(im, ax=axlist.tolist() if hasattr(axlist, "tolist") else list(axlist),
                       **cbar_kw)
     cb.set_label(r"full-domain field $u(T{=}1.2,\cdot)$", fontsize=7)
     cb.ax.tick_params(labelsize=6.5)
+    # finalize the constrained layout, freeze it, then draw circle-to-circle connectors
+    # using the now-final inset transforms.
+    fig.canvas.draw()
+    fig.set_layout_engine("none")
+    for ax, axins, center, edge, ls in connectors:
+        connect_circles(fig, ax, axins, center, edge, ls)
     return fig
 
 
@@ -186,11 +211,15 @@ def main():
     def region_mask(cx):
         return (np.abs(XX - cx) <= R_ZOOM) & (np.abs(YY) <= R_ZOOM)
     mA, mB = region_mask(CA[0]), region_mask(CB[0])
-    full_vmax = float(np.max(fields["reference"]))
+    # full-domain colour scale = TRUE global max over all four methods, so the single
+    # shared colorbar's range actually covers every full-domain panel (no hidden
+    # saturation of the weighted degeneracy spike).  Insets keep a local per-region scale
+    # (reference peak in the region) so the old/new-region structure stays visible.
+    full_vmax = max(float(np.max(fields[k])) for k, _ in PANELS)
     a_vmax = float(np.max(fields["reference"][mA]))
     b_vmax = float(np.max(fields["reference"][mB]))
-    clip_policy = ("full=ref global peak; insets=ref peak per region; vmin=0; "
-                   "over-concentration saturates (not clipped away)")
+    clip_policy = ("full=true global max over methods (colorbar covers all panels); "
+                   "insets=ref peak per region; vmin=0")
 
     layouts = ["2x2", "4x1"] if args.layout == "both" else [args.layout]
     pd = os.path.join(RD, "plot_data"); os.makedirs(pd, exist_ok=True)
