@@ -1,726 +1,735 @@
-# Solver-field comparison using the same LDG-style blow-up proxy
+# Core-collapse time metric for the Keller--Segel benchmark
 
-**Purpose.**  The previous `sf_blob` sweep showed that a smoother blob/KDE residual field can enter the drift stably, but the reported mean abort/final time is only a numerical-stability diagnostic.  It cannot by itself demonstrate that the particle dynamics captures the Keller--Segel concentration or blow-up onset more accurately.  The next step is to compare solver-field variants using the **same LDG-style resolution-gap time** already used for the particle method and the fixed-flux LDG reference.
+**Purpose.**  
+Define a method-independent blow-up / concentration-time diagnostic that can be computed
+on both the fixed-flux LDG reference and the particle method.  This is different from the
+LDG-style resolution-gap time
+\[
+t_b=\inf\{t:S_{\rm high}(t)/S_{\rm low}(t)\ge 1.05\},
+\]
+which measures when two numerical resolutions separate.  The goal here is to estimate a
+geometric **core-collapse time** from the shrinking length scale of the concentrating mass.
 
-This note specifies the exact experiment, definitions, run matrix, analysis script, outputs, and decision rules.
+This note is intended as the implementation plan for the next numerical diagnostic.  The
+metric should be tried first on the fixed-flux LDG reference.  Only if it is stable on LDG
+should it be used as a main comparison with particles.
 
 ---
 
-## 1. What must be compared
+## 1. Why introduce a new metric?
 
-We compare different **solver-field reconstructions**, i.e. reconstructions used inside the time step to compute the chemotactic drift
+The LDG-style \(t_b\) is useful and fair for comparing resolution-gap behavior, but it is
+not a direct blow-up time.  It answers:
 
 \[
-X_{u,i}^{n+1}
-= X_{u,i}^n + \tau\,\nabla \widehat v_n(X_{u,i}^n) + \sqrt{2\tau}\,\xi_i^n.
+\text{When does the high-resolution solution start seeing more }L^2\text{ growth than the low-resolution solution?}
 \]
 
-The comparison must not be based on final-time visualization or abort time.  Each solver field generates its own particle trajectory, and all trajectories are evaluated with the same diagnostic norm.
+That time depends on the resolution pair, the threshold \(1.05\), and the chosen \(S(t)\)
+readout.  It often occurs before the physical or numerical collapse time.
 
-### Solver fields to compare
+For a concentrating Keller--Segel core, the more geometric quantity is the core length scale.
+A method-independent way to measure this length scale is through **mass-quantile radii**
+\[
+R_q(t)=\inf\{r:\mu(B(x_c(t),r))\ge qM\}.
+\]
 
-Use the following configurations:
+For particles, \(R_q\) is obtained directly from sorted particle distances.  
+For LDG, \(R_q\) is obtained from cell or quadrature mass samples.  
+Thus the metric is almost reconstruction-free and can be applied to both methods.
 
-1. **Baseline:** `current_fourier`
+The intended improvement over \(L^2\)-gap metrics is:
 
-   Current single-window Fourier field used in the solver drift.
-
-2. **Blob residual, moderate bandwidth:** `two_level_blob_residual`, `blob_ch=0.06`
-
-   Solver field:
-
-   \[
-   \widehat v
-   = v_{\rm lo}
-   + \chi\left[\eta_h*\mu_v - \eta_h*(v_{\rm lo}\,dx)\right],
-   \qquad
-   v_{\rm lo}=P_{K_g}\mu_v,
-   \qquad
-   h=0.06L.
-   \]
-
-3. **Blob residual, smoother bandwidth:** `two_level_blob_residual`, `blob_ch=0.09`
-
-   Same formula, but with
-
-   \[
-   h=0.09L.
-   \]
-
-Optional record-only configuration:
-
-4. **Spectral residual:** `two_level_spectral_residual`, `Kl=24`, `hybrid_taper_hi=0.25`
-
-   Keep this only as a noise-limited reference.  It should not be promoted unless it beats the blob residual under the same blow-up proxy.
+- It tracks the **core length scale** directly.
+- It is less sensitive to Fourier/KDE/DG readout choices.
+- It exposes core--halo separation:
+  \[
+  R_{0.8}(t)\ \text{may stop shrinking while } R_{0.1}(t),R_{0.2}(t)\ \text{continue collapsing}.
+  \]
+- It can be checked for stability across \(q\), fitting windows, and resolutions.
 
 ---
 
-## 2. Main metric: LDG-matched particle resolution-gap time
+## 2. Mathematical definition
 
-For a particle trajectory with total particle count \(N_p\), define the diagnostic norm by projecting the particle measure onto the same \(P^1\) DG space used by the LDG reference:
-
+Let \(\mu(t)\) be the finite measure corresponding to the cell density \(u(t)\), with total mass
 \[
-S^{\rm DG}_{N_p,n}(t)
+M=\mu(t)(\Omega).
+\]
+
+For the fully parabolic--parabolic Keller--Segel benchmark considered here, \(M=10\pi\)
+for the \(u\)-density and is conserved.
+
+### 2.1 Center of the core
+
+For the single-core radial benchmark, the simplest center is the first moment:
+\[
+x_c(t)=\frac{1}{M}\int_\Omega x\,d\mu(t).
+\]
+
+This is the default center.
+
+A more robust option is an inner-mass center.  First compute \(R_{q_0}\) using the first-moment
+center, with \(q_0=0.2\) or \(0.3\).  Then define
+\[
+x_c^{(q_0)}(t)
 =
-\left\|\Pi_n^{P^1{\rm DG}}\mu^u_{N_p}(t)\right\|_{L^2},
+\frac{1}{\mu(B(x_c,R_{q_0}))}
+\int_{B(x_c,R_{q_0})}x\,d\mu(t).
 \]
 
-where the \(L^2\) norm is computed with the same mass matrix as the LDG solver.  Use the cross/split estimator
+In practice:
 
+1. Start with the global center \(x_c^{(0)}\).
+2. Compute \(R_{q_0}^{(0)}\).
+3. Recompute the center using only the mass inside \(B(x_c^{(0)},R_{q_0}^{(0)})\).
+4. Optionally repeat once.
+5. Use the final center to compute all \(R_q\).
+
+For the current single-core example, the global center should be sufficient.  The inner-center
+version is a robustness check.
+
+### 2.2 Mass-quantile radii
+
+For each
 \[
-\left(S^{\rm DG,cross}_{N_p,n}\right)^2
+q\in Q=\{0.05,0.1,0.2,0.3,0.5,0.8\},
+\]
+define
+\[
+R_q(t)
 =
-\left\langle
-\Pi_n^{P^1{\rm DG}}\mu^{u,a}_{N_p},
-\Pi_n^{P^1{\rm DG}}\mu^{u,b}_{N_p}
-\right\rangle
+\inf\left\{r:\mu(B(x_c(t),r))\ge qM\right\}.
 \]
 
-to reduce the empirical self-term bias of the raw projected Dirac measure.
+Use \(q=0.1,0.2,0.3\) as the **primary core set**.  
+Use \(q=0.5\) as a secondary check.  
+Use \(q=0.8\) only as a halo/core-separation diagnostic, not as the main blow-up-time estimator.
 
-For the particle analogue of LDG grid refinement, use
-
-\[
-(N_p,n)\longrightarrow (4N_p,2n),
-\]
-
-because in two dimensions halving the particle spacing requires four times as many particles.
-
-For each solver field \(m\), define
-
-\[
-\overline S^{m}_{N_p,n}(t)
-=
-\frac1{M}\sum_{s=1}^M
-S^{m,{\rm DG,cross},(s)}_{N_p,n}(t),
-\]
-
-and
-
-\[
- t_b^m(N_p,n;\theta)
- =
- \inf\left\{
- t:
- \frac{\overline S^m_{4N_p,2n}(t)}{\overline S^m_{N_p,n}(t)}
- \ge \theta
- \right\},
- \qquad \theta=1.05.
-\]
-
-Use a persistence rule: the ratio must remain above \(\theta\) for at least
-
-\[
-\Delta t_{\rm persist}=5\times10^{-6}.
-\]
-
-The main comparison is therefore
-
-\[
-(8\times10^4,80)\to(3.2\times10^5,160).
-\]
-
-The fixed-flux LDG reference values are
-
-\[
-t_b^{\rm LDG}(80\to160;1.05)=5.95\times10^{-5},
-\]
-
-\[
-t_b^{\rm LDG}(160\to320;1.05)=8.43\times10^{-5}.
-\]
-
-The particle value should be interpreted as a **numerical resolution-gap indicator**, not a continuum blow-up time.
+The main reason not to use \(q=0.8\) as the primary metric is that \(R_{0.8}\) can be controlled
+by the outer halo while the inner core continues collapsing.
 
 ---
 
-## 3. Why mean abort/final time is not the main metric
+## 3. Core-collapse time from radius extrapolation
 
-For each seed,
-
+In a resolved pre-collapse window, assume the core length scale obeys approximately
 \[
- t_{\rm end}^{(s)} =
- \begin{cases}
- T, & \text{if the run reaches the final horizon},\\
- t_{\rm abort}^{(s)}, & \text{if a guard stops the run early}.
- \end{cases}
+R_q(t)^2 \approx a_q(T_q-t).
 \]
 
-The previously reported “mean abort/final time” is just
-
+Equivalently, write a linear regression model
 \[
- \frac1M\sum_s t_{\rm end}^{(s)}.
-\]
-
-This is useful for stability, but not accuracy.  A smoother solver field can have a later abort time simply because it reduces \(\max|\nabla \widehat v|\), and a sharper solver field can abort earlier even if it captures a stronger core.  Therefore:
-
-- use **mean abort/final time** only as a secondary stability diagnostic;
-- use **LDG-style \(t_b\)** as the primary concentration / blow-up-onset proxy;
-- do not claim improved dynamics from stability alone.
-
----
-
-## 4. Required simulation matrix
-
-### Main production matrix
-
-Run all combinations:
-
-| solver field | parameters | \(N_p\) | DG readout | seeds |
-|---|---|---:|---|---|
-| `current_fourier` | `K=10` | `80000` | `80 160` | `0 1 2 3` |
-| `current_fourier` | `K=10` | `320000` | `80 160` | `0 1 2 3` |
-| `two_level_blob_residual` | `Kg=8`, `blob_h_rule=frac_L`, `blob_ch=0.06` | `80000` | `80 160` | `0 1 2 3` |
-| `two_level_blob_residual` | `Kg=8`, `blob_h_rule=frac_L`, `blob_ch=0.06` | `320000` | `80 160` | `0 1 2 3` |
-| `two_level_blob_residual` | `Kg=8`, `blob_h_rule=frac_L`, `blob_ch=0.09` | `80000` | `80 160` | `0 1 2 3` |
-| `two_level_blob_residual` | `Kg=8`, `blob_h_rule=frac_L`, `blob_ch=0.09` | `320000` | `80 160` | `0 1 2 3` |
-
-This is \(3\) solver-field configurations \(\times\) \(2\) particle resolutions \(\times\) \(4\) seeds = **24 runs**.
-
-### Optional record-only matrix
-
-Add spectral residual only if resources allow:
-
-| solver field | parameters | \(N_p\) | DG readout | seeds |
-|---|---|---:|---|---|
-| `two_level_spectral_residual` | `Kg=8`, `Kl=24`, `hybrid_taper_hi=0.25` | `80000` | `80 160` | `0 1 2 3` |
-| `two_level_spectral_residual` | `Kg=8`, `Kl=24`, `hybrid_taper_hi=0.25` | `320000` | `80 160` | `0 1 2 3` |
-
----
-
-## 5. Use the same time step and output grid
-
-To avoid mixing time-discretization effects with resolution-gap effects, use the same time step for all solver fields and both particle counts:
-
-\[
-\tau=2.0\times10^{-7},
+Y_q(t):=R_q(t)^2 \approx \alpha_q-\beta_q t,
 \qquad
-T=2.0\times10^{-4},
-\qquad
-n_{\rm steps}=1000.
+\beta_q>0,
 \]
-
-Use
-
+so that
 \[
-\Delta t_{\rm output}=10^{-6}.
+T_q = \frac{\alpha_q}{\beta_q}.
 \]
 
-In `simulation.py`, this is achieved with
+This is the **radius-extrapolated collapse time** for quantile \(q\).
 
-```bash
---tau 2e-7 --n_steps 1000 --diag_every 5
-```
+An instantaneous derivative version is also possible:
+\[
+T_q(t)
+=
+t+\frac{R_q(t)^2}{-dR_q(t)^2/dt},
+\]
+but the regression version is less noisy and should be the primary implementation.
 
-All runs should use:
+### 3.1 Fitting windows
 
-```bash
---K 10
---dg_readout_n 80 160
---cfl_abort 5.0
---filter_s 0.5
---q_window 0.8
---report_times 6e-5 1.2e-4 2e-4
-```
+Use several late-time windows, for example
+\[
+\mathcal I =
+\{
+[4\times10^{-5},9\times10^{-5}],
+[5\times10^{-5},1.0\times10^{-4}],
+[6\times10^{-5},1.1\times10^{-4}],
+[7\times10^{-5},1.2\times10^{-4}]
+\}.
+\]
 
-The solver fields differ only through `--solver_field` and the blob/spectral parameters.
+The exact windows should be adjusted after inspecting LDG data.  The key rule is that the
+window must be:
 
----
+1. late enough that the core collapse is visible;
+2. early enough that the radius is not at the grid / particle / bandwidth floor;
+3. before any solver abort / incomplete-data time for the particle runs;
+4. common across the methods being compared when possible.
 
-## 6. Concrete run commands
+### 3.2 Aggregated definition
 
-Assume the working directory is the repository root.
+For each resolution and method, compute
+\[
+T_q(I)
+\]
+for all \(q\in Q_{\rm core}=\{0.1,0.2,0.3\}\) and all \(I\in\mathcal I\).
 
-Create an output directory:
+Define
+\[
+T_{\rm core}
+=
+\operatorname{median}_{q\in Q_{\rm core},\,I\in\mathcal I} T_q(I).
+\]
 
-```bash
-RUNID=$(date +%Y%m%d_%H%M)_solverfield_tb
-OUT=reference_results/keller_segel_ldg_pp/solver_field_tb_${RUNID}
-mkdir -p "$OUT"
-```
+Also report the spread:
+\[
+\Delta T_{\rm core}
+=
+\left[
+\operatorname{percentile}_{10}(T_q(I)),
+\operatorname{percentile}_{90}(T_q(I))
+\right],
+\]
+or a min--max range if the number of windows is small.
 
-### 6.1 Current Fourier baseline
-
-```bash
-for N in 80000 320000; do
-  for seed in 0 1 2 3; do
-    python experiments/keller_segel/ldg_comparison/simulation.py \
-      --N ${N} \
-      --K 10 \
-      --tau 2e-7 \
-      --n_steps 1000 \
-      --diag_every 5 \
-      --seed ${seed} \
-      --solver_field current_fourier \
-      --dg_readout_n 80 160 \
-      --cfl_abort 5.0 \
-      --filter_s 0.5 \
-      --q_window 0.8 \
-      --report_times 6e-5 1.2e-4 2e-4 \
-      --outdir "${OUT}/current_fourier_N${N}_seed${seed}"
-  done
-done
-```
-
-### 6.2 Blob residual, `c_h=0.06`
-
-```bash
-for N in 80000 320000; do
-  for seed in 0 1 2 3; do
-    python experiments/keller_segel/ldg_comparison/simulation.py \
-      --N ${N} \
-      --K 10 \
-      --tau 2e-7 \
-      --n_steps 1000 \
-      --diag_every 5 \
-      --seed ${seed} \
-      --solver_field two_level_blob_residual \
-      --Kg 8 \
-      --blob_h_rule frac_L \
-      --blob_ch 0.06 \
-      --blob_min_count 100 \
-      --dg_readout_n 80 160 \
-      --cfl_abort 5.0 \
-      --filter_s 0.5 \
-      --q_window 0.8 \
-      --report_times 6e-5 1.2e-4 2e-4 \
-      --outdir "${OUT}/blob_ch006_N${N}_seed${seed}"
-  done
-done
-```
-
-### 6.3 Blob residual, `c_h=0.09`
-
-```bash
-for N in 80000 320000; do
-  for seed in 0 1 2 3; do
-    python experiments/keller_segel/ldg_comparison/simulation.py \
-      --N ${N} \
-      --K 10 \
-      --tau 2e-7 \
-      --n_steps 1000 \
-      --diag_every 5 \
-      --seed ${seed} \
-      --solver_field two_level_blob_residual \
-      --Kg 8 \
-      --blob_h_rule frac_L \
-      --blob_ch 0.09 \
-      --blob_min_count 100 \
-      --dg_readout_n 80 160 \
-      --cfl_abort 5.0 \
-      --filter_s 0.5 \
-      --q_window 0.8 \
-      --report_times 6e-5 1.2e-4 2e-4 \
-      --outdir "${OUT}/blob_ch009_N${N}_seed${seed}"
-  done
-done
-```
-
-### 6.4 Optional spectral residual reference
-
-```bash
-for N in 80000 320000; do
-  for seed in 0 1 2 3; do
-    python experiments/keller_segel/ldg_comparison/simulation.py \
-      --N ${N} \
-      --K 10 \
-      --tau 2e-7 \
-      --n_steps 1000 \
-      --diag_every 5 \
-      --seed ${seed} \
-      --solver_field two_level_spectral_residual \
-      --Kg 8 \
-      --Kl 24 \
-      --hybrid_taper_hi 0.25 \
-      --dg_readout_n 80 160 \
-      --cfl_abort 5.0 \
-      --filter_s 0.5 \
-      --q_window 0.8 \
-      --report_times 6e-5 1.2e-4 2e-4 \
-      --outdir "${OUT}/spectral_taper025_N${N}_seed${seed}"
-  done
-done
-```
+Do **not** quote a single blow-up time unless the spread across \(q\), windows, and resolutions is controlled.
 
 ---
 
-## 7. SLURM array version
+## 4. How to compute \(R_q\) on LDG
 
-Create `experiments/keller_segel/ldg_comparison/run_solver_field_tb_sweep.sb`:
+For an LDG solution \(u_h(x,t)\), do not rely only on cell averages.  Use quadrature.
 
-```bash
-#!/bin/bash
-#SBATCH -J sf_tb
-#SBATCH -N 1
-#SBATCH -n 1
-#SBATCH -c 8
-#SBATCH --mem=32G
-#SBATCH -t 08:00:00
-#SBATCH --array=0-23
-#SBATCH -o sf_tb_%A_%a.out
+### 4.1 Quadrature samples
 
-set -euo pipefail
+For each cell \(C\), take quadrature points \(x_{C,m}\) and quadrature weights \(w_{C,m}\).
+For \(P^1\) LDG, a \(3\times 3\) Gauss rule is sufficient for robust diagnostics; a \(4\times4\)
+rule is safer and cheap.
 
-REPO=${REPO:-$PWD}
-OUT=${OUT:-$REPO/reference_results/keller_segel_ldg_pp/solver_field_tb_${SLURM_JOB_ID}}
-mkdir -p "$OUT"
+Evaluate
+\[
+u_{C,m}=u_h(x_{C,m},t).
+\]
 
-# 3 configs x 2 resolutions x 4 seeds = 24 tasks
-CONFIGS=(current_fourier blob006 blob009)
-NS=(80000 320000)
-SEEDS=(0 1 2 3)
+Construct mass samples in two versions:
 
-idx=$SLURM_ARRAY_TASK_ID
-seed=${SEEDS[$((idx % 4))]}
-idx=$((idx / 4))
-N=${NS[$((idx % 2))]}
-idx=$((idx / 2))
-cfg=${CONFIGS[$idx]}
+Raw:
+\[
+m_{C,m}^{\rm raw}=w_{C,m}u_{C,m}.
+\]
 
-COMMON="--N ${N} --K 10 --tau 2e-7 --n_steps 1000 --diag_every 5 \
-  --seed ${seed} --dg_readout_n 80 160 --cfl_abort 5.0 --filter_s 0.5 \
-  --q_window 0.8 --report_times 6e-5 1.2e-4 2e-4"
+Clipped:
+\[
+m_{C,m}^{+}=w_{C,m}\max(u_{C,m},0).
+\]
 
-case "$cfg" in
-  current_fourier)
-    FIELD="--solver_field current_fourier"
-    ;;
-  blob006)
-    FIELD="--solver_field two_level_blob_residual --Kg 8 --blob_h_rule frac_L --blob_ch 0.06 --blob_min_count 100"
-    ;;
-  blob009)
-    FIELD="--solver_field two_level_blob_residual --Kg 8 --blob_h_rule frac_L --blob_ch 0.09 --blob_min_count 100"
-    ;;
-esac
+The positivity limiter should make \(u_h\ge0\), but saving both raw and clipped diagnostics is useful.
+The primary result should use the clipped version only if raw and clipped agree to high accuracy.
 
-python $REPO/experiments/keller_segel/ldg_comparison/simulation.py \
-  $COMMON $FIELD \
-  --outdir "$OUT/${cfg}_N${N}_seed${seed}"
-```
+### 4.2 LDG center and radii
 
-Run with:
+For the selected mass samples \(m_a\) at locations \(x_a\), compute
+\[
+M_h=\sum_a m_a,
+\qquad
+x_c=\frac{\sum_a m_a x_a}{M_h}.
+\]
 
-```bash
-REPO=$PWD OUT=$PWD/reference_results/keller_segel_ldg_pp/solver_field_tb_<runid> \
-  sbatch experiments/keller_segel/ldg_comparison/run_solver_field_tb_sweep.sb
-```
+Then compute distances
+\[
+d_a=|x_a-x_c|.
+\]
 
----
+Sort the pairs \((d_a,m_a)\) by \(d_a\), form cumulative mass, and define
+\[
+R_q=\min\left\{d_a:\sum_{b:d_b\le d_a}m_b\ge qM_h\right\}.
+\]
 
-## 8. Analysis script specification
+Optional interpolation: If cumulative mass jumps from below \(qM_h\) to above \(qM_h\)
+between two adjacent sorted samples, linearly interpolate in \(d\).  This is not required
+but makes \(R_q(t)\) smoother.
 
-Create a new script:
+### 4.3 LDG output file
+
+For each LDG run, write a CSV:
 
 ```text
-experiments/keller_segel/ldg_comparison/analyze_solver_field_tb.py
+ldg_core_radii_N<N>.csv
 ```
 
-It should not reuse abort time as the main criterion.  It should compute the same LDG-style crossing for every solver field.
-
-### 8.1 Inputs
-
-Directory layout:
-
-```text
-solver_field_tb_<runid>/
-  current_fourier_N80000_seed0/diag_*.csv
-  current_fourier_N80000_seed1/diag_*.csv
-  ...
-  current_fourier_N320000_seed3/diag_*.csv
-  blob_ch006_N80000_seed0/diag_*.csv
-  ...
-  blob_ch009_N320000_seed3/diag_*.csv
-```
-
-Required columns from each `diag_*.csv`:
+with columns:
 
 ```text
 t
-S_dg_cross_80
-S_dg_cross_160
-S_dg_raw_80
-S_dg_raw_160
-R_0.1
-R_0.2
-R_0.5
-R_0.8
-drift_cfl_solver_field
-drift_cfl_fourier_diag
-max_grad_solver_field
-max_grad_fourier_diag
-solver_field_h
-solver_field_residual_E
-solver_field_mode
+N
+M_raw
+M_clip
+xc_x_raw
+xc_y_raw
+xc_x_clip
+xc_y_clip
+R_0.05_raw
+R_0.1_raw
+R_0.2_raw
+R_0.3_raw
+R_0.5_raw
+R_0.8_raw
+R_0.05_clip
+R_0.1_clip
+R_0.2_clip
+R_0.3_clip
+R_0.5_clip
+R_0.8_clip
+S_L2
+peak
+u_min
 ```
 
-If any required DG column is missing, the run should be marked invalid for the main \(t_b\) computation.
-
-### 8.2 Main crossing computation
-
-For each solver-field config `m`:
-
-- low group: `N=80000`, column `S_dg_cross_80`;
-- high group: `N=320000`, column `S_dg_cross_160`.
-
-Build a common time grid:
-
-\[
- t_k = k\times 10^{-6}.
-\]
-
-Use only the interval where all required seed curves exist.  Define
-
-\[
- t_{\max}^{m}=\min_s t_{\rm end}^{m,N=80000,s}\wedge
-              \min_s t_{\rm end}^{m,N=320000,s}.
-\]
-
-If \(t_{\max}^{m}<5\times10^{-5}\), mark the config invalid for the main comparison.
-
-Interpolate each seed curve to the common grid up to \(t_{\max}^{m}\), then compute
-
-\[
- \overline S_{\rm low}^{m}(t),
- \qquad
- \overline S_{\rm high}^{m}(t).
-\]
-
-Define
-
-\[
- R^m(t)=
- \frac{\overline S_{\rm high}^{m}(t)}{\overline S_{\rm low}^{m}(t)}.
-\]
-
-Then
-
-\[
- t_b^m(1.05)=
- \inf\{t:R^m(t)\ge1.05\text{ for at least }5\times10^{-6}\}.
-\]
-
-### 8.3 Bootstrap confidence interval
-
-Bootstrap over seeds:
-
-1. Resample low-resolution seeds with replacement.
-2. Resample high-resolution seeds with replacement.
-3. Recompute the ensemble mean ratio and \(t_b\).
-4. Repeat 1000 times.
-5. Report 5th and 95th percentiles.
-
-Use independent resampling unless the Brownian/random seeds are deliberately coupled across low/high runs.  If coupled seeds are used, also report a paired bootstrap as sensitivity.
-
-### 8.4 Secondary diagnostics
-
-For each config, report:
-
-```text
-t_end_mean, t_end_std
-fraction_reached_T
-max drift_cfl_solver_field mean/std
-max drift_cfl_fourier_diag mean/std
-solver/Fourier CFL ratio
-R_0.2(t=1e-4) mean/std
-R_0.1(t=1e-4) mean/std
-R_0.8(t=1e-4) mean/std
-residual_E(t=1e-4) mean/std
-```
-
-These are secondary.  They should never replace \(t_b\).
+The current fixed-flux LDG runs should be re-run or postprocessed so that this time series exists at
+\(\Delta t_{\rm out}\approx10^{-6}\) over \(0\le t\le2\times10^{-4}\).
 
 ---
 
-## 9. Expected output files
+## 5. How to compute \(R_q\) on particles
 
-The analysis script should create:
+For an equal-weight particle cloud
+\[
+\mu^N(t)=\omega\sum_{i=1}^{N(t)}\delta_{X_i(t)},
+\]
+compute
+\[
+x_c=\frac{1}{N(t)}\sum_i X_i(t)
+\]
+for the default center.
 
-```text
-solver_field_tb_summary.csv
-solver_field_tb_summary.json
-README.md
-figures/solver_field_tb_ratio.pdf
-figures/solver_field_tb_ratio.png
-figures/solver_field_S_curves.pdf
-figures/solver_field_core_radii.pdf
-figures/solver_field_dual_cfl.pdf
-plot_data/*.csv
-```
+Then compute distances
+\[
+d_i=|X_i-x_c|.
+\]
 
-### 9.1 `solver_field_tb_summary.csv`
+For equal weights,
+\[
+R_q^N(t)=d_{(\lceil qN(t)\rceil)},
+\]
+where \(d_{(k)}\) is the \(k\)-th ordered distance.
+
+For non-equal weights, sort \((d_i,\omega_i)\) and use the cumulative weighted mass.
+
+### 5.1 Particle output
+
+The current particle diagnostics already include some inner radii such as \(R_{0.1}\), \(R_{0.2}\), \(R_{0.5}\), and \(R_{0.8}\) in recent runs.  Add \(R_{0.3}\) explicitly.
 
 Required columns:
 
 ```text
-config
-theta
-low_group
-high_group
-n_low
-n_high
-n_seed_low
-n_seed_high
-tmax_complete
-tb
-ci_low
-ci_high
-ratio_max
-ldg_ref_80_160
-ldg_ref_160_320
-on_ldg_scale
-fraction_reached_T_low
-fraction_reached_T_high
-t_end_mean_low
-t_end_mean_high
-cfl_solver_max_mean_low
-cfl_solver_max_mean_high
-cfl_fourier_max_mean_low
-cfl_fourier_max_mean_high
-R02_tm_mean_low
-R02_tm_mean_high
-residual_E_tm_mean_low
-residual_E_tm_mean_high
-valid_main_tb
+t
+seed
+N
+M_u
+xc_x
+xc_y
+R_0.05
+R_0.1
+R_0.2
+R_0.3
+R_0.5
+R_0.8
+S_dg_cross_80
+S_dg_cross_160
+S_L2_u
+peak_PK_u
+drift_cfl_solver_field
+drift_cfl_fourier_diag
+solver_field_mode
+```
+
+For the main comparison, use `current_fourier` particle dynamics unless there is a strong reason
+to include solver-field variants.  The latest solver-field comparison shows that blob residual
+improves stability but does not change the LDG-style \(t_b\) or core radii in a statistically
+distinguishable way.  Therefore it is not the main accuracy result.
+
+---
+
+## 6. Secondary collapse-time diagnostics
+
+These are useful cross-checks but should not be the main metric.
+
+### 6.1 Inverse-\(L^2\) time
+
+If the core is approximately self-similar,
+\[
+u(x,t)\approx R(t)^{-2}F\left(\frac{x-x_c}{R(t)}\right),
+\]
+then
+\[
+\|u(t)\|_{L^2}\sim R(t)^{-1}.
+\]
+
+Therefore
+\[
+S(t)^{-2}\sim R(t)^2\sim T-t.
+\]
+
+Fit
+\[
+S(t)^{-2}\approx \alpha_S-\beta_S t,
+\qquad
+T_{L^2}=\alpha_S/\beta_S.
+\]
+
+For LDG, use the LDG \(L^2\) norm.  
+For particles, use the LDG-matched \(P^1\) DG readout \(S^{DG}\), not the Fourier \(S\), as the primary \(S\).  
+Fourier \(S\) can be reported as sensitivity only.
+
+### 6.2 Inverse peak time
+
+Similarly, for a concentrated two-dimensional core,
+\[
+\|u(t)\|_\infty^{-1}\sim R(t)^2.
+\]
+
+Fit
+\[
+P(t)^{-1}\approx \alpha_P-\beta_P t,
+\qquad
+T_{\rm peak}=\alpha_P/\beta_P.
+\]
+
+Peak is highly reconstruction-dependent and should only be a secondary diagnostic.
+
+---
+
+## 7. Stability criteria before quoting a time
+
+A core-collapse time estimate is only meaningful if the following checks pass.
+
+### 7.1 Quantile consistency
+
+The estimates
+\[
+T_{0.1},\quad T_{0.2},\quad T_{0.3}
+\]
+should be close.
+
+Suggested acceptance criterion:
+
+\[
+\frac{\max T_q-\min T_q}{\operatorname{median}T_q}\le 0.25
+\]
+within a given resolution and fitting-window family.
+
+### 7.2 Window consistency
+
+The same \(q\) fitted over multiple windows should give similar \(T_q(I)\).
+
+Suggested acceptance criterion:
+
+\[
+\frac{P_{90}(T_q(I))-P_{10}(T_q(I))}{\operatorname{median}_{I}T_q(I)}\le 0.25.
+\]
+
+### 7.3 Resolution consistency
+
+LDG \(N=160\) and \(N=320\) should give the same order and preferably overlapping
+ranges.  Particle \(N_p=8\times10^4\) and \(3.2\times10^5\) should also be consistent
+within seed uncertainty.
+
+### 7.4 Agreement with secondary diagnostics
+
+\(T_{L^2}\) should be of the same order as \(T_{\rm core}\).  
+\(T_{\rm peak}\) should not strongly contradict it, but peak is not required to agree precisely.
+
+### 7.5 Fit quality
+
+For the linear fit
+\[
+R_q(t)^2=\alpha_q-\beta_q t,
+\]
+require:
+
+```text
+beta_q > 0
+R^2 >= 0.9    # or at least report it
+T_q > max(window)
+T_q not absurdly far beyond the data window
+```
+
+If the fit is curved or the estimate changes strongly with the fitting window, do not quote it as a blow-up time.
+
+---
+
+## 8. Interpretation scenarios
+
+### Scenario A: strong result
+
+LDG \(T_{\rm core}\) is stable across \(q\), windows, and resolution, and particle \(T_{\rm core}\)
+agrees within uncertainty.
+
+Paper language:
+
+> We define a reconstruction-light core-collapse time from the extrapolated mass-quantile
+> radii.  The estimate is stable across inner quantiles and fitting windows and agrees
+> between the fixed-flux LDG reference and the particle method.
+
+This would significantly strengthen the Keller--Segel benchmark.
+
+### Scenario B: LDG stable, particle unstable
+
+This means the metric is valid but the particle resolution / ensemble is not enough.
+
+Action:
+
+- increase particle count or seed count;
+- check small-\(q\) quantile noise;
+- consider \(q=0.2,0.3\) only;
+- do not quote particle \(T_{\rm core}\) yet.
+
+### Scenario C: LDG itself unstable
+
+Then the metric is not robust enough for this benchmark.
+
+Paper language:
+
+> The core-collapse proxy is of order \(10^{-4}\), but remains window-sensitive even
+> for the LDG reference.  We therefore do not quote a continuum blow-up time.
+
+### Scenario D: \(T_{\rm core}\) stable but far from literature time
+
+Then check:
+
+- center definition;
+- raw vs clipped LDG mass;
+- fitting windows;
+- whether \(R_q^2\) is actually linear;
+- whether the literature value refers to a different blow-up-time definition.
+
+Do not force the metric to match a target number.
+
+---
+
+## 9. Proposed repository implementation
+
+Create:
+
+```text
+experiments/keller_segel/core_collapse_time/
+    README.md
+    compute_ldg_core_radii.py
+    collect_particle_core_radii.py
+    fit_core_collapse.py
+    plot_core_collapse.py
+```
+
+### 9.1 `compute_ldg_core_radii.py`
+
+Responsibilities:
+
+- read LDG snapshots or LDG coefficient time series;
+- evaluate \(u_h\) at quadrature points;
+- compute raw and clipped \(R_q\);
+- write `ldg_core_radii_N<N>.csv`.
+
+Command:
+
+```bash
+python compute_ldg_core_radii.py \
+  --ldg_dir reference_results/keller_segel_ldg_pp/ldg_20260614_2074_b41f6d4_ldg_fixed_flux \
+  --N 80 160 320 \
+  --q 0.05 0.1 0.2 0.3 0.5 0.8 \
+  --quad_order 4 \
+  --outdir reference_results/keller_segel_ldg_pp/core_collapse_<run_id>/ldg
+```
+
+If the current LDG archive does not contain enough snapshots / coefficients to postprocess, rerun LDG with online radius output.
+
+### 9.2 `collect_particle_core_radii.py`
+
+Responsibilities:
+
+- read particle `diag_*.csv`;
+- extract \(R_q(t)\), \(S^{DG}(t)\), Fourier \(S(t)\), peak;
+- group by method, \(N_p\), seed;
+- write clean ensemble CSV.
+
+Command:
+
+```bash
+python collect_particle_core_radii.py \
+  --particle_dir reference_results/keller_segel_ldg_pp/particle_blowup_<run_id> \
+  --q 0.05 0.1 0.2 0.3 0.5 0.8 \
+  --outdir reference_results/keller_segel_ldg_pp/core_collapse_<run_id>/particle
+```
+
+If \(R_{0.3}\) is missing from existing particle runs, either rerun or compute from saved clouds if available.
+For main results, prefer rerun with \(R_{0.3}\) written online.
+
+### 9.3 `fit_core_collapse.py`
+
+Responsibilities:
+
+- read LDG and particle radii;
+- fit \(R_q^2=\alpha-\beta t\);
+- compute \(T_q=\alpha/\beta\);
+- compute \(T_{\rm core}\) median and spread;
+- compute \(T_{L^2}\) from \(S^{-2}\);
+- compute \(T_{\rm peak}\) from peak\(^{-1}\);
+- bootstrap particle seeds.
+
+Output files:
+
+```text
+core_fit_all.csv
+core_fit_summary.csv
+core_fit_summary.json
+```
+
+Suggested output columns for `core_fit_all.csv`:
+
+```text
+method
+resolution
+seed_group
+q
+window_start
+window_end
+quantity          # Rq2, Sminus2, peakminus1
+alpha
+beta
+T_est
+R2_fit
+n_points
+valid_fit
 invalid_reason
 ```
 
-### 9.2 README content
+Suggested output columns for `core_fit_summary.csv`:
 
-The generated README must contain:
+```text
+method
+resolution
+quantity
+q_set
+window_set
+T_median
+T_p10
+T_p90
+T_min
+T_max
+relative_spread
+valid_quote
+decision
+```
 
-1. the definition of \(S^{\rm DG}_{N_p,n}\);
-2. the definition of \(t_b^{\rm part}\);
-3. a table comparing solver fields;
-4. a statement that abort/final time is only stability;
-5. a statement that the comparison is a numerical resolution-gap indicator, not continuum blow-up time;
-6. a decision section.
+### 9.4 `plot_core_collapse.py`
+
+Figures:
+
+1. \(R_q(t)^2\) vs \(t\) for \(q=0.1,0.2,0.3\), with fit lines.
+2. \(T_q(I)\) scatter over \(q\) and fit windows.
+3. LDG vs particle \(T_{\rm core}\) summary with uncertainty bars.
+4. \(S(t)^{-2}\) and peak\(^{-1}\) as secondary checks.
+5. Core--halo separation plot:
+   \[
+   R_{0.8}(t)/R_{0.2}(t)
+   \]
+   to show whether the halo decouples from the collapsing inner core.
 
 ---
 
-## 10. Interpretation rules
+## 10. Suggested experiment order
 
-### Scenario A: blob changes stability but not \(t_b\)
+### Step 1: LDG-only validation
 
-If
+Use fixed-flux LDG \(N=80,160,320\).
 
-\[
- t_b^{\rm blob}\approx t_b^{\rm current}
-\]
-
-within bootstrap CI, but blob has smaller real solver CFL or higher fraction reaching \(T\), then conclusion:
+Compute:
 
 ```text
-Blob residual improves numerical stability / smoothness of the drift, but does not change the LDG-style concentration proxy. It is not an accuracy improvement on this benchmark.
+R_0.05, R_0.1, R_0.2, R_0.3, R_0.5, R_0.8
+T_core from R_0.1, R_0.2, R_0.3
+T_L2 from S_L2^{-2}
+T_peak from peak^{-1}
 ```
 
-This is the most likely scenario based on the existing `sf_blob` sweep.
+Decision:
 
-### Scenario B: blob gives a significantly more LDG-like \(t_b\)
+- If LDG \(T_{\rm core}\) is unstable, stop and do not promote this metric.
+- If LDG \(T_{\rm core}\) is stable, proceed to particle.
 
-If blob has a \(t_b\) closer to the fixed-flux LDG interval \([5.95,8.43]\times10^{-5}\) with narrower CI, and the core radii are consistent, then conclusion:
+### Step 2: Particle current solver
+
+Use current particle runs or rerun:
 
 ```text
-Blob residual improves the stability of the LDG-style particle blow-up proxy.
+N_p = 8e4, 3.2e5
+seeds = 0,1,2,3
+solver_field = current_fourier
+dg_readout_n = 80,160
+output_dt = 1e-6
 ```
 
-Still do not call it continuum blow-up time.
+Add \(R_{0.3}\) to diagnostics if missing.
 
-### Scenario C: blob pushes \(t_b\) later
+### Step 3: Compare LDG and particle
 
-If blob moves \(t_b\) to \(1.2\times10^{-4}\) or later while residual energy is very small or core radii do not change, likely interpretation:
+Compare:
 
 ```text
-The blob may be oversmoothing the chemotactic drift; the later gap is not automatically better.
+T_core(LDG N=160,320)
+T_core(particle Np=8e4,3.2e5)
+T_L2(LDG)
+T_L2(particle DG readout)
+LDG-style t_b
 ```
 
-Check radii and LDG snapshots before making any claim.
+### Step 4: Decide paper usage
 
-### Scenario D: blob makes \(t_b\) earlier
+Use in main §5.4 only if LDG and particle are both stable.
 
-If blob makes \(t_b\) much earlier, inspect:
-
-```text
-drift_cfl_solver_field spikes
-abort_diagnostics.json
-residual_E
-R_0.1/R_0.2 seed variance
-```
-
-Do not call this improved concentration unless the change is robust across seeds and consistent with LDG reference.
-
-### Scenario E: many runs abort before \(t_b\)
-
-If a solver field does not survive beyond the crossing window plus persistence, mark it invalid:
-
-```text
-valid_main_tb = false
-invalid_reason = aborted before crossing window
-```
-
-Do not extrapolate.
+Otherwise use as a limited diagnostic and say no continuum blow-up time is quoted.
 
 ---
 
-## 11. Paper-use decision
+## 11. Suggested manuscript wording
 
-Only include solver-field variants in the paper if they improve the same LDG-style \(t_b\) metric or reduce uncertainty without compromising concentration diagnostics.
+### If stable
 
-Current paper-safe result remains:
-
-```text
-Current particle method + LDG-matched DG readout gives a particle resolution-gap time on the same scale as fixed-flux LDG at adequate particle count.
+```latex
+In addition to the LDG-style resolution-gap time, we compute a reconstruction-light
+core-collapse proxy from the mass-quantile radii.  For \(q=0.1,0.2,0.3\), let
+\(R_q(t)\) be the smallest radius around the cell-density center containing a fraction
+\(q\) of the total cell mass.  In a resolved pre-collapse window we fit
+\(R_q(t)^2\approx a_q(T_q-t)\) and define \(T_{\rm core}\) as the median over quantiles
+and fitting windows.  The same definition is applied to LDG quadrature masses and to
+particle clouds.  The resulting \(T_{\rm core}\) is stable across inner quantiles and
+agrees between the LDG reference and the particle method, while the outer radius
+\(R_{0.8}\) exposes the surrounding halo.
 ```
 
-Do not include:
+### If not stable
 
-```text
-Blob residual solves near-blow-up dynamics.
-```
-
-unless the new same-definition \(t_b\) comparison proves it.
-
-If blob only improves stability but not \(t_b\), keep it as a record/appendix note:
-
-```text
-A solver-level blob residual field can be inserted into the drift and reduces real solver-CFL, but did not produce a demonstrable accuracy gain in the LDG-style concentration proxy.
+```latex
+We also tested a reconstruction-light core-collapse proxy based on the extrapolation
+of mass-quantile radii \(R_q(t)^2\).  Although the proxy gives a time scale of order
+\(10^{-4}\), it remains sensitive to the fitting window and inner quantile, even on the
+LDG reference.  We therefore report it only as a diagnostic and do not quote a continuum
+blow-up time.
 ```
 
 ---
 
-## 12. Immediate checklist
+## 12. Decision rule for final paper
 
-Before running production:
-
-- [ ] Verify `test_blob_residual_vfield.py` passes.
-- [ ] Verify `simulation.py --solver_field two_level_blob_residual --smoke` advances and writes `drift_cfl_solver_field`.
-- [ ] Verify all production runs write `S_dg_cross_80` and `S_dg_cross_160`.
-- [ ] Confirm all runs use the same `tau`, `n_steps`, `K`, `filter_s`, and `q_window`.
-- [ ] Confirm output spacing is \(10^{-6}\).
-- [ ] Confirm `abort_diagnostics.json` is written when a run aborts.
-
-After running:
-
-- [ ] Run `analyze_solver_field_tb.py`.
-- [ ] Inspect ratio curves before trusting the CSV.
-- [ ] Check every config reaches at least the crossing time plus persistence.
-- [ ] Compare \(t_b\) and CI against LDG reference.
-- [ ] Check core radii and residual energy to detect oversmoothing.
-- [ ] Update `REVISION_RESULTS.md` with positive and negative outcomes.
-
----
-
-## 13. Minimal conclusion template
-
-Use this structure after the run:
+The new metric should improve the paper only if it passes this gate:
 
 ```text
-We compared solver-field reconstructions using the same LDG-style particle resolution-gap definition.  The diagnostic norm was the LDG-matched P1 DG cross estimator, and the main pair was (8e4,80)->(3.2e5,160).  The current Fourier solver gave tb = ... with CI ....  The blob residual c_h=0.06 gave tb = ... with CI ..., and c_h=0.09 gave tb = ... with CI ....  Abort/final time and solver-CFL are reported only as stability diagnostics.  Therefore, [decision].
+LDG stable first.
+Particle stable second.
+LDG and particle agree within uncertainty.
+Secondary S^{-2} check same order.
+Peak not contradictory.
 ```
 
-Possible decisions:
+If this gate fails, the paper should keep the safer story:
 
 ```text
-Decision 1: Blob residual improves stability but not the LDG-style blow-up proxy; keep record-only.
-Decision 2: Blob residual improves the LDG-style proxy and can be used in §5.4.
-Decision 3: Blob residual oversmooths or is inconclusive; keep current Fourier + DG readout as main result.
+direct LDG comparison;
+LDG-style resolution-gap time on the same scale;
+reconstruction-free core radii showing concentration;
+no continuum blow-up-time claim.
 ```
+
