@@ -732,4 +732,793 @@ LDG-style resolution-gap time on the same scale;
 reconstruction-free core radii showing concentration;
 no continuum blow-up-time claim.
 ```
+# Next experiments for the Keller--Segel LDG comparison and branching advantage
+
+**Purpose.**  
+The recent `T_core` result is promising but not yet paper-ready. We need to separate three questions that have been mixed together:
+
+1. **Metric question:** Is the new core-collapse time `T_core` a stable, method-independent concentration-time diagnostic?
+2. **Particle-dynamics question:** Is the current particle dynamics delayed relative to LDG because of the Fourier drift reconstruction, especially the window quantile `q_window` and bandwidth `K`?
+3. **Branching-novelty question:** Where does the stochastic branching mechanism actually improve over weighted particles? In the fully parabolic--parabolic Keller--Segel blow-up benchmark, `u` is conservative and does not branch; only the `v` cloud uses decay/injection to realize `v_t = Δv + u - v`. Therefore this benchmark cannot by itself prove that branching is better than LDG or better than a weighted particle method.
+
+The goal of the next experiments is **not** to tune a blow-up time to match LDG, but to obtain a defensible result that can be used in the paper.
+
+---
+
+## Current facts to respect
+
+### Current Keller--Segel particle benchmark
+
+The fully parabolic--parabolic benchmark is
+
+\[
+u_t=\Delta u-\nabla\cdot(u\nabla v),\qquad
+v_t=\Delta v+u-v .
+\]
+
+The current particle runs use:
+
+```text
+solver_field = current_fourier
+K = 10
+q_window = 0.8
+tau = 2e-7
+dg_readout_n = 80 160
+N_p = 8e4, 3.2e5
+seeds = 0,1,2,3
+```
+
+The particle dynamics uses a core-adaptive Fourier reconstruction of the **v-field** to compute the drift
+
+\[
+dX_i^u = \nabla \widehat v(X_i^u)\,dt + \sqrt{2}\,dW_i .
+\]
+
+The diagnostic `T_core` is different: it is computed from **raw particle mass quantile radii**, not from Fourier reconstruction.
+
+### Current `T_core` result
+
+The new metric is
+
+\[
+R_q(t)=\inf\{r:\mu(B(x_c(t),r))\ge qM\},
+\]
+
+and
+
+\[
+R_q(t)^2 \approx \alpha_q-\beta_q t,\qquad T_q=\alpha_q/\beta_q.
+\]
+
+The current reported values are approximately:
+
+```text
+LDG N=320:          T_core = 1.215e-4, [p10,p90] = [1.13,1.22]e-4
+particle Np=3.2e5: T_core = 1.318e-4, [p10,p90] = [1.26,1.33]e-4
+```
+
+This is a strong **limited-positive** result: same scale, near the LDG blow-up scale, particle about 8% later. It is **not** yet a continuum blow-up-time claim.
+
+### Current problems to fix before using this in the paper
+
+1. The README/commit text says LDG `N=320` has `12/12` valid fits, but the summary file shows only `4` valid `R_q^2` fits. This must be corrected.
+2. Particle seed averaging currently risks silently dropping seeds whose CSV lengths differ from seed 0. This must be fixed using a common time grid and seed coverage rules.
+3. Particle `T_core` uncertainty currently reflects quantile/window spread, not true seed uncertainty. Add seed bootstrap.
+4. Particle valid fits are mainly from `q=0.2,0.3`; `q=0.1` is not stable. The paper language must reflect that.
+
+---
+
+# Experiment A. Repair and stress-test the `T_core` metric implementation
+
+## A1. Fix particle seed averaging
+
+Modify:
+
+```text
+experiments/keller_segel/core_collapse_time/fit_core_collapse.py
+```
+
+Current problematic logic:
+
+```python
+t0 = seeds[0]["t"]
+arrs = [s["R"][q] for s in seeds if q in s["R"] and len(s["R"][q]) == len(t0)]
+Rdict[q] = np.nanmean(np.vstack(arrs), axis=0)
+```
+
+Replace this with common-grid logic:
+
+```python
+def build_common_grid(seeds, dt=1e-6, t_end=None):
+    # Use the largest interval covered by enough seeds.
+    # Prefer t_grid = np.arange(0, t_common + 0.5*dt, dt)
+    # where t_common is the largest time such that n_seed_eff >= min_seed_coverage.
+    pass
+
+def interpolate_seed_to_grid(seed, t_grid, q_list):
+    # For each q, interpolate R_q(t) to the common grid.
+    # Use np.interp only within the seed's available time interval.
+    # Outside coverage, fill NaN.
+    pass
+
+def seed_mean_on_common_grid(seeds, q_list, dt=1e-6, min_seed_coverage=3):
+    # Return:
+    #   t_grid
+    #   R_mean[q]
+    #   R_median[q]
+    #   n_seed_eff[q](t)
+    #   R_seed_arrays[q] for bootstrap
+    pass
+```
+
+Window validity rule:
+
+```text
+A fitting window is valid for particle only if n_seed_eff(t) >= min_seed_coverage
+for every sampled time in that fitting window.
+```
+
+Default:
+
+```text
+min_seed_coverage = 3
+dt = 1e-6
+```
+
+Keep a stricter option:
+
+```text
+--min_seed_coverage 4
+```
+
+so we can see whether the result changes when all four seeds are required.
+
+## A2. Add seed bootstrap for particle `T_core`
+
+Add:
+
+```text
+--bootstrap_seeds 1000
+```
+
+For each bootstrap sample:
+
+1. Sample seeds with replacement.
+2. Build seed-mean `R_q(t)` on the common grid.
+3. Fit `T_core` over the same q-set and fitting windows.
+4. Store bootstrap `T_core`.
+
+Report:
+
+```text
+T_core_median_qwindow
+T_core_p10_qwindow
+T_core_p90_qwindow
+T_core_bootstrap_median
+T_core_bootstrap_p10
+T_core_bootstrap_p90
+n_seed_eff_min_by_fit
+```
+
+The paper should cite the seed bootstrap interval, not only the q/window spread.
+
+## A3. Add q-set sensitivity without rerunning dynamics
+
+Use existing LDG and particle `R_q(t)` CSVs. Recompute `T_core` for:
+
+```text
+q_set = {0.1,0.2,0.3}     # current default
+q_set = {0.2,0.3}         # likely more reliable for particles
+q_set = {0.2}
+q_set = {0.3}
+q_set = {0.05,0.1,0.2}    # stress test, not for main text unless stable
+```
+
+Output:
+
+```text
+core_fit_summary_by_qset.csv
+core_fit_summary_by_qset.json
+figures/core_T_qset_sensitivity.pdf
+```
+
+Decision:
+
+```text
+If particle T_core changes by >10% across reasonable q_set choices, do not quote a single
+particle T_core. Report only that the core-collapse proxy is on the LDG scale but q-sensitive.
+
+If LDG is stable and particle {0.2,0.3} is stable, use {0.2,0.3} for particle and
+explain that q=0.1 is below the particle resolution/noise floor in the finest run.
+```
+
+## A4. Correct current result text
+
+Update README and `REVISION_RESULTS.md`:
+
+```text
+Wrong:
+  LDG N=320 has 12/12 q-window fits valid.
+
+Correct:
+  LDG N=320 has 4/12 R_q^2 fits passing the strict linear-fit gate;
+  the accepted fits are concentrated in the late resolved windows and have small spread.
+  The independent S^{-2} and peak^{-1} extrapolations agree near 1.21e-4.
+```
+
+Also replace:
+
+```text
+particle q={0.1,0.2,0.3} stable
+```
+
+with:
+
+```text
+particle stable fits currently come mainly from q=0.2 and q=0.3; q=0.1 is too noisy
+or not linearly resolved at the present particle counts.
+```
+
+---
+
+# Experiment B. Sensitivity of particle dynamics to `q_window`
+
+## Why this is necessary
+
+The current particle dynamics chooses the Fourier reconstruction window using `q_window=0.8`. This controls the window scale \(L(t)\) and therefore the effective drift resolution
+
+\[
+h_{\rm eff}(t)=L(t)/K.
+\]
+
+If `q_window=0.8` is controlled by the outer halo, then the inner core may keep collapsing while the Fourier drift remains too coarse. This could explain why particle `T_core` is about 8% later than LDG.
+
+## B1. Production matrix
+
+Run current Fourier solver only:
+
+```text
+solver_field = current_fourier
+K = 10
+tau = 2e-7
+n_steps = 1000
+T = 2e-4
+diag_every = 5        # output dt = 1e-6
+dg_readout_n = 80 160
+cfl_abort = 5.0
+filter_s = 0.5
+```
+
+Sweep:
+
+```text
+q_window in {0.5, 0.65, 0.8, 0.9}
+N_p in {8e4, 3.2e5}
+seeds = {0,1,2,3}
+```
+
+Total:
+
+```text
+4 q_window × 2 N × 4 seeds = 32 runs
+```
+
+Output directory:
+
+```text
+reference_results/keller_segel_ldg_pp/core_collapse_qwindow_<id>/
+```
+
+## B2. Exact command template
+
+For each run:
+
+```bash
+python experiments/keller_segel/ldg_comparison/simulation.py \
+  --N <N> \
+  --K 10 \
+  --tau 2e-7 \
+  --n_steps 1000 \
+  --diag_every 5 \
+  --seed <seed> \
+  --solver_field current_fourier \
+  --dg_readout_n 80 160 \
+  --cfl_abort 5.0 \
+  --filter_s 0.5 \
+  --q_window <q_window> \
+  --report_times 6e-5 1.2e-4 2e-4 \
+  --outdir <OUT>/qwin<q_window>_N<N>_seed<seed>
+```
+
+## B3. Diagnostics to analyze
+
+For each q-window:
+
+```text
+T_core with repaired seed averaging + seed bootstrap
+LDG-style t_b using S_dg_cross
+R_0.1, R_0.2, R_0.3, R_0.5, R_0.8 curves
+R_0.2 / (L/K), R_0.1 / (L/K)
+L(t)
+outside_v_frac
+drift_cfl_solver_field
+abort/final time
+valid fit count
+seed coverage by window
+```
+
+## B4. Decision rule
+
+### Case B-success: q_window explains the 8% offset
+
+If some principled mid-range window such as `q_window=0.65` or `0.5` gives:
+
+```text
+particle T_core closer to LDG N=320,
+particle T_core stable under seed bootstrap,
+outside_v_frac remains small,
+no strong increase in aborts/CFL,
+and q-set sensitivity is acceptable,
+```
+
+then write:
+
+```text
+The residual delay of the particle T_core under the default q_window=0.8 is attributable
+to a conservative outer-mass window that slightly under-resolves the inner drift scale.
+Using a more core-local but still stable window reduces this offset.
+```
+
+Do **not** cherry-pick. If choosing a new default, justify it before looking at `T_core`, e.g.:
+
+```text
+q_window = 0.65 is selected because it keeps outside_v_frac below a tolerance while
+maximizing R_0.2/(L/K), i.e. resolving the inner core without losing the chemical field.
+```
+
+### Case B-negative: q_window sensitivity is large or unstable
+
+If `T_core` changes strongly with `q_window`, or a closer result comes with large `outside_v_frac` or instability, then do not use a particle blow-up-time claim.
+
+Paper wording:
+
+```text
+The particle core-collapse proxy remains on the LDG scale, but its exact extrapolated
+time is sensitive to the Fourier-window choice. We therefore report it as a concentration-time
+diagnostic, not as a continuum blow-up time.
+```
+
+---
+
+# Experiment C. Sensitivity to Fourier bandwidth `K`
+
+## Why this is necessary
+
+The 8% particle delay may come from `K=10`, not only from `q_window=0.8`. If increasing `K` moves particle `T_core` toward LDG, then the current offset is a drift-reconstruction resolution effect.
+
+## C1. Pilot at Np = 8e4
+
+Run:
+
+```text
+K in {8,10,12,16}
+q_window = 0.8
+N_p = 8e4
+seeds = 0,1,2,3
+tau = 2e-7
+T = 2e-4
+```
+
+If `K=16` is too noisy or aborts, try stronger filter:
+
+```text
+filter_s in {0.5,0.35,0.25}
+```
+
+## C2. Main high-resolution test
+
+Only for promising K values:
+
+```text
+K in {10,12} or {10,12,16 if stable}
+N_p = 3.2e5
+seeds = 0,1,2,3
+```
+
+Optional combined sweep:
+
+```text
+q_window in {0.65,0.8}
+K in {10,12}
+```
+
+## C3. Metrics
+
+Same as Experiment B:
+
+```text
+T_core with fixed seed handling
+seed bootstrap CI
+LDG-style t_b
+core radii
+R_0.2/(L/K)
+drift_cfl_solver_field
+abort/final time
+outside_v_frac
+```
+
+## C4. Decision rule
+
+If increasing K moves \(T_{\rm core}\) toward LDG while preserving stability:
+
+```text
+The current particle delay is reconstruction-resolution controlled.
+```
+
+If increasing K does not change \(T_{\rm core}\):
+
+```text
+The 8% offset is not primarily due to Fourier bandwidth at this resolution; it may be
+particle noise, splitting error, time step, or the boundary/window model.
+```
+
+If increasing K causes instability/noise:
+
+```text
+The Fourier drift is resolution/noise limited; report only the stable default result.
+```
+
+---
+
+# Experiment D. Time-step sensitivity
+
+## Why this is necessary
+
+The particle method uses Lie splitting + Euler transport with `tau=2e-7`. Before claiming an 8% physical/numerical offset from LDG, check whether `T_core` changes with `tau`.
+
+## D1. Runs
+
+Use the most relevant configuration from Experiments B/C, plus the current default:
+
+```text
+tau in {4e-7, 2e-7, 1e-7}
+N_p = 8e4 first
+seeds = 0,1,2,3
+K = 10 or selected K
+q_window = 0.8 or selected q_window
+```
+
+If the trend is strong, repeat at \(N_p=3.2e5\) for:
+
+```text
+tau in {2e-7, 1e-7}
+```
+
+## D2. Decision
+
+If `T_core` changes by less than 3--5% under halving tau:
+
+```text
+time discretization is not the main source of the 8% offset.
+```
+
+If it changes significantly:
+
+```text
+the particle core-collapse time is still time-step sensitive; do not promote as final.
+```
+
+---
+
+# Experiment E. LDG metric robustness
+
+## E1. Quadrature order sensitivity
+
+For LDG core radii, compute with:
+
+```text
+quad_order = 3, 5, 7
+```
+
+Check:
+
+```text
+T_core changes < 1--2%
+R_q curves visually identical
+raw vs clipped mass identical within roundoff
+```
+
+## E2. q-set sensitivity for LDG
+
+Same as A3:
+
+```text
+{0.1,0.2,0.3}
+{0.2,0.3}
+{0.2}
+{0.3}
+```
+
+If LDG is stable across q-sets but particle is not, the limitation is particle resolution/noise.
+
+## E3. Fit-window sensitivity
+
+Add later/narrower windows if data allows:
+
+```text
+[7e-5, 1.15e-4]
+[8e-5, 1.18e-4]
+[9e-5, 1.20e-4]
+```
+
+Do not use windows that include post-grid-floor artifacts.
+
+---
+
+# Experiment F. Actual branching advantage: weighted vs branching on non-conservative reaction
+
+## Why this is separate from the KS blow-up benchmark
+
+In the fully parabolic--parabolic KS blow-up benchmark, \(u\) is conservative. The `u` particles do not branch. The birth/death mechanism is only the `v` decay/injection kernel. Therefore this benchmark is not the clean place to claim "branching beats LDG" or "branching beats weighted particles."
+
+The methodological novelty claim should be supported by a **non-conservative reaction** benchmark where particle weights would concentrate but branching keeps an equal-weight representation.
+
+The editor/revision motivation explicitly says that the planned revision should demonstrate reduced sampling variance versus weighted-particle strategies: branching keeps an empirical measure as an unweighted sum and spawns particles where mass concentrates, whereas weighted strategies can suffer effective sample-size collapse. This is the right target for the branching-advantage experiment.
+
+## F1. Candidate benchmark 1: localized growth islands
+
+Use an ADR equation:
+
+\[
+\partial_t u = D\Delta u + r(x)u,
+\]
+
+with
+
+\[
+r(x)=\lambda G_{\rm multi}(x)-\beta,
+\]
+
+where \(G_{\rm multi}\) is a grid of separated Gaussian growth islands.
+
+Suggested parameters:
+
+```text
+M = 16 islands
+sigma = 0.16
+D = 0.01
+lambda = 12
+beta = 0.8
+T = 0.8
+tau = 1e-3
+N0 = 2e4
+K = 64
+```
+
+Run both methods with identical transport and reconstruction:
+
+```text
+branching equal-weight
+weighted fixed-N with weights w_i <- w_i exp(tau r_i)
+```
+
+Metrics:
+
+```text
+global ESS/N
+local ESS per island
+local mass per island
+local variance across seeds
+max weight / mean weight
+MMD or W2 to a high-sample/reference run
+runtime
+particle population trajectory for branching
+```
+
+Expected useful result:
+
+```text
+Global ESS can look acceptable while local island ESS collapses.
+Branching keeps local particle counts proportional to mass growth.
+```
+
+This directly supports the novelty claim.
+
+## F2. Candidate benchmark 2: nonlinear logistic KS / growth KS
+
+Use the non-conservative KS-like system from the manuscript:
+
+\[
+u_t-\nabla\cdot\left(\nabla u-\frac{4u}{1+u^2}\nabla v\right)=u(1-u),
+\qquad
+v_t-\Delta v=u-v.
+\]
+
+This is closer to the original paper's KS section, but it is harder to isolate branching from drift/reconstruction. Use it only after F1 succeeds.
+
+Compare:
+
+```text
+branching birth/death for u reaction
+weighted particle reaction
+same transport
+same reconstruction
+same seeds
+```
+
+Metrics:
+
+```text
+L2 / mass error vs deterministic reference or high-N particle reference
+local ESS
+local variance in high-density region
+particle population N(t)
+weight degeneracy
+```
+
+## F3. Decision rule for paper
+
+A paper-worthy branching result requires:
+
+```text
+branching and weighted use the same transport and same reconstruction;
+branching has lower seed variance or lower local mass error at the same computational budget;
+weighted has local ESS collapse or high max/mean weight;
+branching population remains controlled and tracks L1 mass.
+```
+
+This directly addresses the reviewer concern and the editor letter.
+
+---
+
+# Experiment G. What to put in the paper depending on outcomes
+
+## G1. Strong outcome
+
+Use if the following all hold:
+
+```text
+Repaired T_core confirms LDG T_core ~1.21e-4.
+Particle T_core matches LDG within uncertainty after seed bootstrap and q/window sensitivity.
+Weighted-vs-branching shows a clear local ESS / variance advantage in a non-conservative reaction benchmark.
+```
+
+Paper message:
+
+```text
+The particle method reproduces LDG core-collapse dynamics using a reconstruction-light metric,
+and the branching mechanism provides a separate variance-resolution advantage for non-conservative reactions.
+```
+
+## G2. Limited-positive outcome
+
+Use if:
+
+```text
+LDG T_core is stable.
+Particle T_core is on the same scale but offset by ~5--10%.
+q/K/window sensitivity explains but does not eliminate the offset.
+Weighted-vs-branching shows clear advantage.
+```
+
+Paper message:
+
+```text
+The KS benchmark demonstrates LDG-scale concentration and a stable core-collapse diagnostic,
+while the branching mechanism's main advantage is shown in non-conservative reaction benchmarks.
+```
+
+## G3. Negative outcome
+
+Use if:
+
+```text
+Particle T_core is q/K/window sensitive.
+Weighted-vs-branching advantage is weak.
+```
+
+Paper message:
+
+```text
+Do not emphasize blow-up time. Report reconstruction-free radii and LDG-scale concentration only.
+Refocus novelty on equal-weight reaction representation, mass tracking, high-dimensional scalability,
+and weighted-particle degeneracy where it is demonstrable.
+```
+
+---
+
+# Immediate task list for Claude/Codex
+
+## Priority 1: repair `T_core` analysis
+
+Implement:
+
+```text
+fit_core_collapse.py:
+  --common_grid_dt
+  --min_seed_coverage
+  --bootstrap_seeds
+  --q_sets
+  seed interpolation to common grid
+  seed-bootstrap CI
+  n_seed_eff reporting
+```
+
+Regenerate:
+
+```text
+core_fit_all.csv
+core_fit_summary.csv/json
+core_fit_bootstrap.csv/json
+README.md
+figures/
+```
+
+## Priority 2: q-set sensitivity
+
+Run without new dynamics:
+
+```bash
+python fit_core_collapse.py \
+  --ldg_dir <OUT>/ldg \
+  --particle_root <OUT>/particle \
+  --mass raw \
+  --q_sets "0.1,0.2,0.3" "0.2,0.3" "0.2" "0.3" \
+  --bootstrap_seeds 1000 \
+  --min_seed_coverage 3 \
+  --outdir <OUT>/qset_sensitivity
+```
+
+## Priority 3: q_window dynamics sweep
+
+Create:
+
+```text
+experiments/keller_segel/core_collapse_time/run_qwindow_sensitivity.sb
+experiments/keller_segel/core_collapse_time/analyze_qwindow_sensitivity.py
+experiments/keller_segel/core_collapse_time/plot_qwindow_sensitivity.py
+```
+
+Run the 32-run matrix.
+
+## Priority 4: weighted vs branching non-conservative benchmark
+
+Create or update:
+
+```text
+experiments/branching_vs_weighted/local_growth_islands/
+```
+
+Required scripts:
+
+```text
+simulate_branching.py
+simulate_weighted.py
+analyze_local_ess.py
+plot_local_ess.py
+README.md
+```
+
+This is the clean experiment for the paper's branching novelty.
+
+---
+
+# Recommended paper positioning after these experiments
+
+For the Keller--Segel LDG section:
+
+```text
+Do not claim "branching is better than LDG" in the fully parabolic--parabolic blow-up benchmark.
+Instead: the particle method reproduces LDG-scale concentration under a direct LDG reference,
+and the core-collapse proxy is a reconstruction-light supporting diagnostic.
+```
+
+For the branching novelty section:
+
+```text
+Use the non-conservative reaction benchmark to show branching reduces sampling variance relative
+to weighted particles, especially in local ESS / local mass diagnostics.
+```
+
+This division is scientifically cleaner and safer for reviewers.
 
