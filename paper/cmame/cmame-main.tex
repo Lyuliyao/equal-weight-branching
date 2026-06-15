@@ -853,9 +853,36 @@ Equation~\eqref{equ:system_multiplicative} also clarifies the scope of the coupl
 \section{Numerical experiments}
 \label{sec:numerics}
 
-The numerical section is organized around the claims that the method is meant to support.  Section~\ref{sec:mms} verifies the observable convergence rates on a smooth problem with an exact solution.  Sections~\ref{sec:branch_vs_weight} and~\ref{sec:switch} are the controlled representation comparisons: the transport discretization, initial particles, reconstruction, and Brownian increments are shared, and only the reaction representation is changed.  Sections~\ref{sec:ks} and~\ref{sec:ks3d} then test the same particle-field machinery in two- and three-dimensional Keller--Segel concentration regimes.  The six-dimensional kinetic test is placed last, in Section~\ref{sec:kinetic_ks}, because its role is to show how the same reaction step transfers to a high-dimensional phase-space model once the field reconstruction is kept low-dimensional.
+We test the proposed algorithm on a sequence of numerical examples.  We first verify
+the method on a smooth manufactured solution and then compare equal-weight branching
+with weighted and resampled weighted particles for scalar linear reaction--diffusion
+problems with localized growth.  We next consider Keller--Segel concentration dynamics:
+in two dimensions we use an LDG-aligned benchmark and compare the particle diagnostics
+with a direct LDG reference, while in three dimensions we test focusing behavior in radial
+and nonradial configurations.  Finally, we apply the method to a six-dimensional
+field-coupled kinetic problem, where only low-dimensional spatial fields are reconstructed.
 
-Unless stated otherwise, errors are computed from the reconstructed physical field, $K$ denotes the Fourier bandwidth per spatial direction, and reported stochastic errors are averages over the stated seeds.  In all weighted-versus-branching comparisons the methods use common initial particles and common transport random numbers; therefore the comparison isolates the reaction representation rather than the transport noise.  The full run scripts, configurations, and reference CSV outputs are kept with the released code, while the paper reports only the diagnostics needed to support the claims.
+Throughout this section, unless otherwise specified, relative \(L^2\) errors are computed
+from the reconstructed physical field.  Let
+\(
+\widetilde u^{N,K}(t,\mathbf x)=P_K\mu_t^N(\mathbf x)
+\)
+denote the reconstructed particle solution, and let \(u_{\rm ref}\) denote the reference
+solution on the evaluation grid.  On a uniform grid with cell volume \(\Delta V\), we define
+\begin{equation}
+E_{L^2}(t)
+=
+\frac{
+\left(\Delta V\sum_j
+\left|\widetilde u^{N,K}(t,\mathbf x_j)-u_{\rm ref}(t,\mathbf x_j)\right|^2\right)^{1/2}
+}{
+\left(\Delta V\sum_j
+\left|u_{\rm ref}(t,\mathbf x_j)\right|^2\right)^{1/2}
+}.
+\label{eq:num_L2_error}
+\end{equation}
+For a local diagnostic region \(\Omega_{\rm loc}\), the same formula is used with both
+sums restricted to grid points in \(\Omega_{\rm loc}\).
 
 \subsection{Manufactured-solution verification}
 \label{sec:mms}
