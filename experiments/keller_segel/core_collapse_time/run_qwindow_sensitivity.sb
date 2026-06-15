@@ -1,0 +1,36 @@
+#!/bin/bash
+#SBATCH -J cct_qwin
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -c 8
+#SBATCH --mem=32G
+#SBATCH -p general-long
+#SBATCH -t 06:00:00
+#SBATCH --array=0-31
+#SBATCH -o cct_qwin_%A_%a.out
+#
+# q_window dynamics sensitivity ("Next experiments" Experiment B): does a more
+# core-local Fourier window reduce the particle-vs-LDG T_core offset while keeping
+# outside_v_frac small + the run stable?  current_fourier only.
+# q_window {0.5,0.65,0.8,0.9} x N {8e4,3.2e5} x seeds {0..3} = 32 runs.
+#
+#   OUT=$PWD/reference_results/keller_segel_ldg_pp/core_collapse_qwindow_<id> \
+#       sbatch experiments/keller_segel/core_collapse_time/run_qwindow_sensitivity.sb
+#
+set -euo pipefail
+PY=/mnt/home/lyuliyao/.conda/envs/heat/bin/python
+REPO=/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching
+: "${OUT:?set OUT to the qwindow run dir}"
+
+QWS=(0.5 0.65 0.8 0.9)
+NS=(80000 320000)
+seed=$(( SLURM_ARRAY_TASK_ID % 4 ))
+k=$(( SLURM_ARRAY_TASK_ID / 4 ))
+N=${NS[$(( k % 2 ))]}
+qw=${QWS[$(( k / 2 ))]}
+
+$PY "$REPO/experiments/keller_segel/ldg_comparison/simulation.py" \
+  --N "$N" --K 10 --tau 2e-7 --n_steps 1000 --diag_every 5 --seed "$seed" \
+  --solver_field current_fourier --dg_readout_n 80 160 --cfl_abort 5.0 \
+  --filter_s 0.5 --q_window "$qw" --report_times 6e-5 1.2e-4 2e-4 \
+  --outdir "$OUT/qwin${qw}_N${N}_seed${seed}"
