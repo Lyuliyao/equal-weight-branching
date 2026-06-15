@@ -86,3 +86,6 @@ ldg_quad_*.out
 reference_results/keller_segel_ldg_pp/core_collapse_*/**/snapshots/
 reference_results/keller_segel_ldg_pp/core_collapse_*/**/snapshots.npz
 reference_results/keller_segel_ldg_pp/core_collapse_*/**/*.log
+# KD-sweep reference symlinks (point to already-committed core_collapse particle runs)
+reference_results/keller_segel_ldg_pp/core_collapse_*/K10_N*
+reference_results/keller_segel_ldg_pp/core_collapse_*/tau2e-07_N*

@@ -1,0 +1,1 @@
+method,resolution,q_set,n_seed,n_boot_valid,T_qwindow_median,T_qwindow_p10,T_qwindow_p90,T_boot_median,T_boot_p10,T_boot_p90,n_seed_eff_min_in_windows
