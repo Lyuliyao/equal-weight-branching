@@ -944,10 +944,11 @@ aggregate $(\|\varphi\|,\;P=\bar\rho\|\varphi\|)$ & 1.00 & 0.97 \\
 
 \subsection{Stationary localized growth: reaction representation at equal transport}
 \label{sec:branch_vs_weight}
-
-We next isolate the effect of the reaction representation on a scalar localized-growth
-problem.  The transport discretization, initial particles, reconstruction, and Brownian
-increments are shared across methods; only the reaction step is changed.  We solve
+We next use a scalar localized-growth problem to isolate the numerical realization of
+the reaction operator.  The PDE, splitting, transport discretization, reconstruction, and
+initial particle cloud are the same for all methods; the reaction multiplier
+\(\exp(r\tau)\) is represented either by particle weights, by weighted particles followed
+by resampling, or by equal-weight integer offspring.  We solve
 \begin{equation}
 \partial_t u=D\Delta u+r(\mathbf x)u,
 \qquad
@@ -961,46 +962,72 @@ with \(D=0.05\), \(\lambda=8\), \(\beta=1\), \(\sigma=0.5\), \(\mathbf x_0=0\),
 \(N_0=2\times10^4\).  The deterministic reference is a Fourier Strang split-step
 solution on a \(256^2\) grid.  The diagnostic region is the fixed growth set
 \(\Omega_{\rm grow}=\{G\ge 0.5\}\).
+For each particle run we denote the active particle count by
+\(
+N_{\rm act}(t)=|\mathcal I(t)|,
+\)
+and Table~\ref{tab:bw} reports \(N_{\rm act}(T)\), except for the capped run where the
+reported value is the imposed upper bound.  The work proxy used below is the integrated
+particle-step count
+\(
+W_{\rm p}=\sum_{n=0}^{T/\tau}N_{\rm act}(t_n).
+\)
 
-The raw weighted method develops exactly the degeneracy expected from localized multiplicative growth.  At $T=1$ its global normalized ESS is $0.021$, the maximum-to-mean weight ratio is $133$, and the relative $L^2$ error is $0.269\pm0.041$ (Table~\ref{tab:bw}).  Raising the global weighted population to $1.3\times10^5$ lowers the error but leaves the ESS and max-to-mean ratio essentially unchanged, showing that the failure is local weight concentration rather than only a small global sample size.  Equal-weight branching stores the same mass growth as particle count.  The Poisson kernel reduces the relative $L^2$ error to $0.062\pm0.035$, while the minimum-variance kernel gives $0.033\pm0.011$, consistent with its lower conditional offspring variance.
+The raw weighted method develops the expected localized weight degeneracy.  At
+\(T=1\), its normalized ESS is \(0.021\), the maximum-to-mean weight ratio is \(133\),
+and the relative \(L^2\) error is \(0.269\pm0.041\).  ESS-triggered resampling reduces
+the weight degeneracy and improves the error, but it keeps a fixed active population.
+Equal-weight branching instead represents the same reaction-induced mass growth as
+particle count.  At the same initial budget, the Poisson kernel gives
+\(0.062\pm0.035\), while the minimum-variance kernel gives \(0.033\pm0.011\), consistent
+with its smaller conditional offspring variance.
 
-The comparison with systematic resampling is reported by integrated particle-steps, $\sum_n N_{\rm act}(t_n)$, which is the hardware-independent work of a particle method.  At matched work $1.9\times10^7$ particle-steps, ESS-triggered systematic resampling gives error $0.047\pm0.012$, while minimum-variance branching gives $0.033\pm0.011$ (Table~\ref{tab:bw_cost}).  The resampling baseline reaches comparable accuracy only after increasing the work to $6.6\times10^7$ particle-steps.  Branching therefore provides the corrective effect of equalizing weights, but it does so locally through the reaction mechanism rather than through a global resampling schedule.
-
-The last row of Table~\ref{tab:bw} is the only population-controlled row in the main comparison.  It uses the same minimum-variance branching kernel with a cap $N_{\max}=4.0\times10^4$: after any reaction step that exceeds the cap, the active set is resampled down to $N_{\max}$ and a single common mass factor is updated to preserve total mass.  All particles remain equal-weight.  This bounded-memory variant is less accurate than uncapped minimum-variance branching but still far below the raw weighted error, which is the intended interpretation of the capped run.
+The cost controls in Table~\ref{tab:bw_cost} separate this effect from a simple increase
+in global particle count.  Increasing the raw weighted population improves the error but
+does not remove the degeneracy diagnostics.  At matched work
+\(W_{\rm p}\approx1.9\times10^7\), ESS-triggered systematic resampling gives
+\(0.047\pm0.012\), while minimum-variance branching gives \(0.033\pm0.011\).  The
+larger \(1.3\times10^5\)-particle ESS run is more accurate, but it uses about
+\(6.6\times10^7\) particle steps.  Thus the comparison should be read as a controlled
+representation result, not as a claim that branching dominates every possible resampling
+strategy at every budget.
 
 \begin{table}[t]
 \centering
-\caption{Localized-growth benchmark at $T=1$.  Weighted rows report nESS and max:mean weight as degeneracy diagnostics.  Branching rows have equal weights, so nESS is identically one and $N_{\rm act}$ is the active particle count.  The final row is a representative population-controlled minimum-variance run with cap $N_{\max}=4.0\times10^4$; the cap is an imposed upper bound, not the natural branching population.}
+\caption{Stationary localized-growth benchmark at \(T=1\), with common transport and
+\(N_0=2.0\times10^4\).  Weighted rows report normalized ESS and max:mean weight ratio.
+Branching rows are equal-weight, so nESS is one.  The capped row uses minimum-variance
+branching with \(N_{\max}=4.0\times10^4\).}
 \label{tab:bw}
-\begin{tabular}{l c c c c c c}
+\begin{tabular}{l c c c c}
 \toprule
-method & $N_0$ & rel. $L^2$ error & global nESS & max:mean $w$ & $N_{\rm act}$ & peak-height error \\
+method & rel. \(L^2\) error & nESS & max:mean \(w\) & peak err. \\
 \midrule
-weighted & $2.0\times10^4$ & $0.269\pm0.041$ & 0.021 & 133 & $2.0\times10^4$ & 149 \\
-weighted & $6.0\times10^4$ & $0.151\pm0.021$ & 0.021 & 134 & $6.0\times10^4$ & $75\pm38$ \\
-weighted & $1.3\times10^5$ & $0.089\pm0.018$ & 0.021 & 141 & $1.3\times10^5$ & $31\pm8$ \\
-weighted + resample (ESS) & $2.0\times10^4$ & $0.073\pm0.033$ & 0.56 & 3.1 & $2.0\times10^4$ & $37\pm34$ \\
-weighted + resample (ESS) & $1.3\times10^5$ & $0.028\pm0.006$ & 0.56 & 3.1 & $1.3\times10^5$ & $8\pm5$ \\
-Poisson & $2.0\times10^4$ & $0.062\pm0.035$ & 1 (equal) & -- & $1.35\times10^5$ & 31 \\
-minimum-variance & $2.0\times10^4$ & $\mathbf{0.033\pm0.011}$ & 1 (equal) & -- & $1.32\times10^5$ & $\mathbf{12.7}$ \\
-min.-var. + pop. control ($N_{\max}=4.0\times10^4$) & $2.0\times10^4$ & $0.048\pm0.010$ & 1 (equal) & -- & $\le 4.0\times10^4$ & 17.4 \\
+weighted & \(0.269\pm0.041\) & 0.021 & 133 & 149 \\
+weighted + ESS & \(0.073\pm0.033\) & 0.56 & 3.1 & \(37\pm34\) \\
+Poisson br. & \(0.062\pm0.035\) & 1 & -- & 31 \\
+min.-var. br. & \(\mathbf{0.033\pm0.011}\) & 1 & -- & \(\mathbf{12.7}\) \\
+capped min.-var. & \(0.048\pm0.010\) & 1 & -- & 17.4 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \begin{table}[t]
 \centering
-\caption{Cost--accuracy comparison in the localized-growth benchmark.  Cost is the integrated particle-step count $\sum_n N_{\rm act}(t_n)$.  At matched cost, minimum-variance branching is more accurate than the tested systematic-resampling baseline.}
+\caption{Cost and large-baseline controls for the stationary localized-growth benchmark.
+Here \(W_{\rm p}=\sum_n N_{\rm act}(t_n)\) is the integrated particle-step count.  The
+minimum-variance branching row uses \(N_0=2.0\times10^4\) and grows naturally to
+\(N_{\rm act}(T)\approx1.3\times10^5\).}
 \label{tab:bw_cost}
 \begin{tabular}{l c c c}
 \toprule
-method & initial $N_0$ & particle-steps & rel. $L^2$ error \\
+method & initial budget & \(W_{\rm p}\) & rel. \(L^2\) error \\
 \midrule
-weighted & $2.0\times10^4$ & $1.0\times10^7$ & $0.269\pm0.041$ \\
-weighted + resample (ESS) & $2.0\times10^4$ & $1.0\times10^7$ & $0.073\pm0.033$ \\
-weighted + resample (ESS) & $3.8\times10^4$ & $1.9\times10^7$ & $0.047\pm0.012$ \\
-weighted + resample (ESS) & $1.3\times10^5$ & $6.6\times10^7$ & $0.028\pm0.006$ \\
-minimum-variance branching & $2.0\times10^4\to1.3\times10^5$ & $\mathbf{1.9\times10^7}$ & $\mathbf{0.033\pm0.011}$ \\
+weighted & \(6.0\times10^4\) & \(3.0\times10^7\) & \(0.151\pm0.021\) \\
+weighted & \(1.3\times10^5\) & \(6.6\times10^7\) & \(0.089\pm0.018\) \\
+weighted + ESS & \(3.8\times10^4\) & \(1.9\times10^7\) & \(0.047\pm0.012\) \\
+weighted + ESS & \(1.3\times10^5\) & \(6.6\times10^7\) & \(0.028\pm0.006\) \\
+min.-var. br. & \(2.0\times10^4\) & \(\mathbf{1.9\times10^7}\) & \(\mathbf{0.033\pm0.011}\) \\
 \bottomrule
 \end{tabular}
 \end{table}
