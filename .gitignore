@@ -89,3 +89,5 @@ reference_results/keller_segel_ldg_pp/core_collapse_*/**/*.log
 # KD-sweep reference symlinks (point to already-committed core_collapse particle runs)
 reference_results/keller_segel_ldg_pp/core_collapse_*/K10_N*
 reference_results/keller_segel_ldg_pp/core_collapse_*/tau2e-07_N*
+# Sec 5.2 figure-2 fields (small float32 seed-0 grids; kept for figure regeneration)
+!reference_results/branch_vs_weighted/fig52_fields_seed0.npz
