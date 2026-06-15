@@ -60,25 +60,52 @@ def seed_avg(rows, method, col):
     return np.array(out_t), np.array(out_m), np.array(out_s)
 
 
+# Plot box (figure fraction) produced by plot_l2's constrained_layout.  The snapshot
+# 2x2 field block is placed in the SAME square bbox so the two figures read at equal
+# size at 0.4\linewidth; the colorbar sits in the left margin, exactly where the l2
+# y-label and ticks sit.  (If plot_l2's layout changes, re-measure and update this.)
+L2_BOX = (0.2166, 0.1799, 0.9746, 0.9379)     # x0, y0, x1, y1
+
+
 def plot_snapshots(rows=None):
     """Fig. 2: 2x2 final-time fields -- reference, weighted, weighted+ESS, min.-variance
-    (same initial budget N0=2e4, same final time T=1, one shared color scale)."""
+    (same initial budget N0=2e4, same final time T=1, one shared color scale).
+
+    Manual layout (no constrained_layout): the 2x2 colored block fills the same square
+    bbox as the l2 plot box, titles sit above each panel, a small inter-row gap and a
+    balanced bottom margin keep the two figures visually the same size at 0.4\\linewidth.
+    """
     d = np.load(os.path.join(RD, "fig52_fields_seed0.npz"))
     ext = d["extent"] if "extent" in d.files else [-np.pi, np.pi, -np.pi, np.pi]
     panels = [("reference", "reference"), ("weighted", "weighted"),
               ("weighted_ess", "weighted + ESS"), ("minvar", "min.-variance")]
     vmax = max(float(np.max(d[k])) for k, _ in panels)
-    fig, axes = plt.subplots(2, 2, figsize=(FIG_S, FIG_S), constrained_layout=True)
-    for ax, (key, title) in zip(axes.ravel(), panels):
+
+    x0, y0, x1, y1 = L2_BOX
+    side = min(x1 - x0, y1 - y0)
+    bx0 = x1 - side                              # right edge aligned with l2 plot box
+    by0 = 0.5 * (y0 + y1) - 0.5 * side           # vertical center matches l2 plot box
+    gap = 0.065                                  # small inter-row/col gap (tighter than A)
+    ps = 0.5 * (side - gap)                      # square panel side
+    cols = [bx0, bx0 + ps + gap]
+    rows_y = [by0 + ps + gap, by0]               # top row, bottom row
+
+    fig = plt.figure(figsize=(FIG_S, FIG_S))
+    im = None
+    for (key, title), (r, c) in zip(panels, [(0, 0), (0, 1), (1, 0), (1, 1)]):
+        ax = fig.add_axes([cols[c], rows_y[r], ps, ps])
         im = ax.imshow(d[key], origin="lower", extent=ext, vmin=0, vmax=vmax,
                        cmap="viridis", aspect="equal")
-        ax.set_title(title, fontsize=8, pad=2)
         ax.set_xticks([]); ax.set_yticks([]); ax.grid(False)
-    # colorbar on the LEFT; extra pad so the bottom-left panel title clears the bar/ticks
-    cb = fig.colorbar(im, ax=axes, location="left", shrink=0.92, pad=0.08, aspect=22)
-    cb.set_ticks([0, 200, 400, 600])          # sparse, readable tick set
-    cb.ax.tick_params(labelsize=7)
-    _save(fig, "snapshots_final.pdf")
+        ax.set_title(title, fontsize=8, pad=2)
+    # colorbar in the left margin (where the l2 y-label/ticks live), spanning the block
+    cax = fig.add_axes([bx0 - 0.11, by0, 0.045, side])
+    cb = fig.colorbar(im, cax=cax)
+    cb.ax.yaxis.set_ticks_position("left"); cb.ax.yaxis.set_label_position("left")
+    cb.set_ticks([0, 200, 400, 600]); cb.ax.tick_params(labelsize=7)
+    # save at the full SQUARE figsize (no tight crop) so it is the SAME canvas as l2
+    with mpl.rc_context({"savefig.bbox": "standard"}):
+        _save(fig, "snapshots_final.pdf")
     plt.close(fig)
 
 
