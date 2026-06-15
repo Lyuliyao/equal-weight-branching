@@ -1038,8 +1038,16 @@ min.-var. br. & \(2.0\times10^4\) & \(\mathbf{1.9\times10^7}\) & \(\mathbf{0.033
 \centering
 \includegraphics[width=0.4\linewidth]{figure/snapshots_final.pdf}
 \includegraphics[width=0.4\linewidth]{figure/l2_vs_t.pdf}
-\caption{Localized-growth benchmark at $T=1$.  All stochastic runs use the same initial particles and transport increments.  The weighted reconstruction under-resolves the peak, while both branching reconstructions track the deterministic reference. Final-time relative $L^2$ error over eight seeds.  The seed spread is well separated between the weighted and branching methods, and the minimum-variance advantage is not a single-seed artifact.}
-\label{fig:bw_snap}
+\caption{Stationary localized-growth benchmark.  Left: final-time reconstructed fields
+at \(T=1\), comparing the deterministic reference with raw weighted particles,
+ESS-resampled weighted particles, and minimum-variance branching, all with the same
+initial budget \(N_0=2.0\times10^4\).  Right: relative \(L^2\) error versus time for the
+same-initial-budget comparison.  Raw weighting under-resolves the localized peak as
+weights concentrate; ESS resampling reduces this degeneracy, while equal-weight
+branching represents the reaction-induced mass growth by particle creation and gives the
+lowest final-time error among these \(N_0=2.0\times10^4\) runs.  Quantitative final-time
+errors and degeneracy diagnostics are reported in Table~\ref{tab:bw}.}
+\label{fig:bw_snap_l2}
 \end{figure}
 
 
