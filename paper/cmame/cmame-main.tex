@@ -944,8 +944,8 @@ aggregate $(\|\varphi\|,\;P=\bar\rho\|\varphi\|)$ & 1.00 & 0.97 \\
 
 \subsection{Stationary localized growth: reaction representation at equal transport}
 \label{sec:branch_vs_weight}
-We next use a scalar localized-growth problem to compare different numerical realization of
-the reaction operator.  We solve
+To compare particle-level realizations of the reaction operator, we consider the
+scalar localized-growth problem
 \begin{equation}
 \partial_t u=D\Delta u+r(\mathbf x)u,
 \qquad
@@ -964,10 +964,10 @@ The final-time comparison is summarized in Table~\ref{tab:bw}.  In this table,
 \[
 \mathrm{nESS}
 =
-\frac{(\sum_i w_i)^2}{M\sum_i w_i^2},
+\frac{(\sum_i w_i)^2}{N_{\rm rep}\sum_i w_i^2},
 \]
-where \(M\) is the number of particles in the reported representation at \(T\); hence
-\(\mathrm{nESS}=1\) for equal-weight branching.  The peak error is the absolute
+where \(N_{\rm rep}\) is the number of particles in the reported representation at
+\(T\); hence \(\mathrm{nESS}=1\) for equal-weight branching.  The peak error is the absolute
 peak-height error,
 \[
 E_{\rm peak}
@@ -985,9 +985,9 @@ the error, but it keeps a fixed active population.  Equal-weight branching inste
 represents the same reaction-induced mass growth as particle count.  At the same initial
 budget, the Poisson kernel gives \(0.062\pm0.035\), while the minimum-variance kernel
 gives \(0.033\pm0.011\), consistent with its smaller conditional offspring variance.
-The corresponding reconstructed fields are shown in Fig.~\ref{fig:bw_snap_l2}; the raw
-weighted reconstruction under-resolves the peak, while the branching reconstructions
-track the deterministic reference more closely.
+The corresponding reconstructed fields and error histories are shown in
+Fig.~\ref{fig:bw_snap_l2}; the raw weighted reconstruction under-resolves the peak,
+whereas ESS resampling and minimum-variance branching recover it more accurately.
 
 For the cost comparison, we denote the active particle count by
 \(
@@ -1017,7 +1017,7 @@ branching with \(N_{\max}=4.0\times10^4\).}
 \label{tab:bw}
 \begin{tabular}{l c c c c}
 \toprule
-method & rel. \(L^2\) error & nESS & max:mean \(w\) & peak err. \\
+method & rel. \(L^2\) error & nESS & max:mean \(w\) & \(E_{\rm peak}\) \\
 \midrule
 weighted & \(0.269\pm0.041\) & 0.021 & 133 & 149 \\
 weighted + ESS & \(0.073\pm0.033\) & 0.56 & 3.1 & \(37\pm34\) \\
