@@ -1,0 +1,21 @@
+{
+  "step": 955,
+  "t": 0.00019099999999999998,
+  "solver_field": "current_fourier",
+  "drift_cfl_solver_field": 5.346119961232474,
+  "drift_cfl_fourier_diag": 5.346119961232474,
+  "max_grad_solver_field": 16905.915721985697,
+  "max_grad_fourier_diag": 16905.915721985697,
+  "particle_index_max_grad": 63101,
+  "position_max_grad": [
+    0.14836955474232316,
+    -0.12219119078900341
+  ],
+  "solver_field_h": NaN,
+  "solver_field_residual_E": NaN,
+  "L": 0.044894235795502196,
+  "x_c": [
+    0.0014963709398092362,
+    0.007478791695582404
+  ]
+}
