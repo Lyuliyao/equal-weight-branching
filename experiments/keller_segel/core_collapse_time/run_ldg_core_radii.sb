@@ -1,0 +1,30 @@
+#!/bin/bash
+#SBATCH -J ldg_cr
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -c 4
+#SBATCH --mem=16G
+#SBATCH -p general-short
+#SBATCH -t 01:00:00
+#SBATCH --array=0-2
+#SBATCH -o ldg_cr_%A_%a.out
+#
+# Fixed-flux LDG reference with online mass-quantile radii R_q(t) for the
+# core-collapse-time diagnostic (core_collapse plan, Step 1: LDG-only validation).
+# One resolution per array task: N = 80, 160, 320.
+#
+#   OUT=$PWD/reference_results/keller_segel_ldg_pp/core_collapse_<runid> \
+#       sbatch experiments/keller_segel/core_collapse_time/run_ldg_core_radii.sb
+#
+set -euo pipefail
+PY=/mnt/home/lyuliyao/.conda/envs/heat/bin/python
+REPO=/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching
+: "${OUT:?set OUT to the core_collapse run dir}"
+
+NS=(80 160 320)
+N=${NS[$SLURM_ARRAY_TASK_ID]}
+
+$PY "$REPO/experiments/keller_segel/ldg_reference/run_ldg.py" \
+  --N "$N" --T 2e-4 --report_times 6e-5 1.2e-4 2e-4 \
+  --core_radii --quad_order 3 --qs 0.05 0.1 0.2 0.3 0.5 0.8 --n_save 400 \
+  --out_dir "$OUT/ldg/N$N"

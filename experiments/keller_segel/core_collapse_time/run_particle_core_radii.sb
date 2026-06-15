@@ -1,0 +1,32 @@
+#!/bin/bash
+#SBATCH -J pcct
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -c 8
+#SBATCH --mem=32G
+#SBATCH -p general-long
+#SBATCH -t 06:00:00
+#SBATCH --array=0-7
+#SBATCH -o pcct_%A_%a.out
+#
+# Particle current_fourier runs with the extra mass-quantile radii (R_0.05, R_0.3 now
+# in simulation.py qs) for the core-collapse-time comparison (core_collapse plan Step 2).
+# 2 resolutions x 4 seeds = 8 tasks; same config as the t_b sweep.
+#
+#   OUT=$PWD/reference_results/keller_segel_ldg_pp/core_collapse_<runid> \
+#       sbatch experiments/keller_segel/core_collapse_time/run_particle_core_radii.sb
+#
+set -euo pipefail
+PY=/mnt/home/lyuliyao/.conda/envs/heat/bin/python
+REPO=/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching
+: "${OUT:?set OUT to the core_collapse run dir}"
+
+NS=(80000 320000)
+seed=$(( SLURM_ARRAY_TASK_ID % 4 ))
+N=${NS[$(( SLURM_ARRAY_TASK_ID / 4 ))]}
+
+$PY "$REPO/experiments/keller_segel/ldg_comparison/simulation.py" \
+  --N "$N" --K 10 --tau 2e-7 --n_steps 1000 --diag_every 5 --seed "$seed" \
+  --solver_field current_fourier --dg_readout_n 80 160 --cfl_abort 5.0 \
+  --filter_s 0.5 --q_window 0.8 --report_times 6e-5 1.2e-4 2e-4 \
+  --outdir "$OUT/particle/current_fourier_N${N}_seed${seed}"

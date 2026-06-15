@@ -31,6 +31,12 @@ import numpy as np
 from ldg_solver import (LDGMesh, LDGSolver, project_ic, field_L2, total_mass,
                         field_peak, field_min)
 
+# core-collapse-time diagnostic: method-independent mass-quantile radii R_q(t).
+_CCT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "core_collapse_time")
+if _CCT not in sys.path:
+    sys.path.insert(0, _CCT)
+from core_radii import ldg_core_radii  # noqa: E402
+
 
 def u0_func(x, y):
     return 840.0 * np.exp(-84.0 * (x * x + y * y))
@@ -41,7 +47,8 @@ def v0_func(x, y):
 
 
 def run(N, T, report_times, out_dir, c_diff=0.05, c_conv=0.2, half=0.5,
-        n_save=300, max_steps=2_000_000, verbose=True):
+        n_save=300, max_steps=2_000_000, verbose=True,
+        core_radii=False, qs=(0.05, 0.1, 0.2, 0.3, 0.5, 0.8), quad_order=3):
     os.makedirs(os.path.join(out_dir, "snapshots"), exist_ok=True)
     m = LDGMesh(-half, half, -half, half, N, N)
     sol = LDGSolver(m, chi=1.0, positivity=True)
@@ -53,12 +60,24 @@ def run(N, T, report_times, out_dir, c_diff=0.05, c_conv=0.2, half=0.5,
     save_t = [t for t in save_t if t <= T + 1e-15]
 
     rows = []
+    radii_rows = []
     snaps = {}
+    qs = list(qs)
 
     def record(t):
-        rows.append(dict(t=t, S_L2=field_L2(U, m), peak=field_peak(U, m),
-                         umin=field_min(U, m), mass_u=total_mass(U, m),
-                         mass_v=total_mass(V, m)))
+        sL2 = field_L2(U, m); pk = field_peak(U, m); um = field_min(U, m)
+        rows.append(dict(t=t, S_L2=sL2, peak=pk, umin=um,
+                         mass_u=total_mass(U, m), mass_v=total_mass(V, m)))
+        if core_radii:
+            cr = ldg_core_radii(U, m, qs, quad_order=quad_order)  # raw + clip
+            row = dict(t=t, N=N, S_L2=sL2, peak=pk, u_min=um,
+                       M_raw=cr["raw"]["M"], M_clip=cr["clip"]["M"],
+                       xc_x_raw=cr["raw"]["cx"], xc_y_raw=cr["raw"]["cy"],
+                       xc_x_clip=cr["clip"]["cx"], xc_y_clip=cr["clip"]["cy"])
+            for q in qs:
+                row[f"R_{q}_raw"] = cr["raw"]["R"][float(q)]
+                row[f"R_{q}_clip"] = cr["clip"]["R"][float(q)]
+            radii_rows.append(row)
 
     record(0.0)
     t = 0.0
@@ -102,6 +121,18 @@ def run(N, T, report_times, out_dir, c_diff=0.05, c_conv=0.2, half=0.5,
         w.writeheader()
         for r in rows:
             w.writerow(dict(N=N, **{c: r[c] for c in cols}))
+    if core_radii and radii_rows:
+        rcols = (["t", "N", "M_raw", "M_clip", "xc_x_raw", "xc_y_raw",
+                  "xc_x_clip", "xc_y_clip"]
+                 + [f"R_{q}_raw" for q in qs] + [f"R_{q}_clip" for q in qs]
+                 + ["S_L2", "peak", "u_min"])
+        with open(os.path.join(out_dir, f"ldg_core_radii_N{N}.csv"), "w", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=rcols)
+            w.writeheader()
+            for r in radii_rows:
+                w.writerow({c: r.get(c) for c in rcols})
+        print(f"[N={N}] wrote ldg_core_radii_N{N}.csv ({len(radii_rows)} rows, "
+              f"quad_order={quad_order})")
     snap_arr = {}
     for rt, (uu, vv) in snaps.items():
         snap_arr[f"u_{rt:.2e}"] = uu.astype(np.float32)
@@ -136,10 +167,20 @@ def main():
     ap.add_argument("--out_dir", default="results/N160")
     ap.add_argument("--c_diff", type=float, default=0.05)
     ap.add_argument("--c_conv", type=float, default=0.2)
+    ap.add_argument("--core_radii", action="store_true",
+                    help="also write ldg_core_radii_N<N>.csv (mass-quantile radii "
+                         "R_q(t), raw+clip) for the core-collapse-time diagnostic")
+    ap.add_argument("--quad_order", type=int, default=3,
+                    help="Gauss quadrature order per cell for R_q sampling")
+    ap.add_argument("--qs", type=float, nargs="+",
+                    default=[0.05, 0.1, 0.2, 0.3, 0.5, 0.8])
+    ap.add_argument("--n_save", type=int, default=300,
+                    help="number of dense diagnostic save times over [0,T]")
     args = ap.parse_args()
     print(f"=== LDG Example 5.2 (blow-up): N={args.N} T={args.T:.2e} ===")
     run(args.N, args.T, args.report_times, args.out_dir,
-        c_diff=args.c_diff, c_conv=args.c_conv)
+        c_diff=args.c_diff, c_conv=args.c_conv, n_save=args.n_save,
+        core_radii=args.core_radii, qs=args.qs, quad_order=args.quad_order)
 
 
 if __name__ == "__main__":

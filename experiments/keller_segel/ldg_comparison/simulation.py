@@ -285,7 +285,7 @@ def run(args):
     mask_v_outside = bool(args.mask_v_outside)
     cfl_abort = float(args.cfl_abort)
     p = 1.0 - np.exp(-tau)           # per-step death (v) / birth (u->v) probability
-    qs = [0.1, 0.2, 0.5, 0.8, 0.9, 0.99]   # inner-core radii for the core-halo diagnostic
+    qs = [0.05, 0.1, 0.2, 0.3, 0.5, 0.8, 0.9, 0.99]   # inner-core radii (incl. 0.05,0.3 for core-collapse-time T_core)
 
     report_times = sorted(float(t) for t in args.report_times) if args.report_times else []
 

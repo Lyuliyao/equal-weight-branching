@@ -1,0 +1,22 @@
+{
+  "N": 80,
+  "T": 0.0002,
+  "report_times": [
+    6e-05,
+    0.00012,
+    0.0002
+  ],
+  "half": 0.5,
+  "chi": 1.0,
+  "bc": "Neumann",
+  "scheme": "P1 LDG (Li-Shu-Yang), alternating fluxes, LF chemotaxis, Zhang-Shu positivity limiter, SSP-RK3, adaptive dt",
+  "c_diff": 0.05,
+  "c_conv": 0.2,
+  "M_u0": 31.415926530163063,
+  "final_t": 0.0002,
+  "steps": 401,
+  "blew_up": false,
+  "umin_global": -5.4569682106375694e-12,
+  "max_mass_drift": 2.5105178290268224e-14,
+  "runtime_s": 11.5
+}
