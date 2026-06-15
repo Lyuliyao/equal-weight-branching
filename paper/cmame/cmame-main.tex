@@ -944,11 +944,8 @@ aggregate $(\|\varphi\|,\;P=\bar\rho\|\varphi\|)$ & 1.00 & 0.97 \\
 
 \subsection{Stationary localized growth: reaction representation at equal transport}
 \label{sec:branch_vs_weight}
-We next use a scalar localized-growth problem to isolate the numerical realization of
-the reaction operator.  The PDE, splitting, transport discretization, reconstruction, and
-initial particle cloud are the same for all methods; the reaction multiplier
-\(\exp(r\tau)\) is represented either by particle weights, by weighted particles followed
-by resampling, or by equal-weight integer offspring.  We solve
+We next use a scalar localized-growth problem to compare different numerical realization of
+the reaction operator.  We solve
 \begin{equation}
 \partial_t u=D\Delta u+r(\mathbf x)u,
 \qquad
@@ -963,7 +960,24 @@ with \(D=0.05\), \(\lambda=8\), \(\beta=1\), \(\sigma=0.5\), \(\mathbf x_0=0\),
 solution on a \(256^2\) grid.  The diagnostic region is the fixed growth set
 \(\Omega_{\rm grow}=\{G\ge 0.5\}\).
 
-The final-time comparison is summarized in Table~\ref{tab:bw}.  The raw weighted
+The final-time comparison is summarized in Table~\ref{tab:bw}.  In this table,
+\[
+\mathrm{nESS}
+=
+\frac{(\sum_i w_i)^2}{M\sum_i w_i^2},
+\]
+where \(M\) is the number of particles in the reported representation at \(T\); hence
+\(\mathrm{nESS}=1\) for equal-weight branching.  The peak error is the absolute
+peak-height error,
+\[
+E_{\rm peak}
+=
+\left|
+\|\widetilde u^{N,K}(T)\|_{L^\infty}
+-
+\|u_{\rm ref}(T)\|_{L^\infty}
+\right|.
+\]  The raw weighted
 method develops the expected localized weight degeneracy: its normalized ESS is
 \(0.021\), the maximum-to-mean weight ratio is \(133\), and the relative \(L^2\) error is
 \(0.269\pm0.041\).  ESS-triggered resampling reduces the weight degeneracy and improves
@@ -1016,10 +1030,8 @@ capped min.-var. & \(0.048\pm0.010\) & 1 & -- & 17.4 \\
 
 \begin{table}[t]
 \centering
-\caption{Cost and large-baseline controls for the stationary localized-growth benchmark.
-Here \(W_{\rm p}=\sum_n N_{\rm act}(t_n)\) is the integrated particle-step count.  The
-minimum-variance branching row uses \(N_0=2.0\times10^4\) and grows naturally to
-\(N_{\rm act}(T)\approx1.3\times10^5\).}
+\caption{Cost and large-budget controls for the stationary localized-growth benchmark.
+Here \(W_{\rm p}=\sum_n N_{\rm act}(t_n)\) is the integrated particle-step count.}
 \label{tab:bw_cost}
 \begin{tabular}{l c c c}
 \toprule
@@ -1036,17 +1048,15 @@ min.-var. br. & \(2.0\times10^4\) & \(\mathbf{1.9\times10^7}\) & \(\mathbf{0.033
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=0.4\linewidth]{figure/snapshots_final.pdf}
+\includegraphics[width=0.4\linewidth]{figure/snapshots_final.pdf}\quad
 \includegraphics[width=0.4\linewidth]{figure/l2_vs_t.pdf}
 \caption{Stationary localized-growth benchmark.  Left: final-time reconstructed fields
-at \(T=1\), comparing the deterministic reference with raw weighted particles,
-ESS-resampled weighted particles, and minimum-variance branching, all with the same
-initial budget \(N_0=2.0\times10^4\).  Right: relative \(L^2\) error versus time for the
-same-initial-budget comparison.  Raw weighting under-resolves the localized peak as
-weights concentrate; ESS resampling reduces this degeneracy, while equal-weight
-branching represents the reaction-induced mass growth by particle creation and gives the
-lowest final-time error among these \(N_0=2.0\times10^4\) runs.  Quantitative final-time
-errors and degeneracy diagnostics are reported in Table~\ref{tab:bw}.}
+at \(T=1\) for the deterministic reference, raw weighted particles, ESS-resampled
+weighted particles, and minimum-variance branching, all with \(N_0=2.0\times10^4\).
+Right: relative \(L^2\) error versus time for the same initial budget.  Raw weighting
+under-resolves the localized peak, while ESS resampling and minimum-variance branching
+reduce the error; quantitative final-time diagnostics are reported in
+Table~\ref{tab:bw}.}
 \label{fig:bw_snap_l2}
 \end{figure}
 
