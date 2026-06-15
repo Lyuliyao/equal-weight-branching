@@ -3,12 +3,16 @@ set -euo pipefail
 
 OVERLEAF_REMOTE_DEFAULT="https://git.overleaf.com/67ef53e839dffff6952cd38b"
 DEST_DIR_REL="paper"
+KEYCHAIN_SERVICE="overleaf-git-67ef53e839dffff6952cd38b"
+KEYCHAIN_ACCOUNT="git"
 
 commit_changes=0
 push_changes=0
 delete_extra=0
 dry_run=0
 allow_dirty=0
+save_token=0
+forget_token=0
 remote_url="$OVERLEAF_REMOTE_DEFAULT"
 commit_message="Sync Overleaf project into paper"
 
@@ -26,16 +30,18 @@ Options:
                         are not in Overleaf. Omit this to keep GitHub-only files.
   --dry-run             Show what would be copied without changing files.
   --allow-dirty         Allow running when paper/ already has local changes.
+  --save-token          Save the token to macOS Keychain after prompting.
+  --forget-token        Delete the saved token from macOS Keychain and exit.
   --remote URL          Override the Overleaf Git remote URL.
   --message TEXT        Commit message for --commit.
   -h, --help            Show this help.
 
 Token handling:
-  The script prompts for an Overleaf Git authentication token without echoing it.
-  You can also set OVERLEAF_GIT_TOKEN for non-interactive use.
+  The script first checks OVERLEAF_GIT_TOKEN, then macOS Keychain, then prompts
+  without echoing. Use --save-token once to avoid future prompts.
 
 Common command:
-  scripts/sync-overleaf-paper.sh --commit --push
+  scripts/sync-overleaf-paper.sh --save-token --commit --push
 EOF
 }
 
@@ -60,6 +66,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --allow-dirty)
       allow_dirty=1
+      shift
+      ;;
+    --save-token)
+      save_token=1
+      shift
+      ;;
+    --forget-token)
+      forget_token=1
       shift
       ;;
     --remote)
@@ -105,6 +119,20 @@ script_dir="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(git -C "$script_dir/.." rev-parse --show-toplevel)"
 dest_dir="$repo_root/$DEST_DIR_REL"
 
+if [[ "$forget_token" -eq 1 ]]; then
+  if command -v security >/dev/null 2>&1; then
+    if security delete-generic-password -s "$KEYCHAIN_SERVICE" -a "$KEYCHAIN_ACCOUNT" >/dev/null 2>&1; then
+      echo "Deleted saved Overleaf Git token from macOS Keychain."
+    else
+      echo "No saved Overleaf Git token found in macOS Keychain."
+    fi
+  else
+    echo "error: macOS security command not found; cannot use Keychain" >&2
+    exit 1
+  fi
+  exit 0
+fi
+
 if [[ ! -d "$dest_dir" ]]; then
   echo "error: destination directory not found: $dest_dir" >&2
   exit 1
@@ -128,17 +156,29 @@ trap cleanup EXIT
 
 if [[ -n "${OVERLEAF_GIT_TOKEN:-}" ]]; then
   token="$OVERLEAF_GIT_TOKEN"
+elif command -v security >/dev/null 2>&1 && token="$(security find-generic-password -w -s "$KEYCHAIN_SERVICE" -a "$KEYCHAIN_ACCOUNT" 2>/dev/null)"; then
+  echo "Using Overleaf Git token from macOS Keychain."
 else
   printf "Overleaf Git authentication token: " >&2
+  old_stty="$(stty -g)"
   stty -echo
   IFS= read -r token
-  stty echo
+  stty "$old_stty"
   printf "\n" >&2
 fi
 
 if [[ -z "$token" ]]; then
   echo "error: empty Overleaf token" >&2
   exit 1
+fi
+
+if [[ "$save_token" -eq 1 ]]; then
+  if command -v security >/dev/null 2>&1; then
+    security add-generic-password -U -s "$KEYCHAIN_SERVICE" -a "$KEYCHAIN_ACCOUNT" -w "$token"
+    echo "Saved Overleaf Git token to macOS Keychain."
+  else
+    echo "warning: macOS security command not found; token was not saved" >&2
+  fi
 fi
 
 printf "%s" "$token" > "$token_file"
