@@ -66,3 +66,8 @@ reference_results/keller_segel_ldg_pp/sf_blob_*/*.log
 reference_results/keller_segel_ldg_pp/sf_blob_*/*/run.log
 # SLURM array stdout for the blob sweep
 sf_blob_sweep_*.out
+# solver-field t_b sweep: keep diag CSVs + summary + figures + plot_data; drop snapshots/logs
+reference_results/keller_segel_ldg_pp/solver_field_tb_*/*/snapshots/*.npz
+reference_results/keller_segel_ldg_pp/solver_field_tb_*/*.log
+reference_results/keller_segel_ldg_pp/solver_field_tb_*/*/run.log
+sf_tb_*.out

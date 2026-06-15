@@ -1,0 +1,52 @@
+#!/bin/bash
+#SBATCH -J sf_tb
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -c 8
+#SBATCH --mem=32G
+#SBATCH -p general-long
+#SBATCH -t 06:00:00
+#SBATCH --array=0-23
+#SBATCH -o sf_tb_%A_%a.out
+#
+# Solver-field LDG-style t_b comparison (next_stage.md): compare solver-field
+# reconstructions by the SAME LDG-matched particle resolution-gap time t_b, main
+# pair (8e4,80)->(3.2e5,160).  3 configs x 2 resolutions x 4 seeds = 24 tasks.
+#
+#   REPO=$PWD OUT=$PWD/reference_results/keller_segel_ldg_pp/solver_field_tb_<runid> \
+#       sbatch experiments/keller_segel/ldg_comparison/run_solver_field_tb_sweep.sb
+#
+set -euo pipefail
+
+PY=/mnt/home/lyuliyao/.conda/envs/heat/bin/python
+REPO=${REPO:-/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching}
+: "${OUT:?set OUT to the output path}"
+mkdir -p "$OUT"
+
+CONFIGS=(current_fourier blob_ch006 blob_ch009)
+NS=(80000 320000)
+SEEDS=(0 1 2 3)
+
+idx=$SLURM_ARRAY_TASK_ID
+seed=${SEEDS[$((idx % 4))]}
+idx=$((idx / 4))
+N=${NS[$((idx % 2))]}
+idx=$((idx / 2))
+cfg=${CONFIGS[$idx]}
+
+COMMON="--N ${N} --K 10 --tau 2e-7 --n_steps 1000 --diag_every 5 \
+  --seed ${seed} --dg_readout_n 80 160 --cfl_abort 5.0 --filter_s 0.5 \
+  --q_window 0.8 --report_times 6e-5 1.2e-4 2e-4"
+
+case "$cfg" in
+  current_fourier)
+    FIELD="--solver_field current_fourier" ;;
+  blob_ch006)
+    FIELD="--solver_field two_level_blob_residual --Kg 8 --blob_h_rule frac_L --blob_ch 0.06 --blob_min_count 100" ;;
+  blob_ch009)
+    FIELD="--solver_field two_level_blob_residual --Kg 8 --blob_h_rule frac_L --blob_ch 0.09 --blob_min_count 100" ;;
+esac
+
+$PY "$REPO/experiments/keller_segel/ldg_comparison/simulation.py" \
+  $COMMON $FIELD \
+  --outdir "$OUT/${cfg}_N${N}_seed${seed}"
