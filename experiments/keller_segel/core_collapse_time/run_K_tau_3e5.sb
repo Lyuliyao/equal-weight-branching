@@ -1,0 +1,31 @@
+#!/bin/bash
+#SBATCH -J cct_kd3
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -c 8
+#SBATCH --mem=32G
+#SBATCH -p general-long
+#SBATCH -t 06:00:00
+#SBATCH --array=0-11
+#SBATCH -o cct_kd3_%A_%a.out
+#
+# C2 + D at Np=3.2e5 (the resolved regime; 8e4 pilots were noise-limited): promote
+# K {12,16} and tau 1e-7 to the high-resolution test.  current_fourier, q_window=0.8.
+# 3 configs x 4 seeds = 12.  (K=10 / tau=2e-7 references symlinked from core_collapse.)
+#   OUT=<kd_run_dir> sbatch run_K_tau_3e5.sb
+set -euo pipefail
+PY=/mnt/home/lyuliyao/.conda/envs/heat/bin/python
+REPO=/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching
+: "${OUT:?set OUT}"
+SIM="$REPO/experiments/keller_segel/ldg_comparison/simulation.py"
+cfg=$(( SLURM_ARRAY_TASK_ID / 4 ))
+seed=$(( SLURM_ARRAY_TASK_ID % 4 ))
+case $cfg in
+  0) TAG=K12;      ARG="--K 12 --tau 2e-7 --n_steps 1000 --diag_every 5" ;;
+  1) TAG=K16;      ARG="--K 16 --tau 2e-7 --n_steps 1000 --diag_every 5" ;;
+  2) TAG=tau1e-07; ARG="--K 10 --tau 1e-7 --n_steps 2000 --diag_every 10" ;;
+esac
+$PY "$SIM" --N 320000 $ARG --seed "$seed" --solver_field current_fourier \
+  --dg_readout_n 80 160 --cfl_abort 5.0 --filter_s 0.5 --q_window 0.8 \
+  --report_times 6e-5 1.2e-4 2e-4 \
+  --outdir "$OUT/${TAG}_N320000_seed${seed}"
