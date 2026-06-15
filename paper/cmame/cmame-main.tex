@@ -945,7 +945,9 @@ aggregate $(\|\varphi\|,\;P=\bar\rho\|\varphi\|)$ & 1.00 & 0.97 \\
 \subsection{Stationary localized growth: reaction representation at equal transport}
 \label{sec:branch_vs_weight}
 
-The next experiment is the main comparison between unequal weights and equal-weight branching.  We solve
+We next isolate the effect of the reaction representation on a scalar localized-growth
+problem.  The transport discretization, initial particles, reconstruction, and Brownian
+increments are shared across methods; only the reaction step is changed.  We solve
 \begin{equation}
 \partial_t u=D\Delta u+r(\mathbf x)u,
 \qquad
@@ -954,7 +956,11 @@ r(\mathbf x)=\lambda G(\mathbf x)-\beta,
 G(\mathbf x)=\exp\!\left(-\frac{|\mathbf x-\mathbf x_0|_{\mathbb T}^2}{2\sigma^2}\right),
 \label{equ:loc_growth}
 \end{equation}
-with $D=0.05$, $\lambda=8$, $\beta=1$, $\sigma=0.5$, $\mathbf x_0=0$, $u_0=1+G/2$, $T=1$, $\tau=2\times10^{-3}$, $K=16$, and $N_0=2\times10^4$.  The deterministic reference is a Fourier Strang split-step solution on a $256^2$ grid.  The diagnostic region is the fixed growth set $B=\{G\ge 0.5\}$.
+with \(D=0.05\), \(\lambda=8\), \(\beta=1\), \(\sigma=0.5\), \(\mathbf x_0=0\),
+\(u_0=1+G/2\), \(T=1\), \(\tau=2\times10^{-3}\), \(K=16\), and
+\(N_0=2\times10^4\).  The deterministic reference is a Fourier Strang split-step
+solution on a \(256^2\) grid.  The diagnostic region is the fixed growth set
+\(\Omega_{\rm grow}=\{G\ge 0.5\}\).
 
 The raw weighted method develops exactly the degeneracy expected from localized multiplicative growth.  At $T=1$ its global normalized ESS is $0.021$, the maximum-to-mean weight ratio is $133$, and the relative $L^2$ error is $0.269\pm0.041$ (Table~\ref{tab:bw}).  Raising the global weighted population to $1.3\times10^5$ lowers the error but leaves the ESS and max-to-mean ratio essentially unchanged, showing that the failure is local weight concentration rather than only a small global sample size.  Equal-weight branching stores the same mass growth as particle count.  The Poisson kernel reduces the relative $L^2$ error to $0.062\pm0.035$, while the minimum-variance kernel gives $0.033\pm0.011$, consistent with its lower conditional offspring variance.
 
