@@ -1,0 +1,48 @@
+#!/bin/bash
+#SBATCH -J pp_hiN
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -c 16
+#SBATCH --mem=96G
+#SBATCH -p general-long
+#SBATCH -t 24:00:00
+#SBATCH --array=0-2
+#SBATCH -o pp_hiN_%A_%a.out
+#
+# High-N rerun (N=6.4M, matching case2_test1 samples_N_6400000) to suppress the
+# finite-N center-of-mass wander + MC speckle, for a clean lab-frame SS5.4 figure.
+# Focused set: baseline current_fourier, best Gaussian blob (c_h=0.09), and the
+# physically-matched screened-Poisson/Bessel-K0 arm.  seed 0.
+#
+# cfl_abort raised to 8 (from 5): the sharper high-N core makes grad v larger, so 5
+# could stop the loop before t=1.2e-4; 8 lets it reach all 4 report times.
+#
+#   REPO=$PWD OUT=$PWD/reference_results/keller_segel_ldg_pp/pp_vfield_<runid> \
+#       sbatch experiments/keller_segel/ldg_comparison/run_pp_highN.sb
+#
+set -euo pipefail
+PY=/mnt/home/lyuliyao/.conda/envs/heat/bin/python
+REPO=${REPO:-/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching}
+: "${OUT:?set OUT to the output path}"
+mkdir -p "$OUT"
+
+METHODS=(current_fourier blob_ch009 screened_kg8)
+m=${METHODS[$SLURM_ARRAY_TASK_ID]}
+seed=0
+N=6400000
+
+COMMON="--N ${N} --K 10 --tau 2e-7 --n_steps 700 --diag_every 5 \
+  --seed ${seed} --dg_readout_n 80 160 --cfl_abort 8.0 --filter_s 0.5 \
+  --q_window 0.8 --report_times 3e-5 6e-5 9e-5 1.2e-4 --save_cloud_snapshots"
+
+case "$m" in
+  current_fourier) FIELD="--solver_field current_fourier" ;;
+  blob_ch009)      FIELD="--solver_field two_level_blob_residual --Kg 8 --blob_h_rule frac_L --blob_ch 0.09 --blob_min_count 100" ;;
+  screened_kg8)    FIELD="--solver_field two_level_screened_residual --Kg 8 --blob_h_rule frac_L --blob_ch 0.06 --blob_min_count 100" ;;
+  *) echo "unknown $m"; exit 1 ;;
+esac
+
+echo "[task $SLURM_ARRAY_TASK_ID] highN $m N=$N seed=$seed"
+$PY "$REPO/experiments/keller_segel/ldg_comparison/simulation.py" \
+  $COMMON $FIELD \
+  --outdir "$OUT/${m}_N${N}_seed${seed}"
