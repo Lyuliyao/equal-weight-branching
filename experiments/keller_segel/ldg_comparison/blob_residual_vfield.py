@@ -134,7 +134,16 @@ class BlobResidualVField:
 
     def __init__(self, X_v, x_c, L, mass_v, Kg, taper_s=0.5,
                  frac_in=0.5, frac_out=0.85, h_rule="frac_L", c_h=0.05,
-                 R_for_h=None, N_for_h=None, n_quad=None, n_quad_cap=512):
+                 R_for_h=None, N_for_h=None, n_quad=None, n_quad_cap=512,
+                 kernel="gaussian"):
+        # kernel: local residual convolution kernel.
+        #   "gaussian"  -> eta_h, Fourier symbol exp(-h^2|k|^2/2)  (smooth bump).
+        #   "screened"  -> screened-Poisson / Bessel-K0 Green's function of
+        #                  (1 - h^2 Delta), symbol 1/(1 + h^2|k|^2): a K0(|x|/h)
+        #                  atom with the correct log cusp + exponential tail of the
+        #                  chemical field v ~ (1-Delta)^{-1}u.  Same residual machinery;
+        #                  only the symbol G(k) changes (grid band-limits the cusp).
+        self.kernel = str(kernel)
         self.x_c = np.asarray(x_c, dtype=np.float64)
         self.L = float(L)
         self.mass_v = float(mass_v)
@@ -195,7 +204,16 @@ class BlobResidualVField:
         # ---- residual spectrum R_hat = (FFT(dep) - FFT(vlo)) * G(k) -------
         kfreq = 2.0 * np.pi * np.fft.fftfreq(n_quad, d=self.dx)   # angular freq
         KX, KY = np.meshgrid(kfreq, kfreq, indexing="ij")
-        G = np.exp(-0.5 * self.h * self.h * (KX * KX + KY * KY))
+        k2 = KX * KX + KY * KY
+        if self.kernel == "screened":
+            # screened-Poisson / Bessel-K0 symbol 1/(1+h^2|k|^2).  It decays only
+            # ~1/k^2, so differentiation (i k) leaves ~1/k MC tail noise; damp it
+            # with a mild Gaussian roll-off at ~3 grid cells (well above the cusp
+            # scale h) so the cusp is kept but grid-scale shot noise is not.
+            roll = np.exp(-0.5 * (3.0 * self.dx) ** 2 * k2)
+            G = roll / (1.0 + self.h * self.h * k2)
+        else:
+            G = np.exp(-0.5 * self.h * self.h * k2)
         R_hat = (np.fft.fft2(dep_grid) - np.fft.fft2(vlo_grid)) * G
         self.r_grid = np.real(np.fft.ifft2(R_hat))
         self.gx_grid = np.real(np.fft.ifft2(1j * KX * R_hat))
@@ -307,6 +325,7 @@ class BlobResidualVField:
     def diagnostics(self):
         return dict(
             solver_field_mode="two_level_blob_residual",
+            kernel=self.kernel,
             h=self.h, h_requested=self.h_requested, h_clamped=self.h_clamped,
             h_rule=self.h_rule, c_h=self.c_h, n_quad=self.n_quad, dx=self.dx,
             N_v_in=self.N_v_in, Kg=self.Kg,

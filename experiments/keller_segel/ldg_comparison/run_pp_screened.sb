@@ -1,0 +1,37 @@
+#!/bin/bash
+#SBATCH -J pp_scr
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -c 8
+#SBATCH --mem=32G
+#SBATCH -p general-long
+#SBATCH -t 06:00:00
+#SBATCH --array=0-1
+#SBATCH -o pp_scr_%A_%a.out
+#
+# Additional SS5.4 sweep arm: screened-Poisson / Bessel-K0 residual v-field (the
+# physically-matched chemical-field basis v ~ (1-Delta)^{-1} u).  Same residual
+# machinery as the Gaussian blob; only the local kernel symbol changes to
+# 1/(1+h^2|k|^2).  2 seeds, written into the SAME run dir as run_pp_vfield_sweep.sb.
+#
+#   REPO=$PWD OUT=$PWD/reference_results/keller_segel_ldg_pp/pp_vfield_<runid> \
+#       sbatch experiments/keller_segel/ldg_comparison/run_pp_screened.sb
+#
+set -euo pipefail
+PY=/mnt/home/lyuliyao/.conda/envs/heat/bin/python
+REPO=${REPO:-/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching}
+: "${OUT:?set OUT to the output path}"
+mkdir -p "$OUT"
+
+SEEDS=(0 1)
+seed=${SEEDS[$SLURM_ARRAY_TASK_ID]}
+
+COMMON="--N 320000 --K 10 --tau 2e-7 --n_steps 700 --diag_every 5 \
+  --seed ${seed} --dg_readout_n 80 160 --cfl_abort 5.0 --filter_s 0.5 \
+  --q_window 0.8 --report_times 3e-5 6e-5 9e-5 1.2e-4 --save_cloud_snapshots"
+FIELD="--solver_field two_level_screened_residual --Kg 8 --blob_h_rule frac_L --blob_ch 0.06 --blob_min_count 100"
+
+echo "[task $SLURM_ARRAY_TASK_ID] screened-K0 seed=$seed"
+$PY "$REPO/experiments/keller_segel/ldg_comparison/simulation.py" \
+  $COMMON $FIELD \
+  --outdir "$OUT/screened_kg8_N320000_seed${seed}"

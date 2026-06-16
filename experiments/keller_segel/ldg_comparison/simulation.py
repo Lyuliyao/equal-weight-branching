@@ -178,7 +178,7 @@ def compute_solver_gradv(args, X1, X2, x_c, L, M_v_eff, coeff_v, taper_s):
                            taper_s_hi=ts_hi)
         info["mode"] = mode
         return hyb.grad(X1), info
-    if mode == "two_level_blob_residual":
+    if mode in ("two_level_blob_residual", "two_level_screened_residual"):
         # robustness gate: a degenerate (tiny) in-window v-cloud makes the blob a
         # shot-noise spike; fall back to the smooth single-K field instead.
         if int(Xin.shape[0]) < int(args.blob_min_count):
@@ -195,7 +195,8 @@ def compute_solver_gradv(args, X1, X2, x_c, L, M_v_eff, coeff_v, taper_s):
             frac_in=args.hybrid_frac_in, frac_out=args.hybrid_frac_out,
             h_rule=args.blob_h_rule, c_h=args.blob_ch,
             R_for_h=R_for_h, N_for_h=N_for_h,
-            n_quad=(None if args.blob_n_quad <= 0 else args.blob_n_quad))
+            n_quad=(None if args.blob_n_quad <= 0 else args.blob_n_quad),
+            kernel=("screened" if mode == "two_level_screened_residual" else "gaussian"))
         d = blob.diagnostics()
         info.update(mode=mode, h=d["h"], residual_E=d["residual_energy_fraction"])
         return blob.grad(X1), info
@@ -564,7 +565,7 @@ def build_parser():
                         "resolutions n on [-0.5,0.5]^2 (e.g. 40 80 160); empty = off")
     p.add_argument("--solver_field", default="current_fourier",
                    choices=["current_fourier", "two_level_spectral_residual",
-                            "two_level_blob_residual"],
+                            "two_level_blob_residual", "two_level_screened_residual"],
                    help="reconstruction used INSIDE the time step for the chemotactic "
                         "drift grad v (current_fourier = single-K; two_level_spectral "
                         "= Form I global Kg + local Kl SPECTRUM residual; "

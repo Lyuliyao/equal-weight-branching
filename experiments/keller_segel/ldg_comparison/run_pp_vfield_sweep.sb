@@ -1,0 +1,58 @@
+#!/bin/bash
+#SBATCH -J pp_vfield
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -c 8
+#SBATCH --mem=32G
+#SBATCH -p general-long
+#SBATCH -t 04:00:00
+#SBATCH --array=0-7
+#SBATCH -o pp_vfield_%A_%a.out
+#
+# Production sweep for the SS5.4 LDG-vs-particle snapshot figure: run the particle
+# method with EVERY v-field (grad v) reconstruction we have tried in the dynamics,
+# saving the u/v clouds so the figure can use a nonnegative KDE of mu_u (the
+# dynamics never uses a u reconstruction; grad v from the v-cloud drives the
+# u-aggregation, so a better v reconstruction sharpens the particle core).
+#
+# 4 v-field reconstructions x 2 seeds = 8 tasks.  Each: N=3.2e5, K=10, tau=2e-7,
+# q_window=0.8, report_times 3e-5 6e-5 9e-5 1.2e-4 (n_steps=700 -> T=1.4e-4),
+# --save_cloud_snapshots.
+#
+#   REPO=$PWD OUT=$PWD/reference_results/keller_segel_ldg_pp/pp_vfield_<runid> \
+#       sbatch experiments/keller_segel/ldg_comparison/run_pp_vfield_sweep.sb
+#
+set -euo pipefail
+
+PY=/mnt/home/lyuliyao/.conda/envs/heat/bin/python
+REPO=${REPO:-/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching}
+: "${OUT:?set OUT to the output path}"
+mkdir -p "$OUT"
+
+METHODS=(current_fourier two_level_spectral_residual blob_ch006 blob_ch009)
+SEEDS=(0 1)
+
+idx=$SLURM_ARRAY_TASK_ID
+seed=${SEEDS[$((idx % 2))]}
+m=${METHODS[$((idx / 2))]}
+
+COMMON="--N 320000 --K 10 --tau 2e-7 --n_steps 700 --diag_every 5 \
+  --seed ${seed} --dg_readout_n 80 160 --cfl_abort 5.0 --filter_s 0.5 \
+  --q_window 0.8 --report_times 3e-5 6e-5 9e-5 1.2e-4 --save_cloud_snapshots"
+
+case "$m" in
+  current_fourier)
+    FIELD="--solver_field current_fourier" ;;
+  two_level_spectral_residual)
+    FIELD="--solver_field two_level_spectral_residual --Kg 8 --Kl 24" ;;
+  blob_ch006)
+    FIELD="--solver_field two_level_blob_residual --Kg 8 --blob_h_rule frac_L --blob_ch 0.06 --blob_min_count 100" ;;
+  blob_ch009)
+    FIELD="--solver_field two_level_blob_residual --Kg 8 --blob_h_rule frac_L --blob_ch 0.09 --blob_min_count 100" ;;
+  *) echo "unknown method $m"; exit 1 ;;
+esac
+
+echo "[task $SLURM_ARRAY_TASK_ID] method=$m seed=$seed"
+$PY "$REPO/experiments/keller_segel/ldg_comparison/simulation.py" \
+  $COMMON $FIELD \
+  --outdir "$OUT/${m}_N320000_seed${seed}"

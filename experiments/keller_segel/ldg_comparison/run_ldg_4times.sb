@@ -1,0 +1,24 @@
+#!/bin/bash
+#SBATCH -J ldg4t
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -c 4
+#SBATCH --mem=16G
+#SBATCH -p general-long
+#SBATCH -t 00:40:00
+#SBATCH -o ldg4t_%A.out
+#
+# LDG reference (N=320) at the SS5.4 figure report times 3e-5 6e-5 9e-5 1.2e-4.
+# Deterministic positivity-preserving P1 LDG (same solver as the fixed_flux run);
+# fields at these times are identical to a longer T run (adaptive dt is state-based).
+#
+#   REPO=$PWD OUT=$PWD/reference_results/keller_segel_ldg_pp/pp_vfield_<runid> \
+#       sbatch experiments/keller_segel/ldg_comparison/run_ldg_4times.sb
+#
+set -euo pipefail
+PY=/mnt/home/lyuliyao/.conda/envs/heat/bin/python
+REPO=${REPO:-/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching}
+: "${OUT:?set OUT to the output path}"
+$PY "$REPO/experiments/keller_segel/ldg_reference/run_ldg.py" \
+  --N 320 --T 1.4e-4 --report_times 3e-5 6e-5 9e-5 1.2e-4 \
+  --out_dir "$OUT/ldg/N320"
