@@ -951,14 +951,14 @@ scalar localized-growth problem
 \qquad
 r(\mathbf x)=\lambda G(\mathbf x)-\beta,
 \qquad
-G(\mathbf x)=\exp\!\left(-\frac{|\mathbf x-\mathbf x_0|_{\mathbb T}^2}{2\sigma^2}\right),
+G_\sigma(\mathbf x)=\exp\!\left(-\frac{|\mathbf x-\mathbf x_0|_{\mathbb T}^2}{2\sigma^2}\right),
 \label{equ:loc_growth}
 \end{equation}
 with \(D=0.05\), \(\lambda=8\), \(\beta=1\), \(\sigma=0.5\), \(\mathbf x_0=0\),
 \(u_0=1+G/2\), \(T=1\), \(\tau=2\times10^{-3}\), \(K=16\), and
 \(N_0=2\times10^4\).  The deterministic reference is a Fourier Strang split-step
 solution on a \(256^2\) grid.  The diagnostic region is the fixed growth set
-\(\Omega_{\rm grow}=\{G\ge 0.5\}\).
+\(\Omega_{\rm grow}=\{G_\sigma\ge 0.5\}\).
 
 The final-time comparison is summarized in Table~\ref{tab:bw}.  In this table,
 \[
@@ -1059,10 +1059,6 @@ reduce the error; quantitative final-time diagnostics are reported in
 Table~\ref{tab:bw}.}
 \label{fig:bw_snap_l2}
 \end{figure}
-
-
-\subsection{Switching growth under a moving source}
-\label{sec:switch}
 We further test the representation comparison with a growth region that switches from $\mathbf x_A=(-1.2,0)$ to $\mathbf x_B=(1.2,0)$ at mid-time:
 \begin{equation}
 \partial_tu=D\Delta u+r(t,\mathbf x)u,
@@ -1073,21 +1069,33 @@ s(t)=\frac12\left(1+\tanh\frac{t-T/2}{\delta}\right).
 \label{equ:switch}
 \end{equation}
 Here $u_0\equiv1$, $D=0.02$, $\lambda=10$, $\beta=0.1$, $\sigma=0.25$, $T=1.2$, $\delta=0.04$, $\tau=10^{-3}$, $K=48$, and $N_0=2\times10^4$.  The reference field \(u_{\rm ref}\) is computed by a deterministic Fourier pseudospectral solver on a \(512\times512\) collocation grid.  
-The second-stage region $B_B$ is the discriminating diagnostic.  As shown in Table~\ref{tab:switch}, both branching kernels outperform the tested global resampling baselines globally and in $B_B$.  ESS-triggered resampling is best only in the first-stage region $B_A$, where it has concentrated the fixed particle budget before the switch.  By $t=T/2^-$, global resampling has reduced the number of distinct surviving ancestors to $63$--$68\%$ of $N_0$, while branching retains about $95\%$ and has grown the active population to $4.2\times10^4$.  Thus the failure mode in this test is not only weight variance; it is loss of future-growth lineages.
+We use the half-height sets
+\[
+B_A=\{G_\sigma(\mathbf x;\mathbf x_A)\ge 0.5\},
+\qquad
+B_B=\{G_\sigma(\mathbf x;\mathbf x_B)\ge 0.5\}
+\]
+as the local diagnostic regions.
+The second-stage region \(B_B\) is the discriminating diagnostic.  Table~\ref{tab:switch}
+shows that ESS-triggered resampling gives the smallest error in the first-stage region
+\(B_A\), where the fixed particle budget has been concentrated before the switch, but it
+has larger error in the later region \(B_B\).  Branching gives lower
+\(B_B\) error under the same initial budget, while increasing the active population
+through the reaction step.  
 
 \begin{table}[t]
 \centering
-\caption{Switching-growth benchmark at $T=1.2$ (eight seeds): relative $L^2$ errors globally and in the first- and second-stage regions, active particle count, and fraction of distinct surviving ancestors at the switch.}
+\caption{Switching-growth benchmark at $T=1.2$ (eight seeds): relative $L^2$ errors globally and in the first- and second-stage regions.}
 \label{tab:switch}
-\begin{tabular}{l c c c c c}
+\begin{tabular}{l c c c }
 \toprule
-method & global $L^2$ & $B_A$ $L^2$ & $B_B$ $L^2$ & $N_{\rm act}$ & distinct anc. at switch \\
+method & global $L^2$ & $B_A$ $L^2$ & $B_B$ $L^2$   \\
 \midrule
-weighted & $0.900\pm0.048$ & $1.014\pm0.120$ & $0.690\pm0.039$ & $2.0\times10^4$ & 100\% \\
-weighted + resample (ESS) & $0.288\pm0.025$ & $\mathbf{0.162\pm0.027}$ & $0.297\pm0.038$ & $2.0\times10^4$ & 68\% \\
-weighted + resample (every step) & $0.271\pm0.062$ & $0.234\pm0.087$ & $0.226\pm0.107$ & $2.0\times10^4$ & 63\% \\
-Poisson branching & $\mathbf{0.199\pm0.045}$ & $0.183\pm0.063$ & $\mathbf{0.168\pm0.067}$ & $4.2\times10^4$ & 95\% \\
-minimum-variance branching & $0.203\pm0.051$ & $0.170\pm0.136$ & $0.174\pm0.022$ & $4.2\times10^4$ & 95\% \\
+weighted & $0.900\pm0.048$ & $1.014\pm0.120$ & $0.690\pm0.039$  \\
+weighted + resample (ESS) & $0.288\pm0.025$ & $\mathbf{0.162\pm0.027}$ & $0.297\pm0.038$ \\
+weighted + resample (every step) & $0.271\pm0.062$ & $0.234\pm0.087$ & $0.226\pm0.107$  \\
+Poisson branching & $\mathbf{0.199\pm0.045}$ & $0.183\pm0.063$ & $\mathbf{0.168\pm0.067}$  \\
+minimum-variance branching & $0.203\pm0.051$ & $0.170\pm0.136$ & $0.174\pm0.022$   \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -1095,7 +1103,14 @@ minimum-variance branching & $0.203\pm0.051$ & $0.170\pm0.136$ & $0.174\pm0.022$
 \begin{figure}[t]
 \centering
 \includegraphics[width=0.8\linewidth]{figure/switch_snapshots_magnifier_4x1.png}
-\caption{Switching-growth benchmark at $T=1.2$, after growth has moved from $\mathbf x_A$ to $\mathbf x_B$.  The weighted reconstruction is dominated by a few large weights; systematic resampling and minimum-variance branching both recover smoother fields, with the smallest second-stage error obtained by branching.}
+\caption{Switching-growth benchmark at \(T=1.2\), after the source has moved from
+\(\mathbf x_A\) to \(\mathbf x_B\).  The panels compare the deterministic reference,
+raw weighted particles, ESS-resampled weighted particles, and minimum-variance
+branching.  Each panel shows the full-domain reconstruction together with magnified
+views of the old growth region \(B_A\) and the new growth region \(B_B\).  The insets
+visualize the mechanism quantified in Table~\ref{tab:switch}: ESS resampling is most
+accurate in the old region \(B_A\), while branching gives lower error in the later
+region \(B_B\) under the same initial budget.}
 \label{fig:switch}
 \end{figure}
 
