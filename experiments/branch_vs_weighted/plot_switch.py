@@ -141,20 +141,23 @@ def connect_circles(fig, ax, axins, center, edge, ls, lw=0.8):
 
 
 def _make_colorbar(fig, mappable, cax_list, vmax, label, cbar_kw):
-    """Shared colorbar scaled to `vmax` (the reference peak) with a 'max' overflow arrow.
+    """Shared colorbar styled to match the other manuscript figures (framed bar + outward
+    ticks), scaled to the reference peak `vmax`, with a standard 'max' overflow arrow.
 
-    fig.colorbar's QuadMesh `solids` render as a WHITE box in the saved PDF when the panels
-    contain inset_axes (a matplotlib/PDF-backend artifact -- the facecolors are correct in
-    memory).  We therefore use fig.colorbar only to allocate and place the colorbar axes
-    (constrained-layout aware), then redraw the bar as an imshow gradient plus a triangular
-    over-max arrow; an AxesImage + Polygon render reliably in the PDF.
+    fig.colorbar's QuadMesh fill renders as a WHITE box in the saved PDF for THIS figure
+    (panels contain inset_axes; the facecolors are correct in memory -- a matplotlib/PDF
+    QuadMesh artifact, verified to reproduce here).  We therefore use fig.colorbar only to
+    place the colorbar axes (constrained-layout aware), then redraw the bar as an imshow
+    gradient (an AxesImage renders reliably) plus a filled 'max' arrow, and overlay the
+    standard black frame outline so it is visually identical to a normal colorbar.
     """
     location = cbar_kw.get("location", "right")
     cb = fig.colorbar(mappable, ax=cax_list, extend="max", **cbar_kw)
     cax = cb.ax
     cax.cla()
     cmo = plt.get_cmap(CMAP)
-    ah = 0.06 * vmax                                        # arrow height (data units)
+    lw = matplotlib.rcParams.get("axes.linewidth", 0.6)
+    ah = 0.05 * vmax                                        # arrow height (data units)
     ticks = [t for t in MaxNLocator(nbins=4, steps=[1, 2, 5, 10]).tick_values(0, vmax)
              if 0 <= t <= vmax]
     if location in ("right", "left"):
@@ -162,6 +165,9 @@ def _make_colorbar(fig, mappable, cax_list, vmax, label, cbar_kw):
                    origin="lower", extent=[0, 1, 0, vmax])
         cax.add_patch(Polygon([[0, vmax], [1, vmax], [0.5, vmax + ah]], closed=True,
                               fc=cmo(1.0), ec="none"))
+        # standard black frame: up the left side, over the arrow, down the right side, base
+        cax.add_patch(Polygon([[0, 0], [0, vmax], [0.5, vmax + ah], [1, vmax], [1, 0]],
+                              closed=True, fill=False, ec="black", lw=lw, joinstyle="miter"))
         cax.set_xlim(0, 1); cax.set_ylim(0, vmax + ah); cax.set_xticks([])
         cax.yaxis.set_ticks_position(location); cax.yaxis.set_label_position(location)
         cax.set_yticks(ticks); cax.set_ylabel(label, fontsize=7)
@@ -170,11 +176,13 @@ def _make_colorbar(fig, mappable, cax_list, vmax, label, cbar_kw):
                    origin="lower", extent=[0, vmax, 0, 1])
         cax.add_patch(Polygon([[vmax, 0], [vmax, 1], [vmax + ah, 0.5]], closed=True,
                               fc=cmo(1.0), ec="none"))
+        cax.add_patch(Polygon([[0, 0], [vmax, 0], [vmax + ah, 0.5], [vmax, 1], [0, 1]],
+                              closed=True, fill=False, ec="black", lw=lw, joinstyle="miter"))
         cax.set_ylim(0, 1); cax.set_xlim(0, vmax + ah); cax.set_yticks([])
         cax.set_xticks(ticks); cax.set_xlabel(label, fontsize=7)
-    cax.tick_params(labelsize=6.5)
+    cax.tick_params(labelsize=6.5, direction="out")
     for s in cax.spines.values():
-        s.set_visible(False)
+        s.set_visible(False)                               # frame is the Polygon outline
     return cb
 
 
