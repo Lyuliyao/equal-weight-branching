@@ -1,0 +1,38 @@
+#!/bin/bash
+#SBATCH -J tbconv
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -c 4
+#SBATCH --mem=64G
+#SBATCH -p general-long-gpu
+#SBATCH --gres=gpu:1
+#SBATCH -t 04:00:00
+#SBATCH --array=0-11
+#SBATCH -o tbconv_%A_%a.out
+#
+# SS5.4 numerical-blow-up-time t_b convergence: LDG-style resolution-gap on the
+# DG-readout grid, refining (Np, n) -> (4Np, 2n).  N in {8e4, 3.2e5, 1.28e6},
+# readout grids n=80,160,320, K=10, current_fourier, 4 seeds.  t_b pairs:
+# (8e4,80)->(3.2e5,160) and (3.2e5,160)->(1.28e6,320); show t_b -> ~1.21e-4.
+#
+#   REPO=$PWD OUT=$PWD/reference_results/keller_segel_ldg_pp/tb_converge_<runid> \
+#       sbatch experiments/keller_segel/ldg_comparison/run_tb_converge.sb
+#
+set -euo pipefail
+PY=/mnt/home/lyuliyao/.conda/envs/heat/bin/python
+REPO=${REPO:-/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching}
+: "${OUT:?set OUT}"
+mkdir -p "$OUT"
+
+NS=(80000 320000 1280000)
+SEEDS=(0 1 2 3)
+idx=$SLURM_ARRAY_TASK_ID
+N=${NS[$((idx / 4))]}
+seed=${SEEDS[$((idx % 4))]}
+
+echo "[task $idx] N=$N seed=$seed (K=10, readout 80 160 320)"
+$PY "$REPO/experiments/keller_segel/ldg_comparison/simulation.py" \
+  --N "$N" --K 10 --tau 2e-7 --n_steps 1000 --diag_every 20 --seed "$seed" \
+  --q_window 0.8 --cfl_abort 8.0 --filter_s 0.5 --solver_field current_fourier \
+  --dg_readout_n 80 160 320 --report_times 6e-5 1.2e-4 2e-4 \
+  --outdir "$OUT/cf_N${N}_seed${seed}"
