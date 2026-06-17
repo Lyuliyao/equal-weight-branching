@@ -1,0 +1,40 @@
+#!/bin/bash
+#SBATCH -J tbK5
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -c 4
+#SBATCH --mem=96G
+#SBATCH -p general-long-gpu
+#SBATCH --gres=gpu:1
+#SBATCH -t 06:00:00
+#SBATCH --array=0-11
+#SBATCH -o tbK5_%A_%a.out
+#
+# t_b convergence with the CORRECT centered setup: K=5, global domain (the SS5.4
+# figure config; K=10 wanders off-center, low N is noisy).  Higher-N ladder
+# Np in {4e5, 1.6M, 6.4M} forming clean (Np,n)->(4Np,2n) pairs:
+#   (4e5, n=80) -> (1.6M, n=160) -> (6.4M, n=320).
+# readout grids 80/160/320, 4 seeds.
+#
+#   REPO=$PWD OUT=$PWD/reference_results/keller_segel_ldg_pp/tb_converge_K5_<runid> \
+#       sbatch experiments/keller_segel/ldg_comparison/run_tb_converge_K5.sb
+#
+set -euo pipefail
+PY=/mnt/home/lyuliyao/.conda/envs/heat/bin/python
+REPO=${REPO:-/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching}
+: "${OUT:?set OUT}"
+mkdir -p "$OUT"
+
+NS=(400000 1600000 6400000)
+SEEDS=(0 1 2 3)
+idx=$SLURM_ARRAY_TASK_ID
+N=${NS[$((idx / 4))]}
+seed=${SEEDS[$((idx % 4))]}
+
+echo "[task $idx] N=$N seed=$seed (K=5, global domain, readout 80 160 320)"
+$PY "$REPO/experiments/keller_segel/ldg_comparison/simulation.py" \
+  --N "$N" --K 5 --tau 2e-7 --n_steps 1000 --diag_every 20 --seed "$seed" \
+  --q_window 0.8 --cfl_abort 8.0 --filter_s 1000 --solver_field current_fourier \
+  --global_domain --global_L 0.5 \
+  --dg_readout_n 80 160 320 --report_times 6e-5 1.2e-4 2e-4 \
+  --outdir "$OUT/cf_N${N}_seed${seed}"

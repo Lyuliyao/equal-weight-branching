@@ -58,14 +58,19 @@ def main():
     ap.add_argument("--tb_dir", required=True)
     ap.add_argument("--ldg_dir", required=True)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--n_ladder", type=int, nargs=3, default=[80000, 320000, 1280000],
+                    help="three particle counts N0<N1<N2 forming (N0,80)->(N1,160)->(N2,320)")
     args = ap.parse_args()
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
 
+    N0, N1, N2 = args.n_ladder
+    def lab(n):
+        return f"{n/1e6:g}M" if n >= 1e6 else f"{n/1e3:g}k"
     # particle pairs (Np_low,col_low) -> (Np_high,col_high)
-    p_pairs = [("8e4->3.2e5 (n80->160)", "cf_N80000_seed*", "S_dg_cross_80",
-                "cf_N320000_seed*", "S_dg_cross_160"),
-               ("3.2e5->1.28e6 (n160->320)", "cf_N320000_seed*", "S_dg_cross_160",
-                "cf_N1280000_seed*", "S_dg_cross_320")]
+    p_pairs = [(f"{lab(N0)}->{lab(N1)} (n80->160)", f"cf_N{N0}_seed*", "S_dg_cross_80",
+                f"cf_N{N1}_seed*", "S_dg_cross_160"),
+               (f"{lab(N1)}->{lab(N2)} (n160->320)", f"cf_N{N1}_seed*", "S_dg_cross_160",
+                f"cf_N{N2}_seed*", "S_dg_cross_320")]
     fig, (axr, axc) = plt.subplots(1, 2, figsize=(11, 4.2))
     p_tb = []
     for lab, lo, clo, hi, chi in p_pairs:
