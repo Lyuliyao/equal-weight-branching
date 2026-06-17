@@ -95,9 +95,10 @@ def draw_panel(fig, ax, X, Y, U, title, ylabel):
     cb.set_ticks(ticks)
     cb.set_ticklabels([f"{int(round(tt / 10.0 ** e))}" for tt in ticks])
     cb.ax.tick_params(labelsize=9, color="white", labelcolor="white", length=2)
-    # the shared x10^e, once, in the gap just right of the colorbar (no tick overlap)
-    cax.text(1.02, 0.5, rf"$\times 10^{{{e}}}$", transform=cax.transAxes,
-             ha="left", va="center", color="black", fontsize=9, clip_on=False)
+    # the shared x10^e, once, INSIDE the panel's top-right corner (white on the dark
+    # background, below the colorbar tick row) -- not in the gap, so no panel covers it.
+    ax.text(0.97, 0.82, rf"$\times 10^{{{e}}}$", transform=ax.transAxes,
+            ha="right", va="top", color="white", fontsize=10, zorder=5)
     return cf
 
 
