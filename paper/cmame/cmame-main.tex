@@ -1206,27 +1206,17 @@ a localized central core on the same time scale.  The overlaid mass-quantile rad
 \(R_{0.2}\) and \(R_{0.3}\) motivate the reconstruction-light core-collapse diagnostic
 defined below.
 
-\begin{figure}
-\centering
-\includegraphics[width=0.8\linewidth]{figure/case2_u.pdf}
-\caption{Pre-singular concentration test: particle approximation of $u$ at early times.  The cell density concentrates rapidly while remaining stable over the tested particle counts.}
-\label{fig:case2_u}
-\end{figure}
-
-\begin{figure}
-\centering
-\includegraphics[width=0.85\linewidth]{figure/comparison.pdf}
-\caption{Pre-singular concentration test at $t=5\times10^{-5}$: particle approximation compared with finite-difference approximations on three uniform grids.  The particle peak is stable across particle counts; the uniform-grid solution sharpens with mesh refinement.}
-\label{fig:comparison}
-\end{figure}
-
 \begin{figure}[t]
 \centering
-\includegraphics[width=\linewidth]{figure/ks_concentration_diag.pdf}
-\caption{Grid-free concentration diagnostics.  Left: the second moment of the cell cloud decreases by about a factor of six.  Right: the local particle count in a fixed ball of radius $0.05$ about the centroid grows by about $4.5\times$.  These diagnostics measure approach toward concentration, not a blow-up time.}
-\label{fig:ks_concentration_diag}
+\includegraphics[width=\linewidth]{figure/ks_pp_ldg_particle_snapshots.pdf}
+\caption{Fully parabolic--parabolic Keller--Segel concentration benchmark.
+Top row: deterministic LDG reference. Bottom row: particle-field computation.
+Columns show \(t=3\times10^{-5},6\times10^{-5},9\times10^{-5},1.2\times10^{-4}\).
+The overlaid circles indicate the mass-quantile radii \(R_{0.2}\) and \(R_{0.3}\),
+used in the core-collapse diagnostic. The figure is a qualitative comparison of the
+concentrating core; quantitative concentration-time diagnostics are reported below.}
+\label{fig:ks_pp_fields}
 \end{figure}
-
 \paragraph{Core-local resolution diagnostics.}
 For a more resolution-sensitive diagnostic, we also run the parabolic--elliptic reduction $-\Delta v+v=u$ on a core-adaptive Fourier window, using the same concentrated initial profile.  We track the reconstructed peak $P_{K,N}(t)=\|P_K\mu_t^N\|_\infty$, the reconstructed norm $S_{K,N}(t)=\|P_K\mu_t^N\|_{L^2}$, and reconstruction-free core radii $R_q(t)$.  Snapshots are recorded at $t=5\times10^{-5}$, $10^{-4}$, $1.5\times10^{-4}$, $5\times10^{-4}$, $10^{-3}$, $2\times10^{-3}$, and $4\times10^{-3}$.
 
