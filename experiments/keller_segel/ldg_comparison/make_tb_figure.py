@@ -59,6 +59,7 @@ def main():
     ap.add_argument("--ldg_dir", required=True)
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
+    os.makedirs(os.path.dirname(args.out), exist_ok=True)
 
     # particle pairs (Np_low,col_low) -> (Np_high,col_high)
     p_pairs = [("8e4->3.2e5 (n80->160)", "cf_N80000_seed*", "S_dg_cross_80",
@@ -104,7 +105,7 @@ def main():
     axc.axhline(LIT * 1e4, color="r", ls=":", label=r"literature $1.21$")
     axc.set_ylabel(r"$t_b\ (\times 10^{-4})$"); axc.set_xlabel("refinement pair")
     axc.set_title(r"(b) $t_b$ convergence $\to$ literature"); axc.legend(fontsize=8); axc.grid(alpha=0.3)
-    fig.suptitle(r"Numerical blow-up time $t_b=\inf\{t:S_{\rm fine}/S_{\rm coarse}\ge\theta\}$", fontsize=10)
+    fig.suptitle(r"Numerical blow-up time $t_b=\inf\{t:\ S_{\rm fine}/S_{\rm coarse}\geq\theta\}$", fontsize=10)
     fig.tight_layout(rect=[0, 0, 1, 0.95])
     fig.savefig(args.out + ".pdf", bbox_inches="tight"); fig.savefig(args.out + ".png", dpi=200, bbox_inches="tight")
     print(f"wrote {args.out}.pdf/.png")
