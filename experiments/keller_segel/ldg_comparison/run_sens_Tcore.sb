@@ -1,0 +1,53 @@
+#!/bin/bash
+#SBATCH -J sensTc
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -c 4
+#SBATCH --mem=48G
+#SBATCH -p general-long-gpu
+#SBATCH --gres=gpu:1
+#SBATCH -t 06:00:00
+#SBATCH --array=0-19
+#SBATCH -o sensTc_%A_%a.out
+#
+# SS5.5 sensitivity of the particle core-collapse time T_core^part to (K, tau,
+# q_window, N_p), one-at-a-time around the baseline K=5, tau=2e-7, q=0.8, N=6.4M.
+# Adaptive-window current_fourier (so q_window matters), injection v, filter_s=0.5.
+# T_core is read from the dense reconstruction-free R_q(t) in each diag CSV.
+#
+# 10 configs x 2 seeds = 20 tasks.  GPU (jax CudaDevice).
+#
+#   REPO=$PWD OUT=$PWD/reference_results/keller_segel_ldg_pp/sens_Tcore_<runid> \
+#       sbatch experiments/keller_segel/ldg_comparison/run_sens_Tcore.sb
+#
+set -euo pipefail
+PY=/mnt/home/lyuliyao/.conda/envs/heat/bin/python
+REPO=${REPO:-/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching}
+: "${OUT:?set OUT}"
+mkdir -p "$OUT"
+
+# one-at-a-time configs: "K tau q N"   (baseline = first)
+CFG=( "5 2e-7 0.8 6400000" "8 2e-7 0.8 6400000" "10 2e-7 0.8 6400000" \
+      "5 1e-7 0.8 6400000" "5 5e-8 0.8 6400000" \
+      "5 2e-7 0.5 6400000" "5 2e-7 0.6 6400000" "5 2e-7 0.7 6400000" \
+      "5 2e-7 0.8 3200000" "5 2e-7 0.8 1600000" )
+SEEDS=(0 1)
+
+idx=$SLURM_ARRAY_TASK_ID
+ci=$((idx / 2)); si=$((idx % 2))
+read K TAU Q N <<< "${CFG[$ci]}"
+seed=${SEEDS[$si]}
+
+case "$TAU" in
+  2e-7) NS=700;  DE=5  ;;     # all reach T=1.4e-4; diag every 1e-6
+  1e-7) NS=1400; DE=10 ;;
+  5e-8) NS=2800; DE=20 ;;
+  *) echo "unknown tau $TAU"; exit 1 ;;
+esac
+
+echo "[task $idx] K=$K tau=$TAU q=$Q N=$N seed=$seed n_steps=$NS diag_every=$DE"
+$PY "$REPO/experiments/keller_segel/ldg_comparison/simulation.py" \
+  --N "$N" --K "$K" --tau "$TAU" --n_steps "$NS" --diag_every "$DE" --seed "$seed" \
+  --q_window "$Q" --cfl_abort 8.0 --filter_s 0.5 --solver_field current_fourier \
+  --report_times 3e-5 6e-5 9e-5 1.2e-4 \
+  --outdir "$OUT/sens_K${K}_tau${TAU}_q${Q}_N${N}_seed${seed}"
