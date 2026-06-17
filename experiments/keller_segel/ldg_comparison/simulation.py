@@ -339,6 +339,8 @@ def run(args):
                                 D=args.D, tau=tau, L_min=args.L_min,
                                 q_window=args.q_window)
         L = float(L)
+        if args.global_domain:                       # case2_test1-style FIXED global
+            x_c = jnp.zeros(2, dtype=X1.dtype); L = float(args.global_L)  # [-L,L]^2, no window
         h_eff = L / args.K
         S_u = float(jnp.mean(jnp.sum((X1 - x_c) ** 2, axis=1)))
         R2 = float(np.sqrt(S_u))
@@ -459,6 +461,8 @@ def run(args):
                                 D=args.D, tau=tau, L_min=args.L_min,
                                 q_window=args.q_window)
         L = float(L)
+        if args.global_domain:                       # case2_test1-style FIXED global
+            x_c = jnp.zeros(2, dtype=X1.dtype); L = float(args.global_L)  # [-L,L]^2, no window
         # ---- 2. reconstruct v on the u-window (mask out-of-window v-parts) -
         coeff_v, M_v_eff, _ = coeffs_v_on_window(
             X2, x_c, L, args.K, N0, mask_v_outside)
@@ -560,6 +564,12 @@ def build_parser():
     p.add_argument("--D", type=float, default=1.0)
     p.add_argument("--L_min", type=float, default=1e-3)
     p.add_argument("--q_window", type=float, default=0.8)
+    p.add_argument("--global_domain", action="store_true",
+                   help="case2_test1-style: disable the core-adaptive window and reconstruct "
+                        "grad v on a FIXED global [-global_L, global_L]^2 Fourier domain "
+                        "(x_c=0, L=global_L held constant).")
+    p.add_argument("--global_L", type=float, default=0.5,
+                   help="half-width of the fixed global domain when --global_domain is set")
     p.add_argument("--dg_readout_n", type=int, nargs="*", default=[],
                    help="LDG-matched P1 DG readout (Version A) at these diagnostic "
                         "resolutions n on [-0.5,0.5]^2 (e.g. 40 80 160); empty = off")
