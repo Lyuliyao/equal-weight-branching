@@ -84,6 +84,9 @@ def main():
     ap.add_argument("--scale", choices=["row", "column", "panel"], default="row",
                     help="colour-scale sharing: row (per method, default; core SHAPE comparison "
                          "-- peak is bandwidth-sensitive), column (per time, all rows), panel (each).")
+    ap.add_argument("--only", nargs="+", default=None,
+                    help="restrict to these method keys (e.g. blob_ch009) for a 2-row "
+                         "LDG-vs-one-method SS5.4 figure")
     ap.add_argument("--tag", default="vfield_comparison")
     args = ap.parse_args()
 
@@ -95,6 +98,8 @@ def main():
 
     ldg = load_ldg(ldg_npz)
     methods = discover_methods(args.run_dir, args.seed)
+    if args.only:
+        methods = [t for t in methods if t[0] in args.only]
     if not methods:
         print(f"[cmp] no method snapshot dirs in {args.run_dir} for seed {args.seed}")
         return
