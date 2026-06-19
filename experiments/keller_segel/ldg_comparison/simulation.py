@@ -65,7 +65,8 @@ if _HERE not in sys.path:
 
 from adaptive_window import compute_window, density_coeffs_y  # noqa: E402
 from particle_dg_readout import (  # noqa: E402  LDG-matched P1 DG readout (Version A)
-    project_particles_to_p1dg, dg_l2_norm, dg_inner_product, dg_peak)
+    project_particles_to_p1dg, dg_l2_norm, dg_inner_product, dg_peak,
+    grad_v_dg_from_cloud)
 from hybrid_vfield import HybridVField  # noqa: E402  solver-level residual v-field
 from blob_residual_vfield import BlobResidualVField  # noqa: E402  blob-residual field
 from field_pp import (  # noqa: E402
@@ -164,6 +165,12 @@ def compute_solver_gradv(args, X1, X2, x_c, L, M_v_eff, coeff_v, taper_s):
     # single-K Fourier (default), or any mode with an empty v-cloud -> fall back
     if mode == "current_fourier" or int(X2.shape[0]) == 0:
         return grad_v_from_cloud(X1, coeff_v, x_c, L, M_v_eff, taper_s=taper_s), info
+    # LDG (P1-DG) reconstruction of v on the window mesh; per-cell DG gradient.
+    if mode == "dg":
+        g = grad_v_dg_from_cloud(np.asarray(X1), np.asarray(X2), M_v_eff,
+                                 x_c, L, args.dg_solver_n)
+        info.update(mode="dg", h=float(2.0 * L / args.dg_solver_n))
+        return jnp.asarray(g), info
     # in-window v-cloud (same masking convention as coeffs_v_on_window)
     Yv = (np.asarray(X2) - np.asarray(x_c)) * (np.pi / L)
     inb = np.max(np.abs(Yv), axis=1) <= np.pi
@@ -574,13 +581,16 @@ def build_parser():
                    help="LDG-matched P1 DG readout (Version A) at these diagnostic "
                         "resolutions n on [-0.5,0.5]^2 (e.g. 40 80 160); empty = off")
     p.add_argument("--solver_field", default="current_fourier",
-                   choices=["current_fourier", "two_level_spectral_residual",
+                   choices=["current_fourier", "dg", "two_level_spectral_residual",
                             "two_level_blob_residual", "two_level_screened_residual"],
                    help="reconstruction used INSIDE the time step for the chemotactic "
                         "drift grad v (current_fourier = single-K; two_level_spectral "
                         "= Form I global Kg + local Kl SPECTRUM residual; "
                         "two_level_blob = global Kg + local eta_h BLOB residual, the "
                         "smoother local operator)")
+    p.add_argument("--dg_solver_n", type=int, default=64,
+                   help="P1-DG mesh size (cells per axis on the window) for "
+                        "--solver_field dg")
     p.add_argument("--Kg", type=int, default=8, help="global low bandwidth (hybrid)")
     p.add_argument("--Kl", type=int, default=24, help="local high bandwidth (hybrid)")
     p.add_argument("--hybrid_frac_in", type=float, default=0.5)

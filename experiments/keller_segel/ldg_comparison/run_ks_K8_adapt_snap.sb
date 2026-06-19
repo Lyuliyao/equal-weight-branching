@@ -1,0 +1,31 @@
+#!/bin/bash
+#SBATCH -J ksK8ad
+#SBATCH -A Multiscaleml
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -c 4
+#SBATCH --mem=64G
+#SBATCH -p general-short
+#SBATCH --gres=gpu:1
+#SBATCH -t 02:00:00
+#SBATCH -o ksK8ad_%j.out
+#
+# K=8, q_window=0.8 ADAPTIVE-window case (NOT fixed domain), N=5.12M, with clouds
+# saved, for the LDG-vs-particle snapshot figure with a KDE reconstruction.
+# Adaptive window concentrates better than fixed K=32 (recon-free R0.5 0.0081 vs
+# 0.0092); KDE removes the spectral Gibbs ringing seen at late time.
+#
+set -euo pipefail
+export TF_GPU_ALLOCATOR=cuda_malloc_async
+export XLA_PYTHON_CLIENT_MEM_FRACTION=0.95
+PY=/mnt/home/lyuliyao/.conda/envs/heat/bin/python
+REPO=${REPO:-/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching}
+: "${OUT:?set OUT}"
+mkdir -p "$OUT"
+
+$PY "$REPO/experiments/keller_segel/ldg_comparison/simulation.py" \
+  --N 5120000 --K 8 --tau 2e-7 --n_steps 700 --diag_every 5 --seed 0 \
+  --q_window 0.8 --solver_field current_fourier --save_cloud_snapshots \
+  --cfl_abort 8.0 --filter_s 0.5 \
+  --report_times 6e-5 1.2e-4 \
+  --outdir "$OUT/cf_N5120000_K8_q0.8_seed0"

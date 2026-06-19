@@ -1,0 +1,40 @@
+#!/bin/bash
+#SBATCH -J K32clouds
+#SBATCH -A Multiscaleml
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -c 4
+#SBATCH --mem=80G
+#SBATCH -p general-short
+#SBATCH --gres=gpu:1
+#SBATCH -t 04:00:00
+#SBATCH --array=0-3
+#SBATCH -o K32clouds_%A_%a.out
+#
+# Archive raw PARTICLE POSITIONS (X_u, X_v) for the K=32 fixed-domain N_p ladder
+# (80k/320k/1.28M/5.12M, seed 0) at report times 6e-5/9e-5/1.2e-4, so future
+# analysis (histogram sigma, local reconstruction, residual blobs) needs no rerun.
+# Deterministic per seed -> same clouds as the tb_K32_converge seed-0 runs.
+#   sbatch --array=0-2 --gres=gpu:1       run_tb_K32_clouds.sb   # 80k,320k,1.28M
+#   sbatch --array=3-3 --gres=gpu:h200:1  run_tb_K32_clouds.sb   # 5.12M
+#
+set -euo pipefail
+export TF_GPU_ALLOCATOR=cuda_malloc_async
+export XLA_PYTHON_CLIENT_MEM_FRACTION=0.95
+PY=/mnt/home/lyuliyao/.conda/envs/heat/bin/python
+REPO=${REPO:-/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching}
+: "${OUT:?set OUT}"
+mkdir -p "$OUT"
+
+K=32; GLOBAL_L=0.5; TAU=2e-7; NS=700; DE=5; Q=0.8; seed=0
+NPS=(80000 320000 1280000 5120000)
+N=${NPS[$SLURM_ARRAY_TASK_ID]}
+
+echo "[clouds] K=$K N=$N seed=$seed fixed L=$GLOBAL_L save_cloud_snapshots"
+$PY "$REPO/experiments/keller_segel/ldg_comparison/simulation.py" \
+  --N "$N" --K "$K" --tau "$TAU" --n_steps "$NS" --diag_every "$DE" --seed "$seed" \
+  --q_window "$Q" --global_domain --global_L "$GLOBAL_L" \
+  --save_cloud_snapshots \
+  --cfl_abort 8.0 --filter_s 0.5 --solver_field current_fourier \
+  --report_times 6e-5 9e-5 1.2e-4 \
+  --outdir "$OUT/cf_N${N}_seed${seed}"

@@ -92,6 +92,47 @@ def dg_mass(coeffs, dx, dy):
     return float(np.sum(coeffs[..., 0]) * dx * dy)
 
 
+def grad_v_dg_from_cloud(X_eval, X_v, mass_v, x_c, L, n):
+    """+grad_x v at X_eval from an LDG (P1-DG) reconstruction of the v-cloud.
+
+    SAME window/mass convention as the Fourier drift `grad_v_from_cloud`:
+      * window = [x_c-L, x_c+L]^2 (the |x-x_c|<=L box, i.e. |Yv|<=pi);
+      * the in-window v-particles carry total mass `mass_v` (= M_v_eff), so each
+        gets weight mass_v / N_in -> c0 is the PHYSICAL v density (no (pi/L)^2
+        factor: that Jacobian is only for the probability-density Fourier coeffs).
+    v|_C = c0 + c1*xi + c2*eta with xi=2(x-xc_cell)/dx in [-1,1]; the DG gradient
+    is the per-cell CONSTANT  grad v = (2 c1/dx, 2 c2/dy).  Each evaluation point
+    gets the gradient of the cell it lands in (cells clamped to the grid edge for
+    points outside the window, where the density is ~0).
+
+    Returns an (N,2) numpy array (+grad_x v); the caller forms chi * grad v * tau.
+    """
+    xc = np.asarray(x_c, dtype=np.float64).reshape(2)
+    L = float(L)
+    box = ((xc[0] - L, xc[0] + L), (xc[1] - L, xc[1] + L))
+    Xe = np.asarray(X_eval, dtype=np.float64)
+    Ne = int(Xe.shape[0])
+    Xv = np.asarray(X_v, dtype=np.float64)
+    (x0, x1), (y0, y1) = box
+    inb = ((Xv[:, 0] >= x0) & (Xv[:, 0] < x1)
+           & (Xv[:, 1] >= y0) & (Xv[:, 1] < y1))
+    Nin = int(inb.sum())
+    if Ne == 0 or Nin == 0:
+        return np.zeros((Ne, 2), dtype=np.float64)
+    w = np.full(Nin, float(mass_v) / Nin)
+    coeffs, diag = project_particles_to_p1dg(Xv[inb], w, n, box)   # (n,n,3) [iy,ix]
+    dx, dy = diag["dx"], diag["dy"]
+    gx_grid = coeffs[..., 1] * (2.0 / dx)        # dv/dx, per cell (constant)
+    gy_grid = coeffs[..., 2] * (2.0 / dy)        # dv/dy, per cell
+    ixr = np.floor((Xe[:, 0] - x0) / dx).astype(np.int64)
+    iyr = np.floor((Xe[:, 1] - y0) / dy).astype(np.int64)
+    ins = (ixr >= 0) & (ixr < n) & (iyr >= 0) & (iyr < n)
+    ix = np.clip(ixr, 0, n - 1); iy = np.clip(iyr, 0, n - 1)
+    g = np.stack([gx_grid[iy, ix], gy_grid[iy, ix]], axis=1)
+    g[~ins] = 0.0                                # zero drift outside the window
+    return g
+
+
 if __name__ == "__main__":
     # verification: project a particle SAMPLE of the LDG IC onto P1 DG at n=80 and
     # compare to the LDG solver's field_L2(project_ic(u0)) on the same mesh.

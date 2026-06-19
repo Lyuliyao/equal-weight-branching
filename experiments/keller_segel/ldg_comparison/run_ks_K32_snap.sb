@@ -1,0 +1,32 @@
+#!/bin/bash
+#SBATCH -J ksK32snap
+#SBATCH -A Multiscaleml
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -c 4
+#SBATCH --mem=80G
+#SBATCH -p general-short
+#SBATCH --gres=gpu:h200:1
+#SBATCH -t 02:00:00
+#SBATCH -o ksK32snap_%j.out
+#
+# Snapshots for the LDG-vs-particle figure (Fig 5.4), K=32 / N=5.12M case:
+# fixed domain L=0.5, run to t=2e-4 with the Li-Shu-Yang/LDG report times
+# 6e-5 / 1.2e-4 / 2e-4, seed 0, clouds saved. K=32 spectral field on [-0.5,0.5]
+# matches the LDG full-domain reference.
+#
+set -euo pipefail
+export TF_GPU_ALLOCATOR=cuda_malloc_async
+export XLA_PYTHON_CLIENT_MEM_FRACTION=0.95
+PY=/mnt/home/lyuliyao/.conda/envs/heat/bin/python
+REPO=${REPO:-/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching}
+: "${OUT:?set OUT}"
+mkdir -p "$OUT"
+
+$PY "$REPO/experiments/keller_segel/ldg_comparison/simulation.py" \
+  --N 5120000 --K 32 --tau 2e-7 --n_steps 1000 --diag_every 5 --seed 0 \
+  --q_window 0.8 --global_domain --global_L 0.5 \
+  --solver_field current_fourier --save_cloud_snapshots \
+  --cfl_abort 8.0 --filter_s 0.5 \
+  --report_times 6e-5 1.2e-4 2e-4 \
+  --outdir "$OUT/cf_N5120000_seed0"
