@@ -60,6 +60,26 @@ pip install -r requirements.txt
 The SLURM scripts assume a conda environment named `heat`, except `keller_segel/focusing_3d/` which uses
 `jax-baseline`; edit the `run_*` scripts for your cluster.
 
+For the Overleaf -> ChatGPT/Codex -> HPC handoff, see [`WORKFLOW.md`](WORKFLOW.md).
+In short: use `make paper-sync` after editing manuscript text in Overleaf; it
+skips `paper/figure/` because figures are generated from code/GitHub. Use
+`make paper-push` after code regenerates changed files under `paper/` that need
+to appear in Overleaf. Do not edit `paper/**/*.tex` or `paper/**/*.bib` locally;
+those files are Overleaf-owned. If local LaTeX compilation creates
+temporary files, use `make paper-clean-build-dry-run` and then
+`make paper-clean-build`. To list GitHub-tracked `paper/` files that are not in
+Overleaf, run `make paper-audit-overleaf`. To compile locally, use
+`make paper-build` from the repository root; it builds from `paper/` so
+root-level files such as `lyu.sty` are visible. After `git pull` brings in
+updated figures, use `make paper-push-last-pull-dry-run` and then
+`make paper-push-last-pull` to send them to Overleaf without typing filenames.
+For manual multi-select, use `make paper-push-select-dry-run` or
+`make paper-push-select`. To give ChatGPT/GitHub a rendered manuscript PDF, use
+`make paper-pdf-update` locally or `make paper-sync-pdf` to sync Overleaf,
+rebuild `compiled_pdfs/cmame-main.pdf`, commit, and push. To enable Tab
+completion for Makefile targets in zsh, run `make shell-completion-install`,
+then open a new terminal or run `source ~/.zshrc`.
+
 ## Quick start (smoke tests, a few minutes on CPU)
 
 ```bash
