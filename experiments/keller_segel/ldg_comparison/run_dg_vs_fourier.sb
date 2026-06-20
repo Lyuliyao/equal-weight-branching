@@ -1,0 +1,47 @@
+#!/bin/bash
+#SBATCH -J dgVfour
+#SBATCH -A Multiscaleml
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -c 4
+#SBATCH --mem=64G
+#SBATCH -p general-short
+#SBATCH --gres=gpu:1
+#SBATCH -t 04:00:00
+#SBATCH --array=0-3
+#SBATCH -o dgVfour_%A_%a.out
+#
+# DG-drift vs Fourier-drift, MATCHED setup, to isolate the reconstruction operator
+# used inside the time step for the chemotactic drift grad v:
+#   dg              : strong-P1-DG per-cell gradient (dg_solver_n=64 ~ K=32 res)
+#   current_fourier : single-K=32 spectral drift (low-pass tapered)
+# Fixed domain L=0.5, K=32 diagnostics for BOTH, tau=5e-8 (CFL~1; DG drift is noisier
+# so we drop tau pre-emptively), N_p=1.28M, seeds 0,1. Clouds saved.
+# 2 methods x 2 seeds = 4 tasks.
+#
+set -euo pipefail
+export TF_GPU_ALLOCATOR=cuda_malloc_async
+export XLA_PYTHON_CLIENT_MEM_FRACTION=0.95
+PY=/mnt/home/lyuliyao/.conda/envs/heat/bin/python
+REPO=${REPO:-/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching}
+: "${OUT:?set OUT}"
+mkdir -p "$OUT"
+
+K=32; GLOBAL_L=0.5; TAU=5e-8; NS=2800; DE=20; Q=0.8; N=1280000
+METHODS=(dg current_fourier)
+SEEDS=(0 1)
+idx=$SLURM_ARRAY_TASK_ID
+mi=$((idx / 2)); si=$((idx % 2))
+M=${METHODS[$mi]}; seed=${SEEDS[$si]}
+EXTRA=""
+[ "$M" = "dg" ] && EXTRA="--dg_solver_n 64"
+tag="${M}_seed${seed}"
+
+echo "[task $idx] solver_field=$M K=$K N=$N seed=$seed tau=$TAU fixed L=$GLOBAL_L $EXTRA"
+$PY "$REPO/experiments/keller_segel/ldg_comparison/simulation.py" \
+  --N "$N" --K "$K" --tau "$TAU" --n_steps "$NS" --diag_every "$DE" --seed "$seed" \
+  --q_window "$Q" --global_domain --global_L "$GLOBAL_L" \
+  --solver_field "$M" $EXTRA --save_cloud_snapshots \
+  --cfl_abort 8.0 --filter_s 0.5 \
+  --report_times 6e-5 9e-5 1.2e-4 \
+  --outdir "$OUT/${tag}"

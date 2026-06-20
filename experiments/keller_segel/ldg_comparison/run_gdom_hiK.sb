@@ -1,0 +1,44 @@
+#!/bin/bash
+#SBATCH -J gdomHiK
+#SBATCH -A Multiscaleml
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -c 4
+#SBATCH --mem=64G
+#SBATCH -p general-short
+#SBATCH --gres=gpu:1
+#SBATCH -t 04:00:00
+# K=32,N=6.4M reconstruction ~O(N K^2): ~10x the K=10 cost (~3h); 4h margin.
+# (general-short cap is 4h; -A Multiscaleml also exposes multiscaleml-gpu, 7d.)
+#SBATCH --array=0-3
+#SBATCH -o gdomHiK_%A_%a.out
+#
+# Higher reconstruction bandwidth K=16,32 in the FIXED-domain setup (global_L=0.5),
+# baseline tau=2e-7, N=6.4M, seeds 0,1. Extends the K=5/8/10 fixed-domain run so the
+# core-collapse / field-vs-K comparison can include the higher bandwidths.
+#
+#   REPO=$PWD OUT=$PWD/reference_results/keller_segel_ldg_pp/sens_globaldomain_<runid> \
+#       sbatch experiments/keller_segel/ldg_comparison/run_gdom_hiK.sb
+#
+set -euo pipefail
+PY=/mnt/home/lyuliyao/.conda/envs/heat/bin/python
+REPO=${REPO:-/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching}
+: "${OUT:?set OUT}"
+mkdir -p "$OUT"
+
+GLOBAL_L=0.5
+TAU=2e-7; N=6400000; NS=700; DE=5; Q=0.8
+KS=(16 32)
+SEEDS=(0 1)
+
+idx=$SLURM_ARRAY_TASK_ID
+ki=$((idx / 2)); si=$((idx % 2))
+K=${KS[$ki]}; seed=${SEEDS[$si]}
+
+echo "[task $idx] K=$K tau=$TAU N=$N seed=$seed global_domain L=$GLOBAL_L"
+$PY "$REPO/experiments/keller_segel/ldg_comparison/simulation.py" \
+  --N "$N" --K "$K" --tau "$TAU" --n_steps "$NS" --diag_every "$DE" --seed "$seed" \
+  --q_window "$Q" --global_domain --global_L "$GLOBAL_L" \
+  --cfl_abort 8.0 --filter_s 0.5 --solver_field current_fourier \
+  --report_times 3e-5 6e-5 9e-5 1.2e-4 \
+  --outdir "$OUT/sens_K${K}_tau${TAU}_q${Q}_N${N}_seed${seed}"

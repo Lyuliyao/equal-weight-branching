@@ -189,16 +189,17 @@ def kde_field(X, mass_per_particle, W, ngrid=221, h=None):
 # ---------------------------------------------------------------------------
 # the figure
 # ---------------------------------------------------------------------------
-def build_panels(ldg, part, times):
+def build_panels(ldg, part, times, view_W=None):
     """Assemble per-(row,time) FULL fields + overlays; choose the view window.
 
     Full fields are imshown on their native extent and the axes are clipped to the
     common [-W,W] view, so every panel fills its box (no white margin) and the two
-    rows share an identical physical scale.
+    rows share an identical physical scale.  If view_W is given it overrides the
+    auto core-zoom (e.g. view_W=0.5 -> the full [-0.5,0.5] LDG domain).
     """
     # view half-width = just inside the smallest particle reconstruction window
     Lmin = min(float(part[t]["L"]) for t in times)
-    W = 0.95 * Lmin
+    W = float(view_W) if view_W else 0.95 * Lmin
     panels = {"ldg": {}, "part": {}}
     overlays = {"ldg": {}, "part": {}}
     for t in times:
@@ -381,6 +382,9 @@ def main():
     ap.add_argument("--kde_h_frac", type=float, default=0.06,
                     help="KDE bandwidth as a fraction of the view half-width W.")
     ap.add_argument("--kde_ngrid", type=int, default=221)
+    ap.add_argument("--view_W", type=float, default=None,
+                    help="override view half-width (e.g. 0.5 for the full [-0.5,0.5] "
+                         "LDG domain instead of the auto core-zoom)")
     args = ap.parse_args()
 
     ldg = load_ldg(args.ldg_npz)
@@ -415,7 +419,7 @@ def main():
     print(f"[plot] plotting times: {', '.join(f'{t:.2e}' for t in used)}")
 
     # view half-width (needed up front so the KDE grid can be built on it)
-    W = 0.95 * min(float(part_m[t]["L"]) for t in used)
+    W = float(args.view_W) if args.view_W else 0.95 * min(float(part_m[t]["L"]) for t in used)
 
     # decide the particle reconstruction: nonnegative KDE of the saved cloud (X_u),
     # or the saved spectral P_K-mu readout.
@@ -450,7 +454,7 @@ def main():
             c, Rq = (float(snap["x_c"][0]), float(snap["x_c"][1])), {q: np.nan for q in QUANTILES}
         overlays_part[t] = (c, Rq)
 
-    W, panels, overlays = build_panels(ldg_m, part_m, used)
+    W, panels, overlays = build_panels(ldg_m, part_m, used, view_W=args.view_W)
     overlays["part"] = overlays_part
 
     os.makedirs(args.out_dir, exist_ok=True)

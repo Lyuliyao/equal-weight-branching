@@ -1,0 +1,33 @@
+{
+  "experiment": "keller_segel/fully_parabolic_3d/linear_verification",
+  "git": "c1bf0548059f2785f394d91e3d804cf024c6634c",
+  "date": "2026-06-19 11:23:06.561629",
+  "versions": {
+    "python": "3.12.7",
+    "numpy": "2.4.4",
+    "jax": "0.10.0"
+  },
+  "seed": 3,
+  "N_u": 320000,
+  "kernel": "minvar",
+  "L": 12.0,
+  "D_u": 1.0,
+  "D_v": 1.0,
+  "alpha": 1.0,
+  "beta": 1.0,
+  "chi": 0.0,
+  "M": 10.0,
+  "sigma": 0.45,
+  "v0": 0.0,
+  "tau": 0.001,
+  "T": 1.0,
+  "n_steps": 1000,
+  "diag_every": 20,
+  "K_dyn": 8,
+  "K_test": 4,
+  "omega": 3.125e-05,
+  "max_v_occupancy": 201920,
+  "Nv_cap": null,
+  "population_control": false,
+  "runtime_s": 90.614313
+}

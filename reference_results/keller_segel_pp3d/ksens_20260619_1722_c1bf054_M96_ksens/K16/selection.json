@@ -1,0 +1,24 @@
+{
+  "selection_rule": "weak-response = smallest chi with R_0.5(T) > 0.9 R_0.5(0) (no 10% focusing); delayed-focusing = smallest chi with R_0.5(T) <= 0.9 R_0.5(0) AND t_turn>0 AND max drift_resolution_number<2 AND max v-occupancy<1.5 N_u AND no abort.",
+  "sweep": "M",
+  "per_F": {
+    "96.0": {
+      "chi": 1.0,
+      "M": 96.0,
+      "R05_ratio": 0.1827288455434796,
+      "valid": true,
+      "focused": true,
+      "stable": true,
+      "turnover": true,
+      "Cdrift_max": 0.24242916515747612,
+      "occ_max": 17204
+    }
+  },
+  "weak_response_F": null,
+  "delayed_focusing_F": 96.0,
+  "weak_response": null,
+  "delayed_focusing": {
+    "chi": 1.0,
+    "M": 96.0
+  }
+}

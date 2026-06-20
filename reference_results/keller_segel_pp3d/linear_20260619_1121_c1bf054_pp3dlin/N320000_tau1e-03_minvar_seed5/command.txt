@@ -1,0 +1,1 @@
+python run_linear_verification.py --N 320000 --tau 0.001 --T 1.0 --K_dyn 8 --K_test 4 --L 12.0 --D 1.0 --alpha 1.0 --beta 1.0 --M 10.0 --sigma 0.45 --seed 5 --kernel minvar --out_dir /mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching/reference_results/keller_segel_pp3d/linear_20260619_1121_c1bf054_pp3dlin

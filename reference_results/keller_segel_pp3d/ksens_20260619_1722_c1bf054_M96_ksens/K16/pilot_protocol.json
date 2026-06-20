@@ -1,0 +1,25 @@
+{
+  "selection_rule": "weak-response = smallest chi with R_0.5(T) > 0.9 R_0.5(0) (no 10% focusing); delayed-focusing = smallest chi with R_0.5(T) <= 0.9 R_0.5(0) AND t_turn>0 AND max drift_resolution_number<2 AND max v-occupancy<1.5 N_u AND no abort.",
+  "git": "c1bf0548059f2785f394d91e3d804cf024c6634c",
+  "sweep": "M",
+  "points_chi_M": [
+    [
+      1.0,
+      96.0
+    ]
+  ],
+  "seeds": [
+    0
+  ],
+  "N": 20000,
+  "K_dyn": 16,
+  "tau": 0.001,
+  "T": 2.0,
+  "D": 1.0,
+  "sigma": 0.45,
+  "L": 12.0,
+  "fast": true,
+  "buffer_factor": 1.6,
+  "forcing": "F = chi*alpha*M/beta",
+  "forcing_desc": "chi=1*M"
+}

@@ -1,0 +1,83 @@
+# 3D fully parabolic–parabolic Keller–Segel particle solver
+
+Equal-weight branching / injection particle method for the **fully parabolic–parabolic**
+Keller–Segel system on the periodic box `T_L^3 = [-L/2,L/2]^3` (L=12):
+
+```
+u_t = D_u Δu − χ ∇·(u ∇v)          (cell density, conservative particles)
+v_t = D_v Δv + α u − β v            (chemical, created from u; v0 = 0)
+```
+
+This is NOT the old parabolic–elliptic / screened-Poisson model. The chemical field `v`
+is carried by its own particle cloud and is created from scratch (`v0=0`) by a cross-species
+**injection** step — never an `(u−v)/v` multiplicative rate.
+
+## Algorithm (first-order Lie split, step τ)
+
+1. reconstruct `∇v` at the cell particles from the current v-cloud (periodic Fourier, bandwidth `K_dyn`);
+2. transport u: `X += χ ∇v τ + sqrt(2 D_u τ) ξ`, wrap to torus;
+3. transport v: `Y += sqrt(2 D_v τ) ζ`, wrap;
+4. exact decay–injection: `μ_v^{n+1} = e^{−βτ} μ_v* + (α/β)(1−e^{−βτ}) μ_u*`
+   — existing v-particles survive w.p. `e^{−βτ}`; transported u-particles inject new v-particles
+   with the **minimum-variance integer kernel** of mean `(α/β)(1−e^{−βτ}) ω_u/ω_v`.
+
+Equal particle masses `ω_u = ω_v`. Concentration diagnostics are the **reconstruction-free**
+particle quantile radii `R_q` (no field reconstruction). Performance: a JITTED fixed-capacity
+grad-v buffer (`field3d_fourier.grad_v_buffer`, used via `simulate(..., fast=True)`), verified
+equivalent to the eager dynamic-cloud path in `test_buffer_equiv.py`.
+
+## Code
+
+| file | role |
+|------|------|
+| `field3d_fourier.py` | periodic Fourier reconstruction of v and ∇v; jitted `grad_v_buffer` |
+| `injection_kernel.py` | exact decay–injection (survival + min-variance integer injection) |
+| `exact_linear_modes.py` | analytic û_k, v̂_k, mass laws for the linear verification |
+| `initial_conditions.py` | radial / tetra IC samplers, torus wrap |
+| `diagnostics_pp3d.py` | torus centroid, core radii R_q, cluster diagnostics |
+| `simulation_pp3d.py` | the coupled solver `simulate(cfg, seed, fast=)` |
+| `run_linear_verification.py` | Experiment A driver (exact-linear) |
+| `run_radial_pilot.py` | Experiment B pilot: sweep M (`--Ms`) or χ (`--chis`), `--fast` |
+| `run_radial_production.py` | Experiment B production driver (one config/seed) |
+| `run_tetra_control.py` | Experiment C driver (active χ>0 / control χ=0) |
+| `plot_radial_response.py` | Figure B (reads diagnostics only) |
+| `plot_tetra_control.py` | Figure C (reads diagnostics only) |
+| `test_*.py` | unit tests (field, injection, exact-linear, buffer equivalence) |
+
+Tests: `JAX_PLATFORMS=cpu JAX_ENABLE_X64=1 python test_buffer_equiv.py` (and the other `test_*.py`).
+Env: `/mnt/home/lyuliyao/.conda/envs/heat/bin/python`. GPU submits use `submit_*.sb`
+(`-A Multiscaleml`, `--constraint="a100|h200|l40s"` to avoid 16GB OOM at K=12/large N).
+
+## Experiments and results (under `reference_results/keller_segel_pp3d/`)
+
+### A. Exact-linear verification — `linear_*`
+χ=0, D_u=D_v, v0=0. Mass law `M_v(t)=M_u(0)(1−e^{−t})` and Fourier-mode errors decrease at the
+Monte-Carlo rate `N^{−1/2}`. All acceptance gates pass (validates the coupled injection algorithm).
+
+### B. Radial delayed response — `radial_*_M88_M96_K12_8seed` → **Figure B**
+Normalized regime D=α=β=χ=1, single radial Gaussian (σ=0.45), the effective coupling is F=M.
+Sharp transition between diffusion (R_0.5 grows) and **delayed focusing** (cloud expands as the
+chemical builds from 0, then turns over and concentrates). Delayed config **M=96**: core ratio
+R_0.5(T)/R_0.5(0) ≈ **0.21**, N-converged (0.219/0.211/0.206 at N=2e4/1e5/3.2e5), genuine delay
+(t_turn≈0.20, peak expansion ×1.26). Weak config **M=72**: diffuses (ratio 3.75). See the dir
+README for the full table and the bandwidth-dependence of the transition mass (M\*∈(72,80] at K=12
+vs (88,92] at K=8) and the R_0.8 seed/N-sensitivity caveat. Pilot record: `msweep_*`, `ksens_*`,
+`PILOT_FINDINGS_msweep.md`.
+
+Regenerate: `python plot_radial_response.py --run_dir <radial dir> --baseN 100000 --K 12`
+
+### C. Tetra multi-cluster — `tetra_*_a1_M240_K12` → **Figure C**
+Four super-critical clusters (M=240, σ_c=0.25) on a tetrahedron, active χ=1 vs diffusion control
+χ=0 (common seed). **Mutual chemotactic attraction + individual collapse**: active per-cluster
+R_0.5 → 0.16 (collapse) vs control 3.78 (spread), a ~23× contrast; active d_min ↓ vs flat control.
+Pilots: `tetra_pilot_*`, `tetra_pilot2_*`. See the dir README for the table and caveats.
+
+Regenerate: `python plot_tetra_control.py --run_dir <tetra dir>`
+
+## Manuscript text
+
+Draft §5.6 text (radial + tetra + algorithm/setup + language guardrails) is in
+`DRAFT_TEXT_pp3d_section.md` — markdown for hand-paste into Overleaf (paper/ is not edited here).
+Guardrails honored: no continuum blow-up / no universal critical-mass claim (transition is
+numerical/bandwidth-dependent); cross-species source is injection, not `(u−v)/v`; reconstruction-free
+core radii separated from bandwidth-sensitive peaks/R_0.8.

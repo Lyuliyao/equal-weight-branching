@@ -1,0 +1,37 @@
+#!/bin/bash
+#SBATCH -J pp3dMsw
+#SBATCH -A Multiscaleml
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -c 4
+#SBATCH --mem=48G
+#SBATCH -p general-short
+#SBATCH --gres=gpu:1
+#SBATCH -t 00:40:00
+#SBATCH -o pp3dMsw_%j.out
+#
+# Experiment B M-sweep pilot (CLAUDE plan 6.2; user direction 2026-06-17):
+#   fix D_u=D_v=alpha=beta=chi=1, sweep initial mass M (effective coupling F=chi*alpha*M/beta=M).
+#   M in {16,32,64,128}, one seed, JITTED fixed-capacity grad-v buffer (--fast).
+#   Single GPU task: K_dyn=8 fixed so grad_v_buffer compiles ONCE and is cached
+#   across all four M values.  Locates the diffusion->focusing bracket.
+#     REPO=$PWD OUT=$PWD/reference_results/keller_segel_pp3d/msweep_<runid> \
+#         sbatch experiments/keller_segel/fully_parabolic_3d/submit_msweep.sb
+#
+set -euo pipefail
+export TF_GPU_ALLOCATOR=cuda_malloc_async
+export JAX_ENABLE_X64=1
+PY=/mnt/home/lyuliyao/.conda/envs/heat/bin/python
+REPO=${REPO:-/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching}
+OUT=${OUT:?set OUT}
+MS=${MS:-16 32 64 128}
+SEEDS=${SEEDS:-0}
+T=${T:-2.0}
+N=${N:-20000}
+KDYN=${KDYN:-8}
+mkdir -p "$OUT"
+
+echo "[msweep] Ms={$MS} seeds={$SEEDS} T=$T N=$N K_dyn=$KDYN -> $OUT"
+$PY "$REPO/experiments/keller_segel/fully_parabolic_3d/run_radial_pilot.py" \
+  --Ms $MS --chi 1 --seeds $SEEDS --N "$N" --K_dyn "$KDYN" --tau 1e-3 --T "$T" \
+  --D 1.0 --sigma 0.45 --L 12.0 --fast --out_dir "$OUT"

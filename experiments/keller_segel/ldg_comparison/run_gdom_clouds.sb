@@ -1,0 +1,42 @@
+#!/bin/bash
+#SBATCH -J gdomCloud
+#SBATCH -A Multiscaleml
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -c 4
+#SBATCH --mem=80G
+#SBATCH -p general-short
+#SBATCH --gres=gpu:h200:1
+#SBATCH -t 04:00:00
+#SBATCH --array=0-4
+#SBATCH -o gdomCloud_%A_%a.out
+#
+# Re-run the fixed-domain K sweep (K=5,8,10,16,32, seed 0) WITH raw particle-cloud
+# snapshots saved, so u can be reconstructed by a HISTOGRAM of particle positions
+# (resolution set by bin width, K-independent) instead of the band-limited Fourier
+# P_K mu (whose peak diverges with K). Deterministic per seed -> reproduces the
+# same clouds as the existing gdom runs. H200 (handles K=32) + async allocator.
+#
+#   REPO=$PWD OUT=$PWD/reference_results/keller_segel_ldg_pp/sens_gdom_clouds_<runid> \
+#       sbatch experiments/keller_segel/ldg_comparison/run_gdom_clouds.sb
+#
+set -euo pipefail
+export TF_GPU_ALLOCATOR=cuda_malloc_async
+export XLA_PYTHON_CLIENT_MEM_FRACTION=0.95
+PY=/mnt/home/lyuliyao/.conda/envs/heat/bin/python
+REPO=${REPO:-/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching}
+: "${OUT:?set OUT}"
+mkdir -p "$OUT"
+
+GLOBAL_L=0.5; TAU=2e-7; N=6400000; NS=700; DE=5; Q=0.8; seed=0
+KS=(5 8 10 16 32)
+K=${KS[$SLURM_ARRAY_TASK_ID]}
+
+echo "[K=$K seed=$seed] fixed L=$GLOBAL_L, save_cloud_snapshots"
+$PY "$REPO/experiments/keller_segel/ldg_comparison/simulation.py" \
+  --N "$N" --K "$K" --tau "$TAU" --n_steps "$NS" --diag_every "$DE" --seed "$seed" \
+  --q_window "$Q" --global_domain --global_L "$GLOBAL_L" \
+  --cfl_abort 8.0 --filter_s 0.5 --solver_field current_fourier \
+  --save_cloud_snapshots \
+  --report_times 6e-5 9e-5 1.2e-4 \
+  --outdir "$OUT/sens_K${K}_tau${TAU}_q${Q}_N${N}_seed${seed}"

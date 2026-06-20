@@ -1,0 +1,47 @@
+#!/bin/bash
+#SBATCH -J pp3dRprod
+#SBATCH -A Multiscaleml
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -c 4
+#SBATCH --mem=64G
+#SBATCH -p general-short
+#SBATCH --gres=gpu:1
+#SBATCH --constraint="a100|h200|l40s"
+#SBATCH -t 00:50:00
+#SBATCH --array=0-23%8
+#SBATCH -o pp3dRprod_%A_%a.out
+#
+# Experiment B radial production (Figure B), chi=alpha=beta=D=1, T=2.0, tau=1e-3, K_dyn=12.
+# weak=M88, delayed=M96 (pilot-selected, PILOT_FINDINGS_msweep.md).  --fast JIT buffer.
+#   24 tasks:
+#     delayed M96 N100000 seeds 0-7   (bands + N-refine middle point)
+#     weak    M88 N100000 seeds 0-7   (weak-vs-delayed contrast)
+#     delayed M96 N20000  seeds 0-3   (N-refinement)
+#     delayed M96 N320000 seeds 0-3   (N-refinement)
+#     REPO=$PWD OUT=$PWD/reference_results/keller_segel_pp3d/radial_<runid> \
+#         sbatch experiments/keller_segel/fully_parabolic_3d/submit_radial_prod.sb
+#
+set -euo pipefail
+export TF_GPU_ALLOCATOR=cuda_malloc_async
+export JAX_ENABLE_X64=1
+PY=/mnt/home/lyuliyao/.conda/envs/heat/bin/python
+REPO=${REPO:-/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching}
+OUT=${OUT:?set OUT}
+T=${T:-2.0}
+DRV="$REPO/experiments/keller_segel/fully_parabolic_3d/run_radial_production.py"
+mkdir -p "$OUT"
+
+# build config list: "label M N seed"
+CFG=()
+for s in 0 1 2 3 4 5 6 7; do CFG+=("delayed 96 100000 $s"); done
+for s in 0 1 2 3 4 5 6 7; do CFG+=("weak 88 100000 $s"); done
+for s in 0 1 2 3; do CFG+=("delayed 96 20000 $s"); done
+for s in 0 1 2 3; do CFG+=("delayed 96 320000 $s"); done
+
+idx=$SLURM_ARRAY_TASK_ID
+read LAB M N SEED <<< "${CFG[$idx]}"
+echo "[task $idx] label=$LAB M=$M N=$N seed=$SEED K=12 T=$T"
+$PY "$DRV" --chi 1 --alpha 1 --beta 1 --D 1.0 --M "$M" --sigma 0.45 --L 12.0 \
+  --N "$N" --K_dyn 12 --tau 1e-3 --T "$T" --seed "$SEED" --label "$LAB" \
+  --fast --buffer_factor 1.6 --out_dir "$OUT"

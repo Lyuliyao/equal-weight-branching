@@ -1,0 +1,40 @@
+#!/bin/bash
+#SBATCH -J pp3dKsn
+#SBATCH -A Multiscaleml
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -c 4
+#SBATCH --mem=64G
+#SBATCH -p general-short
+#SBATCH --gres=gpu:1
+#SBATCH -t 00:50:00
+#SBATCH -o pp3dKsn_%j.out
+#
+# Experiment B resolution check for the delayed-focusing config (M=96, chi=alpha=beta=D=1).
+# Is the delayed turnover / onset-of-focusing K-robust, or a band-limited artifact?
+# Sweep K_dyn in {8,12,16} at M=96 (+ M=92 at K=8 to tighten the threshold), one seed.
+# Each K -> separate out_dir (run subdir name has no K; avoid collision).
+#     REPO=$PWD OUT=$PWD/reference_results/keller_segel_pp3d/ksens_<runid> \
+#         sbatch experiments/keller_segel/fully_parabolic_3d/submit_ksens.sb
+#
+set -euo pipefail
+export TF_GPU_ALLOCATOR=cuda_malloc_async
+export JAX_ENABLE_X64=1
+PY=/mnt/home/lyuliyao/.conda/envs/heat/bin/python
+REPO=${REPO:-/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching}
+OUT=${OUT:?set OUT}
+N=${N:-20000}
+T=${T:-2.0}
+DRV="$REPO/experiments/keller_segel/fully_parabolic_3d/run_radial_pilot.py"
+mkdir -p "$OUT"
+
+for K in 8 12 16; do
+  echo "[ksens] M=96 K_dyn=$K"
+  $PY "$DRV" --Ms 96 --chi 1 --seeds 0 --N "$N" --K_dyn "$K" --tau 1e-3 --T "$T" \
+    --D 1.0 --sigma 0.45 --L 12.0 --fast --out_dir "$OUT/K$K"
+done
+# threshold tightening: M=92 at the baseline K=8
+echo "[ksens] M=92 K_dyn=8 (threshold tighten)"
+$PY "$DRV" --Ms 92 --chi 1 --seeds 0 --N "$N" --K_dyn 8 --tau 1e-3 --T "$T" \
+  --D 1.0 --sigma 0.45 --L 12.0 --fast --out_dir "$OUT/M92_K8"
+echo "[ksens] done"

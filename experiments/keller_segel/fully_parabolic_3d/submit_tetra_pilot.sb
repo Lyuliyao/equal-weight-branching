@@ -1,0 +1,38 @@
+#!/bin/bash
+#SBATCH -J pp3dTpil
+#SBATCH -A Multiscaleml
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -c 4
+#SBATCH --mem=64G
+#SBATCH -p general-short
+#SBATCH --constraint="a100|h200|l40s"
+#SBATCH --gres=gpu:1
+#SBATCH -t 00:50:00
+#SBATCH -o pp3dTpil_%j.out
+#
+# Experiment C tetra pilot (K=12): pick the total mass M that aggregates clusters in the
+# active arm (chi=1) but not the diffusion control (chi=0).  4 clusters at a*TETRA,
+# sigma_c=0.25, N=40000, T=2.0, seed 0.  Single GPU task: K fixed -> compile once.
+#   REPO=$PWD OUT=$PWD/reference_results/keller_segel_pp3d/tetra_pilot_<runid> \
+#       sbatch experiments/keller_segel/fully_parabolic_3d/submit_tetra_pilot.sb
+#
+set -euo pipefail
+export TF_GPU_ALLOCATOR=cuda_malloc_async
+export JAX_ENABLE_X64=1
+PY=/mnt/home/lyuliyao/.conda/envs/heat/bin/python
+REPO=${REPO:-/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching}
+OUT=${OUT:?set OUT}
+N=${N:-40000}; T=${T:-2.0}; A=${A:-1.0}
+DRV="$REPO/experiments/keller_segel/fully_parabolic_3d/run_tetra_control.py"
+mkdir -p "$OUT"
+
+common="--N $N --K_dyn 12 --tau 1e-3 --T $T --D 1.0 --alpha 1 --beta 1 \
+  --a $A --sigma_c 0.25 --r_center 1.0 --seed 0 --fast --buffer_factor 1.6 --out_dir $OUT"
+for M in 40 80 120; do
+  echo "[tetra pilot] active chi=1 M=$M"
+  $PY "$DRV" --chi 1 --M "$M" $common
+done
+echo "[tetra pilot] control chi=0 M=80"
+$PY "$DRV" --chi 0 --M 80 $common
+echo "[tetra pilot] done"

@@ -1,0 +1,46 @@
+#!/bin/bash
+#SBATCH -J tbK32
+#SBATCH -A Multiscaleml
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -c 4
+#SBATCH --mem=80G
+#SBATCH -p general-short
+#SBATCH --gres=gpu:1
+#SBATCH -t 04:00:00
+#SBATCH --array=0-15
+#SBATCH -o tbK32_%A_%a.out
+#
+# LDG-style t_b CONVERGENCE on the NEW setup (K=32, fixed domain L=0.5).
+# Particle ladder N_p = 80k/320k/1.28M/5.12M paired with DG-readout grids
+# 80/160/320/640 (particles-per-cell = 12.5 held fixed) -> the LDG-matched main
+# gap (N_p,n)->(4N_p,2n). Question: does t_b(pair) converge to the LDG target
+# ~1.21e-4 ?
+#   pairs: (80k,80)->(320k,160)->(1.28M,320)->(5.12M,640)
+# 4 N_p x 4 seeds = 16 tasks. Submit small N_p on any GPU, 5.12M on H200:
+#   sbatch --array=0-11 --gres=gpu:1        run_tb_K32_converge.sb   # 80k,320k,1.28M
+#   sbatch --array=12-15 --gres=gpu:h200:1  run_tb_K32_converge.sb   # 5.12M
+#
+set -euo pipefail
+export TF_GPU_ALLOCATOR=cuda_malloc_async
+export XLA_PYTHON_CLIENT_MEM_FRACTION=0.95
+PY=/mnt/home/lyuliyao/.conda/envs/heat/bin/python
+REPO=${REPO:-/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching}
+: "${OUT:?set OUT}"
+mkdir -p "$OUT"
+
+K=32; GLOBAL_L=0.5; TAU=2e-7; NS=700; DE=5; Q=0.8
+NPS=(80000 320000 1280000 5120000)
+SEEDS=(0 1 2 3)
+idx=$SLURM_ARRAY_TASK_ID
+ci=$((idx / 4)); si=$((idx % 4))
+N=${NPS[$ci]}; seed=${SEEDS[$si]}
+
+echo "[task $idx] K=$K N=$N seed=$seed fixed L=$GLOBAL_L dg_readout 80 160 320 640"
+$PY "$REPO/experiments/keller_segel/ldg_comparison/simulation.py" \
+  --N "$N" --K "$K" --tau "$TAU" --n_steps "$NS" --diag_every "$DE" --seed "$seed" \
+  --q_window "$Q" --global_domain --global_L "$GLOBAL_L" \
+  --dg_readout_n 80 160 320 640 \
+  --cfl_abort 8.0 --filter_s 0.5 --solver_field current_fourier \
+  --report_times 6e-5 9e-5 1.2e-4 \
+  --outdir "$OUT/cf_N${N}_seed${seed}"

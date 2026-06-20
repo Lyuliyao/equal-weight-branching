@@ -1,0 +1,41 @@
+{
+  "experiment": "keller_segel/fully_parabolic_3d/radial",
+  "git": "c1bf0548059f2785f394d91e3d804cf024c6634c",
+  "date": "2026-06-19 17:50:48.483405",
+  "versions": {
+    "python": "3.12.7",
+    "numpy": "2.4.4",
+    "jax": "0.10.0",
+    "jaxlib": "0.10.0",
+    "devices": [
+      "cuda:0"
+    ]
+  },
+  "seed": 2,
+  "N_u": 100000,
+  "label": "weak",
+  "kernel": "minvar",
+  "L": 12.0,
+  "D_u": 1.0,
+  "D_v": 1.0,
+  "alpha": 1.0,
+  "beta": 1.0,
+  "chi": 1.0,
+  "M": 88.0,
+  "sigma": 0.45,
+  "v0": 0.0,
+  "tau": 0.001,
+  "T": 2.0,
+  "n_steps": 2000,
+  "diag_every": 40,
+  "K_dyn": 12,
+  "K_test": 4,
+  "Nv_cap": 160000,
+  "population_control": false,
+  "fast": true,
+  "buffer_factor": 1.6,
+  "max_v_occupancy": 86182,
+  "aborted": false,
+  "error": "",
+  "runtime_s": 62.943244
+}

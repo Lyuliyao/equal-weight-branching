@@ -1,0 +1,38 @@
+#!/bin/bash
+#SBATCH -J gdomK32
+#SBATCH -A Multiscaleml
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -c 4
+#SBATCH --mem=80G
+#SBATCH -p general-short
+#SBATCH --gres=gpu:h200:1
+#SBATCH -t 04:00:00
+#SBATCH --array=0-1
+#SBATCH -o gdomK32_%A_%a.out
+#
+# K=32 retry: the first attempt OOM'd on a smaller GPU (many N x K=32 basis arrays,
+# ~1.6 GB each). Here we pin an 80 GB H200 and use the async allocator to avoid
+# preallocation/fragmentation. Fixed domain L=0.5, baseline tau=2e-7, N=6.4M, seeds 0,1.
+#
+#   REPO=$PWD OUT=$PWD/reference_results/keller_segel_ldg_pp/sens_globaldomain_<runid> \
+#       sbatch experiments/keller_segel/ldg_comparison/run_gdom_K32.sb
+#
+set -euo pipefail
+export TF_GPU_ALLOCATOR=cuda_malloc_async   # no preallocation, less fragmentation
+export XLA_PYTHON_CLIENT_MEM_FRACTION=0.95
+PY=/mnt/home/lyuliyao/.conda/envs/heat/bin/python
+REPO=${REPO:-/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching}
+: "${OUT:?set OUT}"
+mkdir -p "$OUT"
+
+GLOBAL_L=0.5; TAU=2e-7; N=6400000; NS=700; DE=5; Q=0.8; K=32
+seed=$SLURM_ARRAY_TASK_ID
+
+echo "[K32 seed $seed] H200, cuda_malloc_async, fixed L=$GLOBAL_L"
+$PY "$REPO/experiments/keller_segel/ldg_comparison/simulation.py" \
+  --N "$N" --K "$K" --tau "$TAU" --n_steps "$NS" --diag_every "$DE" --seed "$seed" \
+  --q_window "$Q" --global_domain --global_L "$GLOBAL_L" \
+  --cfl_abort 8.0 --filter_s 0.5 --solver_field current_fourier \
+  --report_times 3e-5 6e-5 9e-5 1.2e-4 \
+  --outdir "$OUT/sens_K${K}_tau${TAU}_q${Q}_N${N}_seed${seed}"

@@ -1,0 +1,40 @@
+#!/bin/bash
+#SBATCH -J pp3dTpil2
+#SBATCH -A Multiscaleml
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -c 4
+#SBATCH --mem=64G
+#SBATCH -p general-short
+#SBATCH --constraint="a100|h200|l40s"
+#SBATCH --gres=gpu:1
+#SBATCH -t 00:50:00
+#SBATCH -o pp3dTpil2_%j.out
+#
+# Experiment C tetra pilot 2 (K=12): stronger forcing / closer spacing to get clean
+# aggregation (clusters hold together + merge) vs diffusion control.  T=3.0, seed 0.
+# Each (arm,a,M) into its own subdir keyed by a (the tag has no a/M -> avoid collision).
+#   REPO=$PWD OUT=$PWD/reference_results/keller_segel_pp3d/tetra_pilot2_<runid> sbatch ...
+#
+set -euo pipefail
+export TF_GPU_ALLOCATOR=cuda_malloc_async
+export JAX_ENABLE_X64=1
+PY=/mnt/home/lyuliyao/.conda/envs/heat/bin/python
+REPO=${REPO:-/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching}
+OUT=${OUT:?set OUT}
+N=${N:-40000}; T=${T:-3.0}
+DRV="$REPO/experiments/keller_segel/fully_parabolic_3d/run_tetra_control.py"
+mkdir -p "$OUT"
+
+run () {  # arm_chi a M
+  local CHI=$1 A=$2 M=$3
+  $PY "$DRV" --chi "$CHI" --a "$A" --M "$M" --N "$N" --K_dyn 12 --tau 1e-3 --T "$T" \
+    --D 1.0 --alpha 1 --beta 1 --sigma_c 0.25 --r_center 1.0 --seed 0 \
+    --fast --buffer_factor 1.6 --out_dir "$OUT/a${A}_M${M}"
+}
+for spec in "1.0 240" "1.0 320" "0.6 120"; do
+  read A M <<< "$spec"
+  echo "[tetra pilot2] active chi=1 a=$A M=$M"; run 1 "$A" "$M"
+  echo "[tetra pilot2] control chi=0 a=$A M=$M"; run 0 "$A" "$M"
+done
+echo "[tetra pilot2] done"
