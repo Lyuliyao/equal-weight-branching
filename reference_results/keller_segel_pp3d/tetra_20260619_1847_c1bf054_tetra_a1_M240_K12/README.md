@@ -3,8 +3,11 @@
 Model `u_t = D Δu − χ∇·(u∇v)`, `v_t = D Δv + αu − βv` on the periodic box L=12, **v0=0**.
 Four equal Gaussian cell clusters (σ_c=0.25) at the vertices of `a·TETRA` (a=1.0, vertex
 radius ≈1.73, nearest-neighbour centroid distance d_min(0)≈2.83), total mass **M=240**
-(super-critical per cluster), `D=α=β=1`, K_dyn=**12**, τ=1e-3, T=3.0, N=80000, minvar
-injection, `--fast` JIT buffer. Cluster labels preserved (u-cloud conservative).
+(selected cluster mass; each cluster focuses at this fixed reconstruction bandwidth — a
+fixed-bandwidth numerical focusing, NOT a continuum critical mass), `D=α=β=1`, K_dyn=**12**,
+τ=1e-3, T=3.0, N=80000, minvar injection, `--fast` JIT buffer. Cluster labels preserved
+(u-cloud conservative). R_0.5 is reconstruction-free as a readout, but its dynamics still
+depend on K_dyn through the reconstructed drift ∇v.
 
 ## Arms (mandatory diffusion control, common randomness)
 

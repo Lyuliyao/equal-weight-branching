@@ -115,8 +115,22 @@ def main():
         dci = np.interp(ta, tc, dc)
         gap = dci - da                                   # control - active (attraction => >0)
         mm = ta <= (t_reliable if np.isfinite(t_reliable) else ta[-1])
-        gaps[name] = (ta, gap, float(np.mean(gap[mm])))
+        gaps[name] = (ta, gap, float(np.mean(gap[mm])), float(da[-1]), float(dci[-1]))
     base_gap = gaps.get("baseline", (None, None, np.nan))[2]
+
+    # traceability CSV for the active-control d_min gap numbers quoted in the report
+    with open(os.path.join(args.refine_dir, "tetra_gap_summary.csv"), "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["config", "t_reliable", "mean_gap_reliable", "pct_vs_baseline",
+                    "active_dmin_T", "control_dmin_T", "final_instant_gap",
+                    "attraction_mean_positive"])
+        for name, _, _ in configs:
+            if name not in gaps:
+                continue
+            _, _, gm, daT, dcT = gaps[name]
+            pct = (gm - base_gap) / base_gap * 100 if (base_gap and np.isfinite(base_gap)) else np.nan
+            w.writerow([name, round(t_reliable, 4), round(gm, 4), round(pct, 1),
+                        round(daT, 4), round(dcT, 4), round(dcT - daT, 4), bool(gm > 0)])
 
     # ---- figure ----
     fig, ax = plt.subplots(2, 2, figsize=(12, 8.5))
@@ -136,7 +150,7 @@ def main():
     B = ax[0, 1]
     for name, cfg, ls in configs:
         if name in gaps:
-            ta, gap, gm = gaps[name]
+            ta, gap, gm = gaps[name][0], gaps[name][1], gaps[name][2]
             B.plot(ta, gap, ls, lw=1.3, label=f"{name} (mean gap {gm:.2f})")
     if np.isfinite(t_reliable):
         B.axvspan(0, t_reliable, color="0.9", alpha=0.6, lw=0)
