@@ -1,0 +1,26 @@
+#!/bin/bash
+#SBATCH -J pp3dBench
+#SBATCH -A Multiscaleml
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -c 4
+#SBATCH --mem=64G
+#SBATCH -p general-short
+#SBATCH --gres=gpu:1
+#SBATCH --constraint="a100|h200|l40s"
+#SBATCH -t 00:40:00
+#SBATCH -o pp3dBench_%j.out
+#
+# validation-closure Task A.2 performance benchmark (fast vs slow + production case).
+#   REPO=$PWD OUT=$PWD/reference_results/keller_segel_pp3d/validation_closure_<id>/performance \
+#       sbatch experiments/keller_segel/fully_parabolic_3d/submit_bench.sb
+#
+set -euo pipefail
+export TF_GPU_ALLOCATOR=cuda_malloc_async
+export JAX_ENABLE_X64=1
+PY=/mnt/home/lyuliyao/.conda/envs/heat/bin/python
+REPO=${REPO:-/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching}
+OUT=${OUT:?set OUT}
+DRV="$REPO/experiments/keller_segel/fully_parabolic_3d/bench_performance.py"
+mkdir -p "$OUT"
+$PY "$DRV" --out_dir "$OUT" --reps 3

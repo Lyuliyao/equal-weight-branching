@@ -1,0 +1,35 @@
+#!/bin/bash
+#SBATCH -J pp3dRtau
+#SBATCH -A Multiscaleml
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -c 4
+#SBATCH --mem=64G
+#SBATCH -p general-short
+#SBATCH --gres=gpu:1
+#SBATCH --constraint="a100|h200|l40s"
+#SBATCH -t 01:30:00
+#SBATCH --array=0-7%8
+#SBATCH -o pp3dRtau_%A_%a.out
+#
+# validation-closure B.1 (nonlinear tau -> tau/2 check).  Delayed config M=96, N=1e5,
+# K_dyn=12, T=2, tau=5e-4 (half the production 1e-3), seeds 0-7.  Compared against the
+# existing tau=1e-3 8-seed ensemble.  --drift_probe 8 12 16 carried for consistency.
+#   REPO=$PWD OUT=$PWD/reference_results/keller_segel_pp3d/validation_closure_<id>/radial_tau \
+#       sbatch experiments/keller_segel/fully_parabolic_3d/submit_radial_tau.sb
+#
+set -euo pipefail
+export TF_GPU_ALLOCATOR=cuda_malloc_async
+export JAX_ENABLE_X64=1
+PY=/mnt/home/lyuliyao/.conda/envs/heat/bin/python
+REPO=${REPO:-/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching}
+OUT=${OUT:?set OUT}
+T=${T:-2.0}
+DRV="$REPO/experiments/keller_segel/fully_parabolic_3d/run_radial_production.py"
+mkdir -p "$OUT"
+
+SEED=$SLURM_ARRAY_TASK_ID
+echo "[task $SEED] M=96 N=100000 K=12 tau=5e-4 seed=$SEED T=$T (drift_probe 8 12 16)"
+$PY "$DRV" --chi 1 --alpha 1 --beta 1 --D 1.0 --M 96 --sigma 0.45 --L 12.0 \
+  --N 100000 --K_dyn 12 --tau 5e-4 --T "$T" --seed "$SEED" --label tauref \
+  --drift_probe 8 12 16 --fast --buffer_factor 1.6 --out_dir "$OUT"

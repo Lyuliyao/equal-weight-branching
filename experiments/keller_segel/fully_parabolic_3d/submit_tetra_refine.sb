@@ -1,0 +1,48 @@
+#!/bin/bash
+#SBATCH -J pp3dTref
+#SBATCH -A Multiscaleml
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -c 4
+#SBATCH --mem=64G
+#SBATCH -p general-short
+#SBATCH --gres=gpu:1
+#SBATCH --constraint="a100|h200|l40s"
+#SBATCH -t 01:30:00
+#SBATCH --array=0-13%8
+#SBATCH -o pp3dTref_%A_%a.out
+#
+# validation-closure Task D: tetra one-factor refinement + augmented diagnostics
+# (centroid-reliability A_m + six pairwise distances).  Baseline M=240, a=1.0,
+# sigma_c=0.25, N=80000, K=12, tau=1e-3, T=3, active(chi1)/control(chi0).
+#   tasks 0-7 : baseline active+control seeds 0-3 (re-run with A_m diagnostics)
+#   tasks 8-9 : N refinement  N=160000, seed 0  (active, control)
+#   tasks 10-11: K refinement  K=16,      seed 0  (active, control)
+#   tasks 12-13: tau refinement tau=5e-4, seed 0  (active, control)
+#   REPO=$PWD OUT=$PWD/reference_results/keller_segel_pp3d/validation_closure_<id>/tetra_refinement \
+#       sbatch experiments/keller_segel/fully_parabolic_3d/submit_tetra_refine.sb
+#
+set -euo pipefail
+export TF_GPU_ALLOCATOR=cuda_malloc_async
+export JAX_ENABLE_X64=1
+PY=/mnt/home/lyuliyao/.conda/envs/heat/bin/python
+REPO=${REPO:-/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching}
+OUT=${OUT:?set OUT}
+T=${T:-3.0}
+DRV="$REPO/experiments/keller_segel/fully_parabolic_3d/run_tetra_control.py"
+mkdir -p "$OUT"
+
+# each entry: "chi N K tau seed"
+CFG=()
+for s in 0 1 2 3; do CFG+=("1 80000 12 1e-3 $s"); done   # baseline active seeds 0-3
+for s in 0 1 2 3; do CFG+=("0 80000 12 1e-3 $s"); done   # baseline control seeds 0-3
+CFG+=("1 160000 12 1e-3 0"); CFG+=("0 160000 12 1e-3 0") # N refinement
+CFG+=("1 80000 16 1e-3 0");  CFG+=("0 80000 16 1e-3 0")  # K refinement
+CFG+=("1 80000 12 5e-4 0");  CFG+=("0 80000 12 5e-4 0")  # tau refinement
+
+idx=$SLURM_ARRAY_TASK_ID
+read CHI N K TAU SEED <<< "${CFG[$idx]}"
+echo "[task $idx] chi=$CHI N=$N K=$K tau=$TAU seed=$SEED M=240 a=1.0 T=$T"
+$PY "$DRV" --chi "$CHI" --a 1.0 --M 240 --N "$N" --K_dyn "$K" --tau "$TAU" --T "$T" \
+  --D 1.0 --alpha 1 --beta 1 --sigma_c 0.25 --r_center 1.0 --seed "$SEED" \
+  --fast --buffer_factor 1.6 --out_dir "$OUT"
