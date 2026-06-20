@@ -1,0 +1,39 @@
+#!/bin/bash
+#SBATCH -J pp3dlin
+#SBATCH -A Multiscaleml
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -c 4
+#SBATCH --mem=48G
+#SBATCH -p general-short
+#SBATCH --gres=gpu:1
+#SBATCH -t 02:00:00
+#SBATCH --array=0-47
+#SBATCH -o pp3dlin_%A_%a.out
+#
+# Experiment A (exact linear verification) sweep, plan section 5.3:
+#   N-sweep   : (N, tau=1e-3) N in {2e4,8e4,3.2e5}, minvar
+#   tau-sweep : (N=3.2e5, tau) tau in {2e-3,1e-3,5e-4}, minvar
+#   kernel    : (N=8e4, tau=1e-3) minvar vs poisson
+# 6 unique configs x 8 seeds = 48 tasks.  (grad v reconstruction -> GPU.)
+#   REPO=$PWD OUT=$PWD/reference_results/keller_segel_pp3d/linear_<runid> \
+#       sbatch experiments/keller_segel/fully_parabolic_3d/submit_linear.sb
+#
+set -euo pipefail
+export TF_GPU_ALLOCATOR=cuda_malloc_async
+PY=/mnt/home/lyuliyao/.conda/envs/heat/bin/python
+REPO=${REPO:-/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching}
+: "${OUT:?set OUT}"
+mkdir -p "$OUT"
+
+# config list: "N tau kernel"
+CFG=( "20000 1e-3 minvar" "80000 1e-3 minvar" "320000 1e-3 minvar" \
+      "320000 2e-3 minvar" "320000 5e-4 minvar" "80000 1e-3 poisson" )
+idx=$SLURM_ARRAY_TASK_ID
+ci=$((idx / 8)); seed=$((idx % 8))
+read N TAU KER <<< "${CFG[$ci]}"
+
+echo "[task $idx] N=$N tau=$TAU kernel=$KER seed=$seed"
+$PY "$REPO/experiments/keller_segel/fully_parabolic_3d/run_linear_verification.py" \
+  --N "$N" --tau "$TAU" --T 1.0 --K_dyn 8 --K_test 4 --seed "$seed" \
+  --kernel "$KER" --out_dir "$OUT"

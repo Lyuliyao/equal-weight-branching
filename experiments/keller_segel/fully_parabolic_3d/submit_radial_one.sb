@@ -1,0 +1,37 @@
+#!/bin/bash
+#SBATCH -J pp3dR1
+#SBATCH -A Multiscaleml
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -c 4
+#SBATCH --mem=64G
+#SBATCH -p general-short
+#SBATCH --constraint="a100|h200|l40s"
+#SBATCH --gres=gpu:1
+#SBATCH -t 00:40:00
+#SBATCH --array=0-7
+#SBATCH -o pp3dR1_%A_%a.out
+#
+# One radial config (LAB/M/N/K) over an 8-seed array -> into an existing production dir.
+#   REPO=$PWD OUT=<dir> LAB=weak M=72 N=100000 K=12 T=2.0 \
+#       sbatch experiments/keller_segel/fully_parabolic_3d/submit_radial_one.sb
+#
+set -euo pipefail
+export TF_GPU_ALLOCATOR=cuda_malloc_async
+export JAX_ENABLE_X64=1
+PY=/mnt/home/lyuliyao/.conda/envs/heat/bin/python
+REPO=${REPO:-/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching}
+OUT=${OUT:?set OUT}
+LAB=${LAB:?set LAB}
+M=${M:?set M}
+N=${N:-100000}
+K=${K:-12}
+T=${T:-2.0}
+SEED=$SLURM_ARRAY_TASK_ID
+DRV="$REPO/experiments/keller_segel/fully_parabolic_3d/run_radial_production.py"
+mkdir -p "$OUT"
+
+echo "[task $SEED] label=$LAB M=$M N=$N K=$K T=$T"
+$PY "$DRV" --chi 1 --alpha 1 --beta 1 --D 1.0 --M "$M" --sigma 0.45 --L 12.0 \
+  --N "$N" --K_dyn "$K" --tau 1e-3 --T "$T" --seed "$SEED" --label "$LAB" \
+  --fast --buffer_factor 1.6 --out_dir "$OUT"

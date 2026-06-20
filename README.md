@@ -36,7 +36,8 @@ concentration/focusing regimes.
 | `experiments/keller_segel/concentration_ldg/` | App. G | Parabolic–elliptic core-adaptive `t_gap` diagnostics — **record only** (the main KS benchmark is the fully pp system) |
 | `experiments/resolution_hybrid/` | App. H | Local reconstruction diagnostics: global spectrum + local residual window/blob/particles |
 | `experiments/reconstruction_audit/` | Appendix | Fourier-bandwidth & periodic-Gaussian-KDE robustness audit of the §5.2/§5.3 error ordering (reruns exact production dynamics, validated byte-faithful) |
-| `experiments/keller_segel/focusing_3d/` | §5.6 | Three-dimensional Keller–Segel focusing transition (radial mass sweep + tetrahedral clusters) |
+| `experiments/keller_segel/fully_parabolic_3d/` | §5.6 | **Fully parabolic–parabolic** 3D Keller–Segel (no screened solve; `v0=0`, cross-species injection). Radial delayed-response (Figure B: diffusion vs delayed focusing, N-converged core radius) + tetrahedral multi-cluster active-vs-diffusion-control (Figure C). Draft text in `DRAFT_TEXT_pp3d_section.md` (pending Overleaf integration) |
+| `experiments/keller_segel/focusing_3d/` | §5.6 (older record) | Parabolic–**elliptic** (screened-Poisson) 3D focusing transition; superseded by `fully_parabolic_3d/` for the fully pp story, kept as a record |
 | `experiments/highdim/` | Appendix | Dense 4D/6D reconstruction on a separable manufactured solution + FHT low-rank marginal diagnostics |
 | `experiments/keller_segel/logistic/` | Appendix | Non-conservative logistic KS (coupled-system check) |
 | `experiments/allen_cahn/` | Appendix | Allen–Cahn sanity check |
@@ -90,7 +91,8 @@ cd ../../highdim                           && python experiment.py --smoke    # 
 | Local reconstruction diagnostics (App. H) | `cd experiments/resolution_hybrid && python core_window_demo.py --blob && python plot_hybrid_reconstruction.py --results_dir ...` |
 | Fourier/KDE reconstruction audit (Appendix) | `cd experiments/reconstruction_audit && python audit_fourier_kde.py --seeds 0 1 2 && python plot_audit.py` (validation tolerances in each `reference_results/reconstruction_audit/*/manifest.json`) |
 | Staged / static multi-island (not in paper; diagnostic records) | `cd experiments/branch_vs_weighted && python staged_multi_island.py --config config_staged_multi_island.json --smoke` (see `staged_parameter_log.md`) |
-| 3D KS focusing: mass sweep, self-convergence, tetrahedral (§5.6) | `cd experiments/keller_segel/focusing_3d && bash submit_focused.sh` then `python plot_focusing.py --runs results/* && python plot_selfconv_NH.py` |
+| Fully pp 3D KS — Figure B (radial delayed response) + Figure C (tetra) (§5.6) | regen from saved diagnostics: `cd experiments/keller_segel/fully_parabolic_3d && python plot_radial_response.py --run_dir ../../../reference_results/keller_segel_pp3d/radial_*_M88_M96_K12_8seed --baseN 100000 --K 12 && python plot_tetra_control.py --run_dir ../../../reference_results/keller_segel_pp3d/tetra_*_a1_M240_K12`. Production: `submit_radial_prod.sb` (delayed M96 + N-refine) + `submit_radial_one.sb` (LAB=weak M=72) + `submit_tetra_prod.sb` (a=1.0 M=240). Pilots: `submit_msweep.sb` (critical mass, K-dependent), `submit_ksens.sb`, `submit_tetra_pilot*.sb` |
+| 3D KS focusing (older parabolic–elliptic record): mass sweep, self-convergence, tetrahedral | `cd experiments/keller_segel/focusing_3d && bash submit_focused.sh` then `python plot_focusing.py --runs results/* && python plot_selfconv_NH.py` |
 | Dense 4D/6D reconstruction MMS (Appendix) | `cd experiments/highdim && python experiment.py && python experiment.py --d6 && python plot.py` |
 | Logistic KS (Appendix) | `cd experiments/keller_segel/logistic && python simulation.py <N>` |
 | Allen–Cahn (Appendix) | `cd experiments/allen_cahn && python simulation.py <N>` |

@@ -1,0 +1,18 @@
+{
+  "gates": {
+    "1_Mu_constant": true,
+    "2_Mv_unbiased": true,
+    "3_E_decreases_with_N": true,
+    "4_MC_slope": true,
+    "5_tau_floor": true,
+    "6_minvar_le_poisson": true,
+    "7_buffer_ok": true,
+    "8_v_from_empty": true,
+    "ALL_PASS": true
+  },
+  "slopes": {
+    "E_u_modes": -0.4852973417091236,
+    "E_v_modes": -0.49770797244213943,
+    "E_grad_v_particles": -0.47819526320888284
+  }
+}

@@ -1,0 +1,36 @@
+#!/bin/bash
+#SBATCH -J pp3dTprod
+#SBATCH -A Multiscaleml
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -c 4
+#SBATCH --mem=64G
+#SBATCH -p general-short
+#SBATCH --constraint="a100|h200|l40s"
+#SBATCH --gres=gpu:1
+#SBATCH -t 00:50:00
+#SBATCH --array=0-7
+#SBATCH -o pp3dTprod_%A_%a.out
+#
+# Experiment C tetra production (Figure C), K=12, a=1.0, M=240, T=3.0, N=80000.
+# 4 clusters at a*TETRA, sigma_c=0.25.  active(chi=1) + control(chi=0), 4 seeds each.
+# Common seed => common initial particles + common early randomness (control).
+#   REPO=$PWD OUT=$PWD/reference_results/keller_segel_pp3d/tetra_<runid> \
+#       sbatch experiments/keller_segel/fully_parabolic_3d/submit_tetra_prod.sb
+#
+set -euo pipefail
+export TF_GPU_ALLOCATOR=cuda_malloc_async
+export JAX_ENABLE_X64=1
+PY=/mnt/home/lyuliyao/.conda/envs/heat/bin/python
+REPO=${REPO:-/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching}
+OUT=${OUT:?set OUT}
+N=${N:-80000}; T=${T:-3.0}; A=${A:-1.0}; M=${M:-240}
+DRV="$REPO/experiments/keller_segel/fully_parabolic_3d/run_tetra_control.py"
+mkdir -p "$OUT"
+
+idx=$SLURM_ARRAY_TASK_ID
+if [ "$idx" -lt 4 ]; then CHI=1; SEED=$idx; else CHI=0; SEED=$((idx-4)); fi
+echo "[task $idx] chi=$CHI seed=$SEED a=$A M=$M N=$N K=12 T=$T"
+$PY "$DRV" --chi "$CHI" --a "$A" --M "$M" --N "$N" --K_dyn 12 --tau 1e-3 --T "$T" \
+  --D 1.0 --alpha 1 --beta 1 --sigma_c 0.25 --r_center 1.0 --seed "$SEED" \
+  --fast --buffer_factor 1.6 --out_dir "$OUT"

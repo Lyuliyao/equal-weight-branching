@@ -1,0 +1,104 @@
+{
+  "selection_rule": "weak-response = smallest chi with R_0.5(T) > 0.9 R_0.5(0) (no 10% focusing); delayed-focusing = smallest chi with R_0.5(T) <= 0.9 R_0.5(0) AND t_turn>0 AND max drift_resolution_number<2 AND max v-occupancy<1.5 N_u AND no abort.",
+  "sweep": "M",
+  "per_F": {
+    "16.0": {
+      "chi": 1.0,
+      "M": 16.0,
+      "R05_ratio": 4.439491767959377,
+      "valid": true,
+      "focused": false,
+      "stable": true,
+      "turnover": true,
+      "Cdrift_max": 0.0018636360511734827,
+      "occ_max": 17204
+    },
+    "32.0": {
+      "chi": 1.0,
+      "M": 32.0,
+      "R05_ratio": 4.2933902580933525,
+      "valid": true,
+      "focused": false,
+      "stable": true,
+      "turnover": true,
+      "Cdrift_max": 0.003930230546660775,
+      "occ_max": 17204
+    },
+    "48.0": {
+      "chi": 1.0,
+      "M": 48.0,
+      "R05_ratio": 4.125793552322602,
+      "valid": true,
+      "focused": false,
+      "stable": true,
+      "turnover": true,
+      "Cdrift_max": 0.006414630673732274,
+      "occ_max": 17204
+    },
+    "56.0": {
+      "chi": 1.0,
+      "M": 56.0,
+      "R05_ratio": 4.008913944094726,
+      "valid": true,
+      "focused": false,
+      "stable": true,
+      "turnover": true,
+      "Cdrift_max": 0.007869818786125625,
+      "occ_max": 17204
+    },
+    "64.0": {
+      "chi": 1.0,
+      "M": 64.0,
+      "R05_ratio": 3.868903550521052,
+      "valid": true,
+      "focused": false,
+      "stable": true,
+      "turnover": true,
+      "Cdrift_max": 0.009520839612124297,
+      "occ_max": 17204
+    },
+    "72.0": {
+      "chi": 1.0,
+      "M": 72.0,
+      "R05_ratio": 3.663242265505584,
+      "valid": true,
+      "focused": false,
+      "stable": true,
+      "turnover": true,
+      "Cdrift_max": 0.012158688740845887,
+      "occ_max": 17204
+    },
+    "80.0": {
+      "chi": 1.0,
+      "M": 80.0,
+      "R05_ratio": 0.39169992606788273,
+      "valid": true,
+      "focused": true,
+      "stable": true,
+      "turnover": true,
+      "Cdrift_max": 0.05378575968312978,
+      "occ_max": 17204
+    },
+    "88.0": {
+      "chi": 1.0,
+      "M": 88.0,
+      "R05_ratio": 0.24105566001464426,
+      "valid": true,
+      "focused": true,
+      "stable": true,
+      "turnover": true,
+      "Cdrift_max": 0.08372778837646694,
+      "occ_max": 17204
+    }
+  },
+  "weak_response_F": 16.0,
+  "delayed_focusing_F": 80.0,
+  "weak_response": {
+    "chi": 1.0,
+    "M": 16.0
+  },
+  "delayed_focusing": {
+    "chi": 1.0,
+    "M": 80.0
+  }
+}

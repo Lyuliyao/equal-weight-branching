@@ -1,0 +1,22 @@
+{
+  "experiment": "tetra",
+  "ic": "tetra",
+  "L": 12.0,
+  "Du": 1.0,
+  "Dv": 1.0,
+  "alpha": 1.0,
+  "beta": 1.0,
+  "chi": 1.0,
+  "M": 120.0,
+  "a": 1.0,
+  "sigma_c": 0.25,
+  "r_center": 1.0,
+  "v0": 0.0,
+  "K_dyn": 12,
+  "K_test": 4,
+  "Nu": 40000,
+  "tau": 0.001,
+  "n_steps": 2000,
+  "kernel": "minvar",
+  "buffer_factor": 1.6
+}
