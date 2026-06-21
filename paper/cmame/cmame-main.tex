@@ -857,7 +857,7 @@ We test the proposed algorithm on a sequence of numerical examples.  We first ve
 the method on a smooth manufactured solution and then compare equal-weight branching
 with weighted and resampled weighted particles for scalar linear reaction--diffusion
 problems with localized growth.  We next consider Keller--Segel concentration dynamics:
-in two dimensions we use an LDG-aligned benchmark and compare the particle diagnostics
+in two dimensions we use an local distinuous Galerkin (LDG) aligned benchmark and compare the particle diagnostics
 with a direct LDG reference, while in three dimensions we test focusing behavior in radial
 and nonradial configurations.  Finally, we apply the method to a six-dimensional
 field-coupled kinetic problem, where only low-dimensional spatial fields are reconstructed.
@@ -1202,10 +1202,7 @@ the same pre-singular concentration scale as a deterministic LDG computation, no
 claim a continuum blow-up time.
 Fig.~\ref{fig:ks_pp_fields}
 compares the density fields at representative reporting times.  Both methods develop
-a localized central core on the same time scale.  The overlaid mass-quantile radii
-\(R_{0.2}\) and \(R_{0.3}\) motivate the reconstruction-light core-collapse diagnostic
-defined below.
-
+a localized central core on the same time scale. 
 \begin{figure}[t]
 \centering
 \includegraphics[width=\linewidth]{figure/ks_pp_ldg_particle_snapshots.pdf}
@@ -1216,99 +1213,209 @@ The figure is a qualitative comparison of the
 concentrating core; quantitative concentration-time diagnostics are reported below.}
 \label{fig:ks_pp_fields}
 \end{figure}
-\paragraph{Core-local resolution diagnostics.}
-For a more resolution-sensitive diagnostic, we also run the parabolic--elliptic reduction $-\Delta v+v=u$ on a core-adaptive Fourier window, using the same concentrated initial profile.  We track the reconstructed peak $P_{K,N}(t)=\|P_K\mu_t^N\|_\infty$, the reconstructed norm $S_{K,N}(t)=\|P_K\mu_t^N\|_{L^2}$, and reconstruction-free core radii $R_q(t)$.  Snapshots are recorded at $t=5\times10^{-5}$, $10^{-4}$, $1.5\times10^{-4}$, $5\times10^{-4}$, $10^{-3}$, $2\times10^{-3}$, and $4\times10^{-3}$.
-
-Figures~\ref{fig:ldg_snapshots}--\ref{fig:ldg_curves} show that the inner half-mass radius decreases from about $0.091$ to about $0.06$ by $t=4\times10^{-3}$.  The reconstructed peak grows with bandwidth, approximately $1.7\times10^3$ for $K=5$ and $2.8\times10^3$ for $K=10$, so the peak itself is not treated as a converged blow-up diagnostic.  To quantify the onset of under-resolution we report
+After the qualitative field comparison in Fig.~\ref{fig:ks_pp_fields}, we compare the
+numerical blow-up time in the sense used by the LDG study~\cite{li2017local}.  Let
+\(n\) denote the number of mesh cells in each coordinate direction for the LDG method,
+and let
 \[
- t_{\rm gap}(N,K)=\inf\{t:S_{2K,4N}(t)/S_{K,N}(t)\ge\theta\}.
+    S_n^{\rm LDG}(t)
+    =
+    \|u_h^{(n)}(t)\|_{L^2(\Omega)}
 \]
-Table~\ref{tab:ldg_tgap} should be read exactly as this definition states: it marks when the reconstructed $L^2$ norm becomes sensitive to resolution, not when the PDE blows up.
+be the \(L^2\)-norm of the LDG solution, computed in the \(P^1\) DG finite-element
+space with the corresponding mass matrix.  For the threshold \(\theta=1.05\), define
+\[
+    t_b^{\rm LDG}(n;\theta)
+    =
+    \inf\Bigl\{
+    t:\,
+    S_{2n}^{\rm LDG}(t)
+    \ge
+    \theta S_n^{\rm LDG}(t)
+    \Bigr\}.
+\]
+This follows the LDG numerical blow-up-time criterion: it detects when the computed
+\(L^2\)-norm becomes sensitive to mesh refinement.
 
-\begin{figure}[t]
+For a fair particle comparison, we evaluate the same diagnostic norm after projecting
+the particle measure onto the same \(P^1\) DG space.  For a particle cloud with total
+particle number \(N_p\), define
+\[
+    S_{N_p,n}^{\rm part}(t)
+    =
+    \left\|
+    \Pi_n^{P^1{\rm DG}}\mu_{N_p}^u(t)
+    \right\|_{L^2(\Omega)},
+\]
+where \(\Pi_n^{P^1{\rm DG}}\) denotes the \(P^1\) DG projection on the \(n\times n\)
+mesh.  Since halving a two-dimensional mesh size corresponds to quadrupling the total
+number of particles, the particle refinement corresponding to \(n\to2n\) is
+\[
+    (N_p,n)\longrightarrow(4N_p,2n).
+\]
+We therefore define
+\[
+    t_b^{\rm part}(N_p,n;\theta)
+    =
+    \inf\Bigl\{
+    t:\,
+    \overline S_{4N_p,2n}^{\rm part}(t)
+    \ge
+    \theta\,
+    \overline S_{N_p,n}^{\rm part}(t)
+    \Bigr\},
+\]
+where the overline denotes averaging over particle seeds.  In practice we use a
+split/cross estimator for \(S_{N_p,n}^{\rm part}\) to remove the empirical self-term
+introduced by projecting an atomic particle measure.\begin{table}[t]
 \centering
-\includegraphics[width=\linewidth]{figure/ldg_snapshots.pdf}
-\caption{Core-adaptive parabolic--elliptic Keller--Segel diagnostics: reconstructed contours of $u$ over the reporting times.  The field sharpens into a concentrating peak, consistent with the grid-based concentration literature.}
-\label{fig:ldg_snapshots}
-\end{figure}
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{figure/ldg_curves.pdf}
-\caption{Resolution diagnostics for the refined $(N,K)=(6.4\times10^5,10)$ run: reconstructed $L^2$ norm, reconstructed peak, and squared core radii.  The core radius collapse is reconstruction-free; the peak remains bandwidth-sensitive.}
-\label{fig:ldg_curves}
-\end{figure}
-
-\begin{table}[t]
-\centering
-\caption{Resolution-gap focusing indicator $t_{\rm gap}(N,K)=\inf\{t:S_{2K,4N}(t)/S_{K,N}(t)\ge\theta\}$ for two refinement pairs.  The indicator marks the onset of under-resolution, not a blow-up time.}
-\label{tab:ldg_tgap}
-\begin{tabular}{c c c c c}
+\caption{Numerical blow-up times for the fully parabolic--parabolic Keller--Segel
+benchmark, computed using the LDG \(L^2\)-resolution criterion with \(\theta=1.05\).
+For the particle method, the empirical measure is first projected onto the same
+\(P^1\) DG space used by the LDG reference.}
+\label{tab:ks_pp_tb}
+\begin{tabular}{l c c}
 \toprule
-base $(N,K)$ & refined $(4N,2K)$ & $t_{\rm gap}(\theta=1.05)$ & $t_{\rm gap}(\theta=1.10)$ & $\max_t S_{2K,4N}/S_{K,N}$ \\
+method & refinement pair & numerical blow-up time \(t_b\) \\
 \midrule
-$(4\times10^4,5)$ & $(1.6\times10^5,10)$ & $3.0\times10^{-3}$ & -- & 1.08 \\
-$(1.6\times10^5,5)$ & $(6.4\times10^5,10)$ & $2.5\times10^{-3}$ & $3.8\times10^{-3}$ & 1.11 \\
+LDG
+& \(80\to160\)
+& \(5.95\times10^{-5}\) \\
+LDG
+& \(160\to320\)
+& \(8.43\times10^{-5}\) \\
+particle-field
+& \((8\times10^4,80)\to(3.2\times10^5,160)\)
+& \(8.5\times10^{-5}\) \\
 \bottomrule
 \end{tabular}
 \end{table}
+The particle-field numerical blow-up time lies on the same scale as the LDG refinement
+criterion.  We use this comparison only in the numerical sense of the LDG criterion; a
+continuum blow-up time is not inferred from these values.
 
-\subsection{Three-dimensional Keller--Segel focusing}
-\label{sec:ks3d}
 
-The three-dimensional Keller--Segel experiment is a conservative particle-field focusing test.  It exercises the mesh-free transport and the three-dimensional screened-Poisson field solve, but it is not used to claim a universal critical mass or a singular blow-up time.  On $[-L/2,L/2]^3$ with $L=12$, we solve
+\subsection{Three-dimensional Keller--Segel dynamics}
+\label{sec:ks3d_pp}
+
+We also test our method for the Keller--Segel system in three spatial
+dimensions,
 \begin{equation}
-\partial_t\rho=\Delta\rho-\chi\nabla\cdot(\rho\nabla c),
-\qquad
--\Delta c+\kappa^2c=\rho-\bar\rho,
-\qquad
-\chi=1,
-\qquad
-\kappa=0.1 .
-\label{equ:ks3d}
+\begin{aligned}
+ \partial_t u
+ &=
+ \Delta u-\nabla\cdot(u\nabla v),\\
+ \partial_t v
+ &=
+ \Delta v+u-v,
+\end{aligned}
+\label{equ:ks3d_pp}
 \end{equation}
-The particle dynamics are $dX=\chi\nabla c\,dt+\sqrt{2}\,dW$, and $c$ is reconstructed by a three-dimensional spectral screened-Poisson solve with zero mean.  Unless otherwise stated, $\tau=5\times10^{-4}$, $T=1$, and the field bandwidth is $H=16$.
-
-We first sweep the radial Gaussian family
-\[
- \rho_0^M(\mathbf x)=M(2\pi\sigma^2)^{-3/2}\exp[-|\mathbf x|^2/(2\sigma^2)],
+on $\mathbb T_L^3$ with $L=12$ and periodic boundary conditions. We take
+\begin{equation}
+ u_0^M(\boldsymbol{x})
+ =
+ \frac{M}{(2\pi\sigma^2)^{3/2}}
+ \exp\left(-\frac{|\boldsymbol{x}|^2}{2\sigma^2}\right),
+ \qquad
+ v_0(\boldsymbol{x})=0,
  \qquad
  \sigma=0.45,
+\label{equ:ks3d_ic}
+\end{equation}
+where the Gaussian is periodized on $\mathbb T_L^3$. Since the first
+equation conserves mass, $M_u(t)=M$. Integrating the second equation over
+the domain gives
+\[
+ \frac{d}{dt}M_v(t)=M-M_v(t),
  \qquad
- M\in\{20,40,60,80,100\}.
+ M_v(0)=0,
 \]
-The low-mass cases disperse, while the higher-mass cases focus.  The final half-mass radius is $2.07$ for $M=20$ and $1.71$ for $M=40$, but about $0.103$, $0.084$, and $0.074$ for $M=60$, $80$, and $100$, respectively (Fig.~\ref{fig:ks3d_core_radii}).  Thus the transition in this family lies between $M=40$ and $M=60$.  The core-density surrogate in Fig.~\ref{fig:ks3d_rho_core} grows rapidly for the focusing cases, but its absolute value is bandwidth- and time-step-sensitive and should be read only as a focusing indicator.
+and hence
+\begin{equation}
+ M_v(t)=M(1-e^{-t}).
+\label{equ:ks3d_mass}
+\end{equation}
+We use this identity as a direct check of the coupled particle
+discretization.
+We use $N=10^5$, $\tau=10^{-3}$, and the Fourier truncation
+$K=12$ for reconstructing the chemical field and evaluating the
+chemotactic drift. The sensitivity to the Fourier resolution is examined
+using $K=8,12$, and $16$.
+To characterize the spatial concentration directly from the particles, we
+denote by $\boldsymbol{x}_c(t)$ the torus centroid of the cell cloud and define
+the mass-quantile radius
+\[
+ R_q(t)
+ =
+ \inf\left\{
+ r>0:
+ \mu_u^N\bigl(B_{\mathbb T_L^3}(\boldsymbol{x}_c(t),r)\bigr)
+ \ge qM
+ \right\}.
+\]
+In particular, $R_{0.5}$ measures the size of the cell core without requiring
+an additional reconstruction of $u$.
 
-At $M=80$, the half-mass radius is stable under particle-number refinement: $N=10^5$, $2\times10^5$, and $4\times10^5$ all give $R_{0.5}\approx0.084$ at final time (Fig.~\ref{fig:ks3d_selfconv}).  The reconstructed peak still grows with bandwidth, so the radius is the reliable diagnostic here.  A nonradial four-cluster datum at the vertices of a tetrahedron gives the expected mutual attraction: the minimum inter-cluster distance decreases from $2.83$ to $2.12$ over $[0,1]$ (Fig.~\ref{fig:ks3d_tetra}).
+We first consider the case $M=96$ up to $T=2$. Starting from $v_0=0$, the
+half-mass radius initially increases while the chemical field develops,
+reaches its maximum near $t=0.2$, and subsequently decreases. The maximum
+value of $R_{0.5}$ is approximately $1.26$ times its initial value, showing a
+clear delay between the initial diffusion of the cell cloud and the subsequent
+chemotactic contraction. In contrast, for $M=72$, the half-mass radius
+continues to increase over the same time interval. Figure~\ref{fig:ks3d_state}
+shows the corresponding evolution of the $xy$-mass marginals of $u$ and $v$.
 
 \begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{figure/ks3d_core_radii.pdf}
-\caption{Three-dimensional Keller--Segel focusing.  Core radii $R_{0.5}$ and $R_{0.9}$ for the radial mass sweep.  Low masses disperse, while higher masses focus, with a transition between $M=40$ and $M=60$ for this family.}
-\label{fig:ks3d_core_radii}
+    \centering
+    \includegraphics[width=\linewidth]{figure/ks3d_pp_state.pdf}
+    \caption{
+    Three-dimensional Keller--Segel dynamics for $M=96$. The upper and lower
+    rows show the mass marginals $\int u(x,y,z)\,dz$ and
+    $\int v(x,y,z)\,dz$, respectively, at representative times. The cell
+    distribution initially spreads and subsequently contracts after the
+    chemical field has developed. A common linear color scale is used within
+    each row.
+    }
+    \label{fig:ks3d_state}
 \end{figure}
+
+At fixed $K=12$, the evolution of the half-mass radius is stable with respect
+to the number of particles. The final ratios
+\[
+ \frac{R_{0.5}(T)}{R_{0.5}(0)}
+ =
+ 0.219,\quad 0.211,\quad 0.206
+\]
+are obtained with $N=2\times10^4$, $10^5$, and $3.2\times10^5$,
+respectively. The delayed response is also stable under time-step refinement:
+halving the time step from $10^{-3}$ to $5\times10^{-4}$ changes the mean
+turnover time from approximately $0.21$ to $0.18$, while leaving the overall
+contraction behavior unchanged.
+
+The dependence on the Fourier truncation is more pronounced. The turnover is
+observed for all three values $K=8,12$, and $16$, and its timing is similar
+for $K=12$ and $16$. However, the late-time values of $R_{0.5}$ continue to
+decrease as $K$ is increased. Thus, the delayed transition from diffusion to
+chemotactic contraction is robust, whereas the final width of the concentrated
+cell core is not resolved independently of the Fourier truncation. We therefore
+use this experiment to demonstrate the fully three-dimensional coupled
+dynamics, without interpreting the final core radius as a converged
+concentration scale.
 
 \begin{figure}[t]
-\centering
-\includegraphics[width=0.8\linewidth]{figure/ks3d_rho_core.pdf}
-\caption{Core-density surrogate for the three-dimensional mass sweep.  Absolute peak values are bandwidth- and time-step-limited and are used only as qualitative focusing indicators.}
-\label{fig:ks3d_rho_core}
+    \centering
+    \includegraphics[width=\linewidth]{figure/ks3d_pp_validation.pdf}
+    \caption{
+    Sensitivity of the three-dimensional radial experiment to the time step and
+    Fourier truncation. The delayed turnover of $R_{0.5}$ persists under
+    time-step refinement and for $K=12$ and $16$, while the late-time
+    contraction remains dependent on the Fourier resolution. The radius
+    $R_{0.5}$ is computed directly from the particles, although its dynamics
+    depend on the reconstructed chemical drift.
+    }
+    \label{fig:ks3d_validation}
 \end{figure}
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{figure/ks3d_selfconv.pdf}
-\caption{Self-convergence at $M=80$.  The core radius is stable under particle-number refinement, while the reconstructed peak still grows with bandwidth $H$.}
-\label{fig:ks3d_selfconv}
-\end{figure}
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=0.8\linewidth]{figure/ks3d_tetra.pdf}
-\caption{Nonradial four-cluster datum at the vertices of a tetrahedron.  The cluster centroids mutually attract, and the minimum inter-cluster distance decreases from $2.83$ to $2.12$.}
-\label{fig:ks3d_tetra}
-\end{figure}
-
 \subsection{Six-dimensional field-coupled kinetic Keller--Segel}
 \label{sec:kinetic_ks}
 
