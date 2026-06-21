@@ -1,0 +1,1 @@
+/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching/experiments/keller_segel/fully_parabolic_3d/bench_performance.py --out_dir /mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching/reference_results/keller_segel_pp3d/validation_closure_20260620_dd245f2/performance --reps 3

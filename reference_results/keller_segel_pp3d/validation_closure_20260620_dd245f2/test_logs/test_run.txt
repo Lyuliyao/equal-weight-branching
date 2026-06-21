@@ -1,0 +1,48 @@
+######## test_field3d_fourier ########
+[ok] single-mode gradient (err 0.0e+00)
+[ok] constant -> zero gradient (0.0e+00)
+[ok] translation phase shift (err 1.2e-18)
+[ok] real cos/sin == complex Fourier (err 6.9e-18)
+[ok] analytic grad == finite difference (err 1.9e-11)
+ALL field3d_fourier tests passed.
+EXIT: 0
+
+######## test_injection_kernel ########
+[ok] v created from empty cloud (n_birth=51)
+[ok] mean a=1 b=1 ou=1: 3019.9 vs exact 3019.8 (rel 2.7e-05)
+[ok] mean a=1.5 b=0.8 ou=1.0: 3176.2 vs exact 3176.4 (rel 6.6e-05)
+[ok] mean a=1.0 b=1.0 ou=2.0: 3146.8 vs exact 3147.8 (rel 3.0e-04)
+[ok] tau=0.02: var(minvar)=58.2 <= var(poisson)=65.8
+[ok] tau=0.3: var(minvar)=624.8 <= var(poisson)=773.3
+[ok] tau=1.0: var(minvar)=727.8 <= var(poisson)=1783.3
+[ok] mass bookkeeping consistent (Nv 1000->1044)
+ALL injection_kernel tests passed.
+EXIT: 0
+
+######## test_buffer_equiv ########
+[ok] masked normalization: buffer==cloud (err 1.8e-15), padding inert (0.0e+00)
+[ok] linear: fast == slow (all ['M_u', 'M_v', 'E_u_modes', 'E_v_modes', 'E_grad_v_particles', 'N_v'] match to 1e-8; N_v 614)
+[ok] radial chi=1,M=64: fast == slow (R_0.5 0.8301, N_v 1137, all to 1e-7)
+ALL buffer-equivalence tests passed.
+EXIT: 0
+
+######## test_exact_linear_case ########
+[ok] v created from empty cloud: N_v 0 -> 845 (max occ 845, cap-free)
+[ok] mass law: M_v(T) 0.3943+-0.0076 vs exact 0.3921 (dev 2.2e-03 < 4SEM 3.1e-02); M_u drift 0.0e+00
+[ok] E_u_modes: N=2e4 1.95e-04 -> N=8e4 9.20e-05  (x2.12, ~2 ideal)
+[ok] E_v_modes: N=2e4 7.80e-05 -> N=8e4 3.35e-05  (x2.32, ~2 ideal)
+[ok] E_grad_v_particles: N=2e4 1.30e-02 -> N=8e4 7.24e-03  (x1.80, ~2 ideal)
+[ok] no time-step bias: M_v dev  tau 2.2e-03(4SEM 3.1e-02),  tau/2 5.5e-03(4SEM 1.6e-02)
+ALL exact-linear-case tests passed.
+EXIT: 0
+
+######## test_validation_extra ########
+[ok] Fourier axis-permutation symmetry (field invariant, grad permutes, <1e-9)
+[ok] periodic wrapping (u in box, v in box; N_v=594)
+[ok] fixed-seed reproducibility (max record diff 0.0e+00 <= 1e-12)
+[ok] no hidden population control (tiny cap raises; uncapped max_occ 879 > 0, u count fixed 5000)
+[ok] row-wise injection location (all 280 injected rows are u rows)
+[ok] new diagnostics sane (circular resultant point=1/uniform~0; probe schema)
+ALL validation-extra tests passed.
+EXIT: 0
+

@@ -67,7 +67,7 @@ vs (88,92] at K=8) and the R_0.8 seed/N-sensitivity caveat. Pilot record: `mswee
 Regenerate: `python plot_radial_response.py --run_dir <radial dir> --baseN 100000 --K 12`
 
 ### C. Tetra multi-cluster — `tetra_*_a1_M240_K12` → **Figure C**
-Four super-critical clusters (M=240, σ_c=0.25) on a tetrahedron, active χ=1 vs diffusion control
+Four selected-cluster-mass clusters (M=240, σ_c=0.25; each focuses at this fixed bandwidth) on a tetrahedron, active χ=1 vs diffusion control
 χ=0 (common seed). **Mutual chemotactic attraction + individual collapse**: active per-cluster
 R_0.5 → 0.16 (collapse) vs control 3.78 (spread), a ~23× contrast; active d_min ↓ vs flat control.
 Pilots: `tetra_pilot_*`, `tetra_pilot2_*`. See the dir README for the table and caveats.
@@ -81,3 +81,65 @@ Draft §5.6 text (radial + tetra + algorithm/setup + language guardrails) is in
 Guardrails honored: no continuum blow-up / no universal critical-mass claim (transition is
 numerical/bandwidth-dependent); cross-species source is injection, not `(u−v)/v`; reconstruction-free
 core radii separated from bandwidth-sensitive peaks/R_0.8.
+
+---
+
+## Validation closure (2026-06-20)
+
+A focused closure pass on the remaining 3D fully parabolic–parabolic validation items.
+All new code is committed; all new data, figures, and a neutral analysis report live under
+`reference_results/keller_segel_pp3d/validation_closure_<UTC>_<sha>/`. **No paper file is
+edited by this pass.**
+
+### Important readout caveat
+
+`R_0.5` (and the other quantile radii `R_q`) are **reconstruction-free as a readout** —
+they are computed directly from particle positions with no field reconstruction. However,
+their **dynamics still depend on `K_dyn`** through the reconstructed chemotactic drift `∇v`
+(bandwidth `K_dyn`). The validation-closure resolution audit quantifies this via a
+same-cloud `∇v` discrepancy between `K=8/12/16`. The radial/tetra "transitions" are
+**fixed-bandwidth numerical transitions**, not continuum critical masses.
+
+### New code
+
+| file | role |
+|------|------|
+| `repro.py` | shared reproducibility metadata (git, argv, command.txt, host, versions, device, buffer capacity, population_control) |
+| `test_validation_extra.py` | axis-permutation symmetry, periodic wrapping, fixed-seed reproducibility, no-hidden-population-control, row-wise injection location |
+| `bench_performance.py` | fast/slow timing benchmark (Task A.2) |
+| `vc_load.py` | config-safe diagnostics loader (never pools differing M/N/K/tau) |
+| `analyze_radial_validation.py` | B.1 tau + B.2 K metrics → `figure_radial_tau_K_validation` |
+| `analyze_resolution_audit.py` | B.3 `Q_0.2` gate audit + B.4 same-cloud drift → `figure_radial_resolution_audit` |
+| `plot_radial_state.py` | Task C u/v xy mass-marginal state-evolution figure from saved clouds |
+| `analyze_tetra_validation.py` | Task D one-factor refinement + centroid reliability → `figure_tetra_resolution_validation` |
+
+`simulation_pp3d.simulate` gained an optional `drift_probe_K` (same-cloud `∇v` discrepancy
+at diagnostic times; draws no RNG and does not enter transport → trajectory unchanged) and
+the tetra diagnostics gained the per-cluster circular-resultant reliability `A_{m,j}` plus
+the six pairwise centroid distances. `run_radial_production.py` gained `--drift_probe` and
+`--save_times` (cloud snapshots). `plot_radial_response.py` / `plot_tetra_control.py` now
+take explicit baseline selectors and group seed means by the FULL config tuple (they never
+auto-pick the smallest `tau` or pool different bandwidths).
+
+### Reproduce
+
+```bash
+# tests (CPU)
+JAX_PLATFORMS=cpu JAX_ENABLE_X64=1 python test_validation_extra.py   # + the other test_*.py
+
+# GPU runs (SLURM); set OUT to a validation_closure_* subdir
+REPO=$PWD OUT=<vc>/radial_K          sbatch submit_radial_K.sb
+REPO=$PWD OUT=<vc>/radial_tau        sbatch submit_radial_tau.sb
+REPO=$PWD OUT=<vc>/radial_state_figure sbatch submit_radial_state.sb
+REPO=$PWD OUT=<vc>/tetra_refinement  sbatch submit_tetra_refine.sb
+REPO=$PWD OUT=<vc>/performance       sbatch submit_bench.sb
+
+# figures (solver-free, from saved CSV/NPZ)
+python analyze_radial_validation.py --K_dir <vc>/radial_K --tau_fine_dir <vc>/radial_tau \
+    --tau_base_dir <radial production dir> --out_root <vc>
+python analyze_resolution_audit.py  --K_dir <vc>/radial_K --out_root <vc>
+python plot_radial_state.py --clouds <vc>/radial_state_figure/state_*/snapshots/clouds_seed0.npz --out_root <vc>
+python analyze_tetra_validation.py  --refine_dir <vc>/tetra_refinement --out_root <vc>
+```
+
+See `validation_closure_*/ANALYSIS_REPORT.md` for the validation matrix and findings.

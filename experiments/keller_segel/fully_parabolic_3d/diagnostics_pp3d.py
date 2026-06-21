@@ -72,3 +72,19 @@ def symmetry_residual(centroids, L):
     """Coefficient of variation of the six pairwise centroid distances."""
     d = np.asarray(pairwise_dists(centroids, L))
     return float(d.std() / d.mean()) if d.mean() > 0 else np.nan
+
+
+def circular_resultant(Xc, L):
+    """Per-axis circular resultant length  A_j = |(1/N) sum_i exp(2*pi*i*x_{i,j}/L)|
+    of a labelled cluster's particle positions Xc (N,3) on the torus [-L/2,L/2)^3.
+
+    A_j in [0,1]: A_j -> 1 when the cluster is tightly concentrated along axis j,
+    A_j -> 0 when the cluster is (near-)uniform along axis j (centroid ill-defined).
+    Returns the (A_x, A_y, A_z) resultant lengths; the caller takes min_j A_j as a
+    conservative torus-centroid reliability score.  Empty cluster -> zeros.
+    """
+    Xc = np.asarray(Xc, float)
+    if Xc.shape[0] == 0:
+        return np.zeros(3)
+    ang = (2.0 * np.pi / L) * Xc                     # (N,3) angular coords
+    return np.abs(np.exp(1j * ang).mean(axis=0))     # (3,) resultant length per axis

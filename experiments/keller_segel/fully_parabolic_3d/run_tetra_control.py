@@ -4,23 +4,11 @@ chi>0 = active, chi=0 = diffusion control.  Same seed => common initial particle
 (sample_tetra) and common early random streams (practical common-randomness).
 experiment='tetra', v0=0; cluster labels preserved (u-cloud conservative).
 """
-import os, csv, json, argparse, subprocess, sys, datetime
+import os, csv, json, argparse, sys, datetime
 import numpy as np
 _HERE = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, _HERE)
 import simulation_pp3d as S
-
-
-def git_hash():
-    try:
-        return subprocess.check_output(["git", "-C", _HERE, "rev-parse", "HEAD"],
-                                       stderr=subprocess.DEVNULL).decode().strip()
-    except Exception:
-        return "unknown"
-
-
-def pkg_versions():
-    import jax
-    return {"python": sys.version.split()[0], "numpy": np.__version__, "jax": jax.__version__}
+import repro
 
 
 def main():
@@ -67,18 +55,20 @@ def main():
             w = csv.DictWriter(f, fieldnames=cols, extrasaction="ignore"); w.writeheader()
             for r in recs:
                 w.writerow(r)
+    Ncap = int(np.ceil(args.buffer_factor * args.N))
     manifest = dict(experiment="keller_segel/fully_parabolic_3d/tetra", arm=arm,
-                    git=git_hash(), date=str(t0), versions=pkg_versions(), seed=args.seed,
-                    N_u=args.N, kernel="minvar", L=args.L, D_u=args.D, D_v=args.D,
-                    alpha=args.alpha, beta=args.beta, chi=args.chi, M=args.M, a=args.a,
-                    sigma_c=args.sigma_c, r_center=args.r_center, v0=0.0, tau=args.tau,
-                    T=args.T, n_steps=n_steps, diag_every=diag_every, K_dyn=args.K_dyn,
-                    Nv_cap=summ.get("Nv_cap"), population_control=False,
-                    fast=bool(args.fast), buffer_factor=args.buffer_factor,
-                    max_v_occupancy=summ["max_v_occupancy"], aborted=aborted, error=err,
-                    runtime_s=dt)
-    json.dump(manifest, open(os.path.join(run_dir, "manifest.json"), "w"), indent=2)
-    json.dump(cfg, open(os.path.join(run_dir, "config_used.json"), "w"), indent=2)
+                    seed=args.seed, N_u=args.N, kernel="minvar", L=args.L, D_u=args.D,
+                    D_v=args.D, alpha=args.alpha, beta=args.beta, chi=args.chi, M=args.M,
+                    a=args.a, sigma_c=args.sigma_c, r_center=args.r_center, v0=0.0,
+                    tau=args.tau, T=args.T, n_steps=n_steps, diag_every=diag_every,
+                    K_dyn=args.K_dyn, K_test=4, Nv_cap=summ.get("Nv_cap"),
+                    population_control=False, fast=bool(args.fast),
+                    buffer_factor=args.buffer_factor,
+                    buffer_capacity=(Ncap if args.fast else None),
+                    max_v_occupancy=summ["max_v_occupancy"], final_Nv=summ.get("final_Nv"),
+                    aborted=aborted, error=err, runtime_s=dt)
+    manifest.update(repro.env_record(_HERE))
+    repro.dump(run_dir, manifest, cfg)
     if recs:
         fin = recs[-1]
         print(f"[{tag}] {dt:.0f}s  d_min {recs[0]['d_min']:.3f}->{fin['d_min']:.3f}  "

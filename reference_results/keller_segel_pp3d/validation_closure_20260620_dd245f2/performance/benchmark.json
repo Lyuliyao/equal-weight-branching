@@ -1,0 +1,76 @@
+{
+  "rows": [
+    {
+      "case": "case1",
+      "N": 20000,
+      "K_dyn": 8,
+      "T": 0.1,
+      "tau": 0.001,
+      "n_steps": 100,
+      "fast": false,
+      "warmup_s": 37.196,
+      "steady_mean_s": 2.548,
+      "steady_std_s": 0.011,
+      "sec_per_step": 0.02548,
+      "peak_v_occupancy": 2019,
+      "buffer_capacity": null,
+      "device": "cuda:0"
+    },
+    {
+      "case": "case1",
+      "N": 20000,
+      "K_dyn": 8,
+      "T": 0.1,
+      "tau": 0.001,
+      "n_steps": 100,
+      "fast": true,
+      "warmup_s": 1.666,
+      "steady_mean_s": 0.441,
+      "steady_std_s": 0.001,
+      "sec_per_step": 0.00441,
+      "peak_v_occupancy": 2019,
+      "buffer_capacity": 32000,
+      "device": "cuda:0"
+    },
+    {
+      "case": "case2",
+      "N": 100000,
+      "K_dyn": 12,
+      "T": 0.2,
+      "tau": 0.001,
+      "n_steps": 200,
+      "fast": true,
+      "warmup_s": 6.385,
+      "steady_mean_s": 4.931,
+      "steady_std_s": 0.006,
+      "sec_per_step": 0.02466,
+      "peak_v_occupancy": 18083,
+      "buffer_capacity": 160000,
+      "device": "cuda:0"
+    }
+  ],
+  "case1_speedup_fast_over_slow": 5.78,
+  "device": "cuda:0",
+  "git": "dd245f2075f595ba2cdfdb146b48fa7ad6eacd5b",
+  "git_dirty": true,
+  "utc_timestamp": "2026-06-20T21:39:52.349079+00:00",
+  "hostname": "nal-002",
+  "argv": [
+    "/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching/experiments/keller_segel/fully_parabolic_3d/bench_performance.py",
+    "--out_dir",
+    "/mnt/gs21/scratch/lyuliyao/SDE_PDE/equal-weight-branching/reference_results/keller_segel_pp3d/validation_closure_20260620_dd245f2/performance",
+    "--reps",
+    "3"
+  ],
+  "versions": {
+    "python": "3.12.7",
+    "numpy": "2.4.4",
+    "jax": "0.10.0",
+    "devices": [
+      "cuda:0"
+    ],
+    "jaxlib": "0.10.0"
+  },
+  "jax_platforms": "",
+  "jax_enable_x64": "1"
+}

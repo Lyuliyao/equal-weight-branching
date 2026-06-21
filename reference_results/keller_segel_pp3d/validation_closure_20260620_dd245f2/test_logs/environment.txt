@@ -1,0 +1,10 @@
+# pp3d validation-closure test logs
+date_utc: 2026-06-20T21:39:00Z
+host: acm-070
+git_commit: dd245f2075f595ba2cdfdb146b48fa7ad6eacd5b
+JAX_PLATFORMS=cpu JAX_ENABLE_X64=1
+python 3.12.7
+numpy 2.4.4
+jax 0.10.0
+jaxlib 0.10.0
+devices [CpuDevice(id=0)]

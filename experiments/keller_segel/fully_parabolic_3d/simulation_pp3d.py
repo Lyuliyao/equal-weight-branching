@@ -55,16 +55,43 @@ def _linear_diag(t, X, Y, omega, gv, cfg, Mu0):
 
 
 def _radial_diag(t, X, Y, gv, cfg):
-    """Experiment-B reconstruction-free radial diagnostics."""
+    """Experiment-B reconstruction-free radial diagnostics.
+
+    If cfg['drift_probe_K'] is a list of bandwidths (e.g. [8,12,16]), additionally
+    evaluate grad v at the CURRENT u-positions from the CURRENT v-cloud at each probe
+    bandwidth and record the rms magnitude Gv_K{K} plus the pairwise reconstruction
+    discrepancy dabs/drel between consecutive bandwidths (validation-closure 4.4).
+    This is a same-cloud, diagnostic-only readout: it draws no RNG and does NOT enter
+    the transport drift, so the trajectory is identical to a run without the probe."""
     L, K, chi, tau = cfg["L"], cfg["K_dyn"], cfg["chi"], cfg["tau"]
     xc = D.torus_centroid(X, L)
     R = D.core_radii(X, xc, L, (0.2, 0.5, 0.8))
     eig = D.covariance_eigs(X, xc, L)
     hK = L / (2 * K + 1)
     gmax = float(np.max(np.linalg.norm(gv, axis=1))) if gv.shape[0] else 0.0
-    return dict(R_0_2=R[0.2], R_0_5=R[0.5], R_0_8=R[0.8],
-                cov_eig0=float(eig[0]), cov_eig1=float(eig[1]), cov_eig2=float(eig[2]),
-                drift_resolution_number=float(tau * chi * gmax / hK))
+    out = dict(R_0_2=R[0.2], R_0_5=R[0.5], R_0_8=R[0.8],
+               cov_eig0=float(eig[0]), cov_eig1=float(eig[1]), cov_eig2=float(eig[2]),
+               drift_resolution_number=float(tau * chi * gmax / hK))
+    probe = cfg.get("drift_probe_K")
+    if probe:
+        ks = sorted(int(kp) for kp in probe)
+        omega = cfg["M"] / X.shape[0]                 # omega_u = omega_v
+        Mv = omega * Y.shape[0]
+        gvs = {}
+        for kp in ks:
+            if Y.shape[0]:
+                g = np.asarray(F.grad_v_from_cloud(jnp.asarray(X), jnp.asarray(Y), kp, L, Mv))
+            else:
+                g = np.zeros((X.shape[0], 3))
+            gvs[kp] = g
+            out[f"Gv_K{kp}"] = float(np.sqrt(np.mean(np.sum(g ** 2, axis=1))))
+        for klo, khi in zip(ks[:-1], ks[1:]):
+            d = gvs[khi] - gvs[klo]
+            dabs = float(np.sqrt(np.mean(np.sum(d ** 2, axis=1))))
+            denom = float(np.sqrt(np.mean(np.sum(gvs[khi] ** 2, axis=1))))   # higher-K ref
+            out[f"dabs_{klo}_{khi}"] = dabs
+            out[f"drel_{klo}_{khi}"] = dabs / (denom + 1e-30)
+    return out
 
 
 def _tetra_diag(t, X, gv, cfg, labels):
@@ -85,6 +112,14 @@ def _tetra_diag(t, X, gv, cfg, labels):
         out[f"R05_c{m}"] = R05[m]; out[f"R09_c{m}"] = R09[m]
         out[f"c{m}_x"] = float(cen[m, 0]); out[f"c{m}_y"] = float(cen[m, 1])
         out[f"c{m}_z"] = float(cen[m, 2])
+        # centroid-reliability score: per-axis circular resultant, conservative min_j
+        A = D.circular_resultant(X[labels == m], L)
+        out[f"A_c{m}_x"] = float(A[0]); out[f"A_c{m}_y"] = float(A[1])
+        out[f"A_c{m}_z"] = float(A[2]); out[f"A_c{m}"] = float(A.min())
+    # the six pairwise centroid distances (i<j): d01,d02,d03,d12,d13,d23
+    for (i, j), dij in zip([(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)],
+                           D.pairwise_dists(cen, L)):
+        out[f"d{i}{j}"] = float(dij)
     return out
 
 
