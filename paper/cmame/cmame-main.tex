@@ -1437,7 +1437,26 @@ cluster and define
 \]
 We also compute the half-mass radius of each labelled cluster and report
 their mean.
-
+\begin{figure}
+    \centering
+    \includegraphics[width=\linewidth]{ks3d_tetra.pdf  }
+\caption{
+Nonradial three-dimensional Keller--Segel dynamics for four initially
+separated cell clusters placed at the vertices of a regular tetrahedron.
+The active simulation uses $\chi=1$, while the diffusion control uses
+$\chi=0$; both employ $M=240$, $N=8\times10^4$, $\tau=10^{-3}$, and
+$K=12$. (a) Cluster-centroid trajectories for one representative active
+realization. Circles and triangles mark the initial and final centroid
+positions, respectively. (b) Normalized minimum pairwise centroid distance
+for the active and control simulations, shown over the interval in which
+the control centroids remain well defined. (c) Normalized mean
+per-cluster half-mass radius. Curves in (b)--(c) show means over four seeds,
+and shaded bands indicate one standard deviation. The active clusters move
+toward one another and remain individually localized, whereas the control
+clusters diffuse.
+}
+    \label{fig:placeholder}
+\end{figure}
 \subsection{Six-dimensional field-coupled kinetic Keller--Segel}
 \label{sec:kinetic_ks}
 
