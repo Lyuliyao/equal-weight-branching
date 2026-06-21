@@ -21,6 +21,16 @@ import matplotlib as mpl
 mpl.use("Agg")
 import matplotlib.pyplot as plt
 
+HERE = os.path.dirname(os.path.abspath(__file__))
+EXP = os.path.abspath(os.path.join(HERE, "..", ".."))
+if EXP not in sys.path:
+    sys.path.insert(0, EXP)
+from paper_style import apply_style, TEXTWIDTH_IN  # noqa: E402
+
+apply_style()
+mpl.rcParams.update({"axes.titlesize": 7.0, "axes.labelsize": 7.0,
+                     "xtick.labelsize": 6.0, "ytick.labelsize": 6.0})
+
 
 def marginal(P, omega, L, bins, rng):
     """int (.) dz mass-marginal histogram on [-rng,rng]^2 over the FULL box; returns
@@ -58,7 +68,8 @@ def render(S, out_root, prefix, disp=3.0):
     nt = len(times)
     ext = [-S["rng"], S["rng"], -S["rng"], S["rng"]]
     for variant in ("physical", "normalized"):
-        fig, ax = plt.subplots(2, nt, figsize=(2.7 * nt, 5.6), squeeze=False)
+        fig, ax = plt.subplots(2, nt, figsize=(TEXTWIDTH_IN, 0.62 * TEXTWIDTH_IN),
+                               squeeze=False)
         for ri, (data, lab, cmap) in enumerate([(U, r"$\int u\,dz$", "viridis"),
                                                 (Vv, r"$\int v\,dz$", "magma")]):
             vmax = float(data.max()) if data.max() > 0 else 1.0
@@ -72,13 +83,13 @@ def render(S, out_root, prefix, disp=3.0):
                                        vmin=0, vmax=vlim, aspect="equal")
                 ax[ri, ci].set_xlim(-disp, disp); ax[ri, ci].set_ylim(-disp, disp)
                 if ri == 0:
-                    ax[ri, ci].set_title(f"t={times[ci]:.2f}", fontsize=9)
+                    ax[ri, ci].set_title(rf"$t={times[ci]:.2f}$", fontsize=7)
                 if ci == 0:
                     ax[ri, ci].set_ylabel(lab + ("\n(per-panel norm.)" if variant == "normalized"
-                                                  else ""), fontsize=9)
+                                                  else ""), fontsize=7)
                 pk = S["peakU"][ci] if ri == 0 else S["peakV"][ci]
                 ax[ri, ci].text(0.04, 0.92, f"peak={pk:.1f}", transform=ax[ri, ci].transAxes,
-                                fontsize=6, color="w")
+                                fontsize=5.5, color="w")
                 ax[ri, ci].tick_params(labelsize=6)
             cb = fig.colorbar(im, ax=ax[ri, :].tolist(), fraction=0.012, pad=0.01)
             cb.ax.tick_params(labelsize=6)
@@ -86,7 +97,7 @@ def render(S, out_root, prefix, disp=3.0):
                if variant == "physical" else
                "normalized shape (each panel scaled to its own peak)")
         fig.suptitle(f"Radial state evolution (M={S['M']:g}, K={S['K_dyn']}, seed={S['seed']}): "
-                     + ttl, fontsize=11)
+                     + ttl, fontsize=7.5)
         suffix = "" if variant == "physical" else "_normalized"
         fd = os.path.join(out_root, "figures"); os.makedirs(fd, exist_ok=True)
         for e in ("pdf", "png"):

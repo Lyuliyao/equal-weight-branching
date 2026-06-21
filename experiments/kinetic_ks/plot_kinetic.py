@@ -10,6 +10,7 @@ Usage:
   python plot_kinetic.py --results_dir <dir-with-metrics.csv> [--out_dir <dir>]
 """
 import os
+import sys
 import argparse
 import csv
 from collections import defaultdict
@@ -19,11 +20,21 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_EXP = os.path.abspath(os.path.join(_HERE, ".."))
+if _EXP not in sys.path:
+    sys.path.insert(0, _EXP)
+from paper_style import apply_style, TEXTWIDTH_IN, METHOD_COLORS  # noqa: E402
+
+apply_style()
+
 METHODS = ["weighted", "weighted_resample", "poisson", "minvar"]
 LABEL = {"weighted": "weighted", "weighted_resample": "weighted+resample",
          "poisson": "Poisson branch", "minvar": "min-var branch"}
-COLOR = {"weighted": "tab:red", "weighted_resample": "tab:orange",
-         "poisson": "tab:blue", "minvar": "tab:green"}
+COLOR = {"weighted": METHOD_COLORS["weighted"],
+         "weighted_resample": METHOD_COLORS["resampled"],
+         "poisson": METHOD_COLORS["poisson"],
+         "minvar": METHOD_COLORS["minvar"]}
 
 
 def load(results_dir):
@@ -58,7 +69,7 @@ def load(results_dir):
 
 
 def plot_field(d, out_dir):
-    fig, ax = plt.subplots(2, 2, figsize=(9, 6.5))
+    fig, ax = plt.subplots(2, 2, figsize=(TEXTWIDTH_IN, 0.72 * TEXTWIDTH_IN))
     panels = [("total_mass", "total mass $M(t)$"),
               ("c_inf_grid", r"$\|c\|_\infty$"),
               ("rho_inf_grid", r"$\|\rho\|_\infty$"),
@@ -69,28 +80,28 @@ def plot_field(d, out_dir):
                 a.plot(d[m]["t"], d[m][key], color=COLOR[m], label=LABEL[m])
                 if key == "R_core_0p5" and "R_core_0p9" in d[m]:
                     a.plot(d[m]["t"], d[m]["R_core_0p9"], color=COLOR[m], ls="--")
-        a.set_xlabel("t"); a.set_title(title); a.grid(alpha=0.3)
-    ax[0, 0].legend(fontsize=8)
+        a.set_xlabel(r"$t$"); a.set_title(title, fontsize=8); a.grid(alpha=0.3)
+    ax[0, 0].legend(fontsize=7)
     fig.tight_layout()
     fig.savefig(os.path.join(out_dir, "kinetic_field.pdf"))
     plt.close(fig)
 
 
 def plot_repr(d, out_dir):
-    fig, ax = plt.subplots(1, 3, figsize=(13, 4))
+    fig, ax = plt.subplots(1, 3, figsize=(TEXTWIDTH_IN, 0.34 * TEXTWIDTH_IN))
     # global nESS (weighted methods)
     for m in ["weighted", "weighted_resample"]:
         if "global_nESS" in d[m] and len(d[m]["t"]):
             ax[0].plot(d[m]["t"], d[m]["global_nESS"], color=COLOR[m], label=LABEL[m])
     ax[0].axhline(1.0, color="k", ls=":", lw=0.8, label="equal weights (branch)")
-    ax[0].set_xlabel("t"); ax[0].set_ylabel("global nESS"); ax[0].set_title("weight degeneracy")
-    ax[0].legend(fontsize=8); ax[0].grid(alpha=0.3)
+    ax[0].set_xlabel(r"$t$"); ax[0].set_ylabel("global nESS"); ax[0].set_title("weight degeneracy", fontsize=8)
+    ax[0].legend(fontsize=7); ax[0].grid(alpha=0.3)
     # max:mean weight (weighted)
     for m in ["weighted", "weighted_resample"]:
         if "max_w_over_mean_w" in d[m] and len(d[m]["t"]):
             ax[1].plot(d[m]["t"], d[m]["max_w_over_mean_w"], color=COLOR[m], label=LABEL[m])
-    ax[1].set_xlabel("t"); ax[1].set_ylabel("max:mean weight"); ax[1].set_title("weight concentration")
-    ax[1].legend(fontsize=8); ax[1].grid(alpha=0.3)
+    ax[1].set_xlabel(r"$t$"); ax[1].set_ylabel("max:mean weight"); ax[1].set_title("weight concentration", fontsize=8)
+    ax[1].legend(fontsize=7); ax[1].grid(alpha=0.3)
     # local resolution: weighted ABSOLUTE local ESS (= normalized nESS_B * N_B)
     # vs branching equal-weight local count, both absolute and comparable.
     for m in METHODS:
@@ -102,23 +113,23 @@ def plot_repr(d, out_dir):
                 y = d[m]["N_local_B"]
                 lab = LABEL[m] + " (local count)"
             ax[2].plot(d[m]["t"], y, color=COLOR[m], label=lab)
-    ax[2].set_xlabel("t"); ax[2].set_ylabel("local resolution in B")
-    ax[2].set_title("local resolution"); ax[2].legend(fontsize=8); ax[2].grid(alpha=0.3)
+    ax[2].set_xlabel(r"$t$"); ax[2].set_ylabel("local resolution in B")
+    ax[2].set_title("local resolution", fontsize=8); ax[2].legend(fontsize=7); ax[2].grid(alpha=0.3)
     fig.tight_layout()
     fig.savefig(os.path.join(out_dir, "kinetic_repr.pdf"))
     plt.close(fig)
 
 
 def plot_coupling(d, out_dir):
-    fig, ax = plt.subplots(1, 3, figsize=(13, 4))
+    fig, ax = plt.subplots(1, 3, figsize=(TEXTWIDTH_IN, 0.34 * TEXTWIDTH_IN))
     panels = [("corr_r_c", r"corr$(r,c)$"), ("corr_r_rho", r"corr$(r,\rho)$"),
               ("mean_Sc", r"mean $S_c(c)$ (activation)")]
     for a, (key, title) in zip(ax, panels):
         for m in METHODS:
             if key in d[m] and len(d[m]["t"]):
                 a.plot(d[m]["t"], d[m][key], color=COLOR[m], label=LABEL[m])
-        a.set_xlabel("t"); a.set_title(title); a.grid(alpha=0.3)
-    ax[0].legend(fontsize=8)
+        a.set_xlabel(r"$t$"); a.set_title(title, fontsize=8); a.grid(alpha=0.3)
+    ax[0].legend(fontsize=7)
     fig.tight_layout()
     fig.savefig(os.path.join(out_dir, "kinetic_coupling.pdf"))
     plt.close(fig)

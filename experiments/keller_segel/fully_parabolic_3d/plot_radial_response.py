@@ -12,11 +12,22 @@ from EXPLICIT CLI selectors (--base_N/--base_K/--base_tau), never by auto-pickin
 smallest tau present.  Seed means are grouped by the FULL config tuple
 (label, M, N, K_dyn, tau); runs with a different time step or bandwidth are never pooled.
 """
-import os, csv, glob, re, argparse, json
+import os, csv, glob, re, argparse, json, sys
 import numpy as np
 import matplotlib as mpl
 mpl.use("Agg")
 import matplotlib.pyplot as plt
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+EXP = os.path.abspath(os.path.join(HERE, "..", ".."))
+if EXP not in sys.path:
+    sys.path.insert(0, EXP)
+from paper_style import apply_style, TEXTWIDTH_IN  # noqa: E402
+
+apply_style()
+mpl.rcParams.update({"axes.titlesize": 7.0, "axes.labelsize": 7.0,
+                     "xtick.labelsize": 6.0, "ytick.labelsize": 6.0,
+                     "legend.fontsize": 6.0})
 
 
 def load(run_dir):
@@ -86,14 +97,14 @@ def main():
                     and np.isclose(r["M"], Md, equal_nan=True)))
     nseed = len(set(r["seed"] for r in runs if _match(r, sd)))
 
-    fig, ax = plt.subplots(1, 4, figsize=(17, 3.9))
+    fig, ax = plt.subplots(1, 4, figsize=(TEXTWIDTH_IN, 0.42 * TEXTWIDTH_IN))
     t, Mv, _ = seedmean(runs, sd, "M_v"); _, Mex, _ = seedmean(runs, sd, "M_v_exact")
     _, Gv, _ = seedmean(runs, sd, "G_v")
     if t is not None:
         ax[0].plot(t, Mv, "C0-", label="$M_v$"); ax[0].plot(t, Mex, "k--", label="exact law")
         a2 = ax[0].twinx(); a2.plot(t, Gv, "C2-", lw=1.2); a2.set_ylabel("$G_v$", color="C2")
-        ax[0].set_title("(a) chemical buildup (delayed)"); ax[0].set_xlabel("t")
-        ax[0].set_ylabel("$M_v$"); ax[0].legend(fontsize=8, loc="lower right")
+        ax[0].set_title("(a) chemical buildup"); ax[0].set_xlabel(r"$t$")
+        ax[0].set_ylabel("$M_v$"); ax[0].legend(fontsize=6, loc="lower right")
     for q, c in [("R_0_2", "C0"), ("R_0_5", "C1"), ("R_0_8", "C3")]:
         t, m, s = seedmean(runs, sd, q)
         if t is not None:
@@ -102,26 +113,26 @@ def main():
     t5, m5, _ = seedmean(runs, sd, "R_0_5")
     if t5 is not None:
         tt = t5[np.argmax(m5)]; ax[1].axvline(tt, color="0.5", ls=":", lw=1)
-        ax[1].text(tt, ax[1].get_ylim()[1] * 0.9, "$t_{turn}$", fontsize=7)
-    ax[1].set_title(f"(b) delayed response (M={Md:g})"); ax[1].set_xlabel("t")
-    ax[1].set_ylabel("$R_q^u$"); ax[1].legend(fontsize=8)
+        ax[1].text(tt, ax[1].get_ylim()[1] * 0.9, "$t_{turn}$", fontsize=6)
+    ax[1].set_title(f"(b) delayed response"); ax[1].set_xlabel(r"$t$")
+    ax[1].set_ylabel("$R_q^u$"); ax[1].legend(fontsize=6)
     for sel, lab, c in [(sw, f"weak (M={Mw:g})", "C0"), (sd, f"delayed (M={Md:g})", "C3")]:
         t, m, s = seedmean(runs, sel, "R_0_5")
         if t is not None:
             ax[2].plot(t, m, c, label=lab)
             ax[2].fill_between(t, m - s, m + s, color=c, alpha=0.2, lw=0)
-    ax[2].set_title("(c) $R_{0.5}^u$: weak vs delayed"); ax[2].set_xlabel("t")
-    ax[2].set_ylabel("$R_{0.5}^u$"); ax[2].legend(fontsize=8)
+    ax[2].set_title(r"(c) $R_{0.5}^u$: weak vs delayed"); ax[2].set_xlabel(r"$t$")
+    ax[2].set_ylabel("$R_{0.5}^u$"); ax[2].legend(fontsize=6)
     for N in Ns:
         t, m, _ = seedmean(runs, dict(label="delayed", M=Md, N=N, K=K, tau=tau0), "R_0_5")
         if t is not None:
             ax[3].plot(t, m, label=f"N={N/1e3:g}k")
-    ax[3].set_title("(d) $R_{0.5}^u$ vs $N$ (delayed)"); ax[3].set_xlabel("t")
-    ax[3].set_ylabel("$R_{0.5}^u$"); ax[3].legend(fontsize=8)
+    ax[3].set_title(r"(d) $R_{0.5}^u$ vs $N$"); ax[3].set_xlabel(r"$t$")
+    ax[3].set_ylabel("$R_{0.5}^u$"); ax[3].legend(fontsize=6)
 
     fig.suptitle(f"Figure B: 3D fully-parabolic radial delayed chemical response "
                  f"(reconstruction-free $R_q$; K={K}, tau={tau0:g}, N={args.base_N}, "
-                 f"{nseed} seeds)", fontsize=12)
+                 f"{nseed} seeds)", fontsize=7.5)
     fig.tight_layout(rect=[0, 0, 1, 0.95])
     fd = os.path.join(args.run_dir, "figures"); os.makedirs(fd, exist_ok=True)
     for ext in ("pdf", "png"):

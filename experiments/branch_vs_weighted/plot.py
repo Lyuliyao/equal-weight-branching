@@ -26,11 +26,13 @@ sys.path.insert(0, os.path.join(REPO, "experiments"))
 from paper_style import apply_style, fig_size, TEXTWIDTH_IN, METHOD_COLORS, METHOD_LABELS
 
 apply_style()
-# Both figures are included at 0.4\linewidth side by side, so generate BOTH at the same
-# SQUARE physical size -> equal displayed size and consistent font scaling at 0.4 width.
-mpl.rcParams.update({"axes.labelsize": 8.5, "xtick.labelsize": 8, "ytick.labelsize": 8,
-                     "legend.fontsize": 7.5})
-FIG_S = 0.46 * TEXTWIDTH_IN          # square side, in inches
+# Both figures are included at 0.4\linewidth side by side, so generate BOTH at
+# exactly that physical size.  LaTeX then includes them without rescaling, and
+# the fonts match the rest of the manuscript figures.
+mpl.rcParams.update({"axes.labelsize": 8.0, "axes.titlesize": 8.0,
+                     "xtick.labelsize": 7.5, "ytick.labelsize": 7.5,
+                     "legend.fontsize": 7.0})
+FIG_S = 0.40 * TEXTWIDTH_IN          # square side, in inches
 RD = os.path.join(REPO, "reference_results", "branch_vs_weighted")
 FIGDIR = os.path.join(REPO, "paper", "figure")
 METHODS = ["weighted", "poisson", "minvar"]
@@ -60,33 +62,29 @@ def seed_avg(rows, method, col):
     return np.array(out_t), np.array(out_m), np.array(out_s)
 
 
-# Plot box (figure fraction) produced by plot_l2's constrained_layout.  The snapshot
-# 2x2 field block is placed in the SAME square bbox so the two figures read at equal
-# size at 0.4\linewidth; the colorbar sits in the left margin, exactly where the l2
-# y-label and ticks sit.  (If plot_l2's layout changes, re-measure and update this.)
-L2_BOX = (0.2166, 0.1799, 0.9746, 0.9379)     # x0, y0, x1, y1
+# Manual layout for the 2x2 field block.  The colorbar is horizontal underneath,
+# matching the other manuscript field-snapshot figures.
+SNAP_PANEL_X0 = 0.15
+SNAP_PANEL_Y0 = 0.18
+SNAP_PANEL_SIDE = 0.34
+SNAP_PANEL_GAP = 0.075
 
 
 def plot_snapshots(rows=None):
     """Fig. 2: 2x2 final-time fields -- reference, weighted, weighted+ESS, min.-variance
     (same initial budget N0=2e4, same final time T=1, one shared color scale).
 
-    Manual layout (no constrained_layout): the 2x2 colored block fills the same square
-    bbox as the l2 plot box, titles sit above each panel, a small inter-row gap and a
-    balanced bottom margin keep the two figures visually the same size at 0.4\\linewidth.
+    Manual layout (no constrained_layout): the 2x2 colored block uses the same
+    font and bottom-colorbar convention as the other heatmap snapshot figures.
     """
     d = np.load(os.path.join(RD, "fig52_fields_seed0.npz"))
     ext = d["extent"] if "extent" in d.files else [-np.pi, np.pi, -np.pi, np.pi]
     panels = [("reference", "reference"), ("weighted", "weighted"),
-              ("weighted_ess", "weighted + ESS"), ("minvar", "min.-variance")]
+              ("weighted_ess", "weighted+ESS"), ("minvar", "min.-variance")]
     vmax = max(float(np.max(d[k])) for k, _ in panels)
 
-    x0, y0, x1, y1 = L2_BOX
-    side = min(x1 - x0, y1 - y0)
-    bx0 = x1 - side                              # right edge aligned with l2 plot box
-    by0 = 0.5 * (y0 + y1) - 0.5 * side           # vertical center matches l2 plot box
-    gap = 0.065                                  # small inter-row/col gap (tighter than A)
-    ps = 0.5 * (side - gap)                      # square panel side
+    bx0, by0 = SNAP_PANEL_X0, SNAP_PANEL_Y0
+    ps, gap = SNAP_PANEL_SIDE, SNAP_PANEL_GAP
     cols = [bx0, bx0 + ps + gap]
     rows_y = [by0 + ps + gap, by0]               # top row, bottom row
 
@@ -97,12 +95,10 @@ def plot_snapshots(rows=None):
         im = ax.imshow(d[key], origin="lower", extent=ext, vmin=0, vmax=vmax,
                        cmap="viridis", aspect="equal")
         ax.set_xticks([]); ax.set_yticks([]); ax.grid(False)
-        ax.set_title(title, fontsize=8, pad=2)
-    # colorbar in the left margin (where the l2 y-label/ticks live), spanning the block
-    cax = fig.add_axes([bx0 - 0.11, by0, 0.045, side])
-    cb = fig.colorbar(im, cax=cax)
-    cb.ax.yaxis.set_ticks_position("left"); cb.ax.yaxis.set_label_position("left")
-    cb.set_ticks([0, 200, 400, 600]); cb.ax.tick_params(labelsize=7)
+        ax.set_title(title, fontsize=6.8, pad=2)
+    cax = fig.add_axes([0.18, 0.065, 0.68, 0.040])
+    cb = fig.colorbar(im, cax=cax, orientation="horizontal")
+    cb.set_ticks([0, 200, 400, 600]); cb.ax.tick_params(labelsize=6.8)
     # save at the full SQUARE figsize (no tight crop) so it is the SAME canvas as l2
     with mpl.rc_context({"savefig.bbox": "standard"}):
         _save(fig, "snapshots_final.pdf")
@@ -176,7 +172,7 @@ def plot_l2(rows):
     ax.set_yticks([0.04, 0.06, 0.1, 0.2, 0.3])
     ax.set_yticklabels([r"$0.04$", r"$0.06$", r"$0.1$", r"$0.2$", r"$0.3$"])
     ax.yaxis.set_minor_formatter(NullFormatter())
-    ax.legend(loc="lower left", fontsize=7.5, frameon=False, handlelength=1.4,
+    ax.legend(loc="lower left", fontsize=7.0, frameon=False, handlelength=1.4,
               borderaxespad=0.4, labelspacing=0.3)
     # save at the full SQUARE figsize (no tight crop) so the square box is centred and the
     # two figures display at the same size at 0.4\linewidth
