@@ -1350,8 +1350,8 @@ through the $xy$-mass marginals of the two particle clouds.
     The upper and lower rows show the mass marginals
     $\int u(x,y,z)\,\mathrm dz$ and
     $\int v(x,y,z)\,\mathrm dz$, respectively, at representative times.
-    These are mass marginals rather than planar slices. A common linear color
-    scale is used within each row. The cell cloud initially spreads while the
+    These are mass marginals rather than planar slices. Each panel uses its
+    own linear color scale. The cell cloud initially spreads while the
     chemical field develops and subsequently contracts under the resulting
     chemotactic drift.
     }
@@ -1424,6 +1424,21 @@ the delayed response is robust at the tested resolutions, but neither the
 transition mass nor the final core width should be interpreted as a
 resolution-independent quantity.
 
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\linewidth]{figure/ks3d_pp_validation.pdf}
+    \caption{
+    Radial response in the three-dimensional Keller--Segel experiment.
+    Panel (a) compares the normalized half-mass radius for $M=72$ and
+    $M=96$ at $N=10^5$, $K=12$, and $\tau=10^{-3}$. The lower-mass cloud
+    continues to diffuse, whereas the $M=96$ cloud first expands and then
+    contracts. Panel (b) shows the $M=96$ response under particle-number
+    refinement. Curves are ensemble means over the available seeds, and shaded
+    bands show one standard deviation.
+    }
+    \label{fig:ks3d_radial_response}
+\end{figure}
+
 \paragraph{Nonradial multi-cluster dynamics.}
 To test genuinely three-dimensional, nonradial interactions, we initialize
 four equal Gaussian cell clusters of width $\sigma_c=0.25$ at the vertices
@@ -1475,7 +1490,7 @@ attraction.
 
 \begin{figure}[t]
     \centering
-    \includegraphics[width=0.92\linewidth]{figure/ks3d_pp_tetra.pdf}
+    \includegraphics[width=0.92\linewidth]{figure/ks3d_tetra.pdf}
     \caption{
     Nonradial tetrahedral Keller--Segel experiment.
     Left: minimum pairwise distance $d_{\min}(t)$ between the four labelled
