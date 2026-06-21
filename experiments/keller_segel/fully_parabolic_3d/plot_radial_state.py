@@ -7,9 +7,9 @@ mass-conserving periodic histogram on the full box [-L/2,L/2]^2:
     sigma(x,y) = (omega / (dx*dy)) * (# particles in the (x,y) bin),
 
 so  sum_bins sigma * dx*dy = omega * N = M (the species mass).  This is a marginal, NOT
-a 3D slice.  Row 1 = u marginal, row 2 = v marginal; columns = saved times.  Shared
-LINEAR color scale within each row (vmin=0, vmax=row max); NO percentile clipping (the
-true peak is shown and annotated).  A per-panel-normalized companion figure is also saved
+a 3D slice.  Row 1 = u marginal, row 2 = v marginal; columns = saved times.  Each
+panel uses a LINEAR color scale (vmin=0, vmax=panel max); NO percentile clipping, and
+panel maxima are annotated.  A per-panel-normalized companion figure is also saved
 to reveal shape evolution (explicitly labelled).
 
   python plot_radial_state.py --clouds <clouds_seed0.npz> --out_root <validation_closure dir>
@@ -30,6 +30,21 @@ from paper_style import apply_style, TEXTWIDTH_IN  # noqa: E402
 apply_style()
 mpl.rcParams.update({"axes.titlesize": 7.0, "axes.labelsize": 7.0,
                      "xtick.labelsize": 6.0, "ytick.labelsize": 6.0})
+
+
+def _fmt_tick(x):
+    x = float(x)
+    if abs(x) < 1e-12:
+        return "0"
+    if abs(x) >= 1000:
+        return f"{x / 1000:.1f}k"
+    if abs(x) >= 100:
+        return f"{x:.0f}"
+    if abs(x) >= 10:
+        return f"{x:.1f}".rstrip("0").rstrip(".")
+    if abs(x) >= 1:
+        return f"{x:.2g}"
+    return f"{x:.1g}"
 
 
 def marginal(P, omega, L, bins, rng):
@@ -67,41 +82,59 @@ def render(S, out_root, prefix, disp=3.0):
     times, U, Vv = S["times"], S["U"], S["V"]
     nt = len(times)
     ext = [-S["rng"], S["rng"], -S["rng"], S["rng"]]
+    fig_w = TEXTWIDTH_IN
+    fig_h = 0.43 * TEXTWIDTH_IN
+    left = 0.30
+    right = 0.08
+    panel_gap = 0.070
+    cbar_pad = 0.012
+    cbar_w = 0.030
+    panel = (fig_w - left - right - (nt - 1) * panel_gap
+             - nt * (cbar_pad + cbar_w)) / nt
+    row_gap = 0.09
+    bottom = 0.18
+    top_y = bottom + panel + row_gap
     for variant in ("physical", "normalized"):
-        fig, ax = plt.subplots(2, nt, figsize=(TEXTWIDTH_IN, 0.62 * TEXTWIDTH_IN),
-                               squeeze=False)
+        fig = plt.figure(figsize=(fig_w, fig_h))
         for ri, (data, lab, cmap) in enumerate([(U, r"$\int u\,dz$", "viridis"),
                                                 (Vv, r"$\int v\,dz$", "magma")]):
-            vmax = float(data.max()) if data.max() > 0 else 1.0
+            y = top_y if ri == 0 else bottom
+            fig.text(0.055, (y + 0.5 * panel) / fig_h,
+                     lab + ("\n(norm.)" if variant == "normalized" else ""),
+                     rotation=90, va="center", ha="center", fontsize=7)
             for ci in range(nt):
+                x = left + ci * (panel + cbar_pad + cbar_w + panel_gap)
+                ax = fig.add_axes([x / fig_w, y / fig_h, panel / fig_w, panel / fig_h])
+                cax = fig.add_axes([(x + panel + cbar_pad) / fig_w, y / fig_h,
+                                    cbar_w / fig_w, panel / fig_h])
                 A = data[ci]
+                panel_max = float(A.max())
                 if variant == "normalized":
                     A = A / (A.max() if A.max() > 0 else 1.0); vlim = 1.0
                 else:
-                    vlim = vmax
-                im = ax[ri, ci].imshow(A, origin="lower", extent=ext, cmap=cmap,
-                                       vmin=0, vmax=vlim, aspect="equal")
-                ax[ri, ci].set_xlim(-disp, disp); ax[ri, ci].set_ylim(-disp, disp)
+                    vlim = panel_max if panel_max > 0 else 1.0
+                im = ax.imshow(A, origin="lower", extent=ext, cmap=cmap,
+                               vmin=0, vmax=vlim, aspect="equal")
+                ax.set_xlim(-disp, disp); ax.set_ylim(-disp, disp)
                 if ri == 0:
-                    ax[ri, ci].set_title(rf"$t={times[ci]:.2f}$", fontsize=7)
-                if ci == 0:
-                    ax[ri, ci].set_ylabel(lab + ("\n(per-panel norm.)" if variant == "normalized"
-                                                  else ""), fontsize=7)
-                pk = S["peakU"][ci] if ri == 0 else S["peakV"][ci]
-                ax[ri, ci].text(0.04, 0.92, f"peak={pk:.1f}", transform=ax[ri, ci].transAxes,
-                                fontsize=5.5, color="w")
-                ax[ri, ci].tick_params(labelsize=6)
-            cb = fig.colorbar(im, ax=ax[ri, :].tolist(), fraction=0.012, pad=0.01)
-            cb.ax.tick_params(labelsize=6)
-        ttl = ("physical mass marginals (shared linear scale per row, true peak shown)"
-               if variant == "physical" else
-               "normalized shape (each panel scaled to its own peak)")
-        fig.suptitle(f"Radial state evolution (M={S['M']:g}, K={S['K_dyn']}, seed={S['seed']}): "
-                     + ttl, fontsize=7.5)
+                    ax.set_title(rf"$t={times[ci]:.2f}$", fontsize=7, pad=2)
+                ax.text(0.04, 0.91, f"max={_fmt_tick(panel_max)}", transform=ax.transAxes,
+                        fontsize=4.8, color="w",
+                        bbox=dict(facecolor="k", edgecolor="none", alpha=0.45, pad=0.6))
+                ax.set_xticks([-2, 0, 2]); ax.set_yticks([-2, 0, 2])
+                if ri == 0:
+                    ax.set_xticklabels([])
+                if ci != 0:
+                    ax.set_yticklabels([])
+                ax.tick_params(labelsize=5.4, length=2, pad=1)
+                ax.grid(False)
+                cb = fig.colorbar(im, cax=cax)
+                cb.set_ticks([])
         suffix = "" if variant == "physical" else "_normalized"
         fd = os.path.join(out_root, "figures"); os.makedirs(fd, exist_ok=True)
         for e in ("pdf", "png"):
-            fig.savefig(os.path.join(fd, f"{prefix}{suffix}.{e}"), dpi=200, bbox_inches="tight")
+            with mpl.rc_context({"savefig.bbox": "standard"}):
+                fig.savefig(os.path.join(fd, f"{prefix}{suffix}.{e}"), dpi=200)
         plt.close(fig)
 
 
