@@ -54,6 +54,10 @@ DEF_PART = os.path.join(KS, "solver_field_tb_20260614_2256_0293dd7", "current_fo
 DEF_OUT = os.path.join(_REPO, "paper", "cmame", "figure")
 DEF_PLOTDATA = os.path.join(KS, "plot_data")
 CMAP = "viridis"
+TITLE_FONTSIZE = 9.0
+ROW_LABEL_FONTSIZE = 9.0
+CBAR_LABEL_FONTSIZE = 8.5
+CBAR_TICK_FONTSIZE = 8.0
 # core mass-quantile radii to overlay (solid, dashed).  The snapshot run logs
 # R_0.1/0.2/0.5/0.8/0.9 (ordered-particle-distance radii) but NOT R_0.3, so we use
 # R_0.2 and R_0.5; R_0.5 is the half-mass radius the later T_core analysis uses.
@@ -233,7 +237,7 @@ def _fmt_t(t):
 
 
 def figure_log(W, panels, overlays, times, out_stem, plotdata, rq=True):
-    """Version 1: log10(1+u), one shared global colorbar."""
+    """Version 1: log10(1+u), one shared horizontal global colorbar."""
     cps.apply_style()
     n = len(times)
     gmax = 0.0
@@ -245,7 +249,7 @@ def figure_log(W, panels, overlays, times, out_stem, plotdata, rq=True):
     vmin, vmax = 0.0, float(np.log10(1.0 + gmax))
 
     fw = cps.TEXTWIDTH_IN
-    fh = fw * (2.0 / n) * 1.04 + 0.30
+    fh = fw * (2.0 / n) * 1.04 + 0.48
     fig, axes = plt.subplots(2, n, figsize=(fw, fh), squeeze=False)
     im = None
     for i, row in enumerate(("ldg", "part")):
@@ -263,14 +267,14 @@ def figure_log(W, panels, overlays, times, out_stem, plotdata, rq=True):
                 c, Rq = overlays[row][t] if row == "ldg" else overlays["part"][t]
                 add_rq_overlay(ax, c, Rq)
             if i == 0:
-                ax.set_title(_fmt_t(t), fontsize=8, pad=3)
+                ax.set_title(_fmt_t(t), fontsize=TITLE_FONTSIZE, pad=3)
             if j == 0:
-                ax.set_ylabel(ROW_LABEL[row], fontsize=8)
-    fig.subplots_adjust(left=0.085, right=0.88, top=0.90, bottom=0.03, wspace=0.06, hspace=0.06)
-    cax = fig.add_axes([0.895, 0.06, 0.02, 0.84])
-    cb = fig.colorbar(im, cax=cax)
-    cb.set_label(r"$\log_{10}(1+u)$", fontsize=8)
-    cb.ax.tick_params(labelsize=7)
+                ax.set_ylabel(ROW_LABEL[row], fontsize=ROW_LABEL_FONTSIZE)
+    fig.subplots_adjust(left=0.09, right=0.995, top=0.90, bottom=0.19, wspace=0.06, hspace=0.06)
+    cax = fig.add_axes([0.16, 0.065, 0.72, 0.030])
+    cb = fig.colorbar(im, cax=cax, orientation="horizontal")
+    cb.set_label(r"$\log_{10}(1+u)$", fontsize=CBAR_LABEL_FONTSIZE)
+    cb.ax.tick_params(labelsize=CBAR_TICK_FONTSIZE)
     cps.savefig_multi(fig, out_stem, close=False)
     plt.close(fig)
     np.savez(plotdata,
@@ -315,17 +319,17 @@ def figure_linear(W, panels, overlays, times, out_stem, rq=True):
                 c, Rq = overlays[row][t] if row == "ldg" else overlays["part"][t]
                 add_rq_overlay(ax, c, Rq)
             if i == 0:
-                ax.set_title(_fmt_t(t), fontsize=8, pad=3)
+                ax.set_title(_fmt_t(t), fontsize=TITLE_FONTSIZE, pad=3)
             if j == 0:
-                ax.set_ylabel(ROW_LABEL[row], fontsize=8)
+                ax.set_ylabel(ROW_LABEL[row], fontsize=ROW_LABEL_FONTSIZE)
     fig.subplots_adjust(left=0.085, right=0.985, top=0.88, bottom=0.14, wspace=0.06, hspace=0.06)
     # one slim horizontal colorbar under each column (column-wise scale)
     for j, t in enumerate(times):
         p = axes[1][j].get_position()
         cax = fig.add_axes([p.x0, 0.075, p.width, 0.025])
         cb = fig.colorbar(ims[(1, j)], cax=cax, orientation="horizontal")
-        cb.ax.tick_params(labelsize=6)
-        cb.set_label(rf"$u$  (max ${col_vmax[t]:.2g}$)", fontsize=6.5)
+        cb.ax.tick_params(labelsize=7)
+        cb.set_label(rf"$u$  (max ${col_vmax[t]:.2g}$)", fontsize=7.5)
     cps.savefig_multi(fig, out_stem, close=False)
     plt.close(fig)
     return col_vmax
@@ -353,7 +357,8 @@ def write_readme(path, args, times, W, vmax_log, col_vmax, part_dir, ldg_npz):
         f.write("- The particle Fourier reconstruction rings NEGATIVE near the steep core; for "
                 "DISPLAY ONLY u is clipped at 0 (max(u,0)).  R_q radii and the centroid are "
                 "reconstruction-free and are not clipped.\n")
-        f.write(f"- Version 1 (manuscript): log10(1+u), one shared colorbar, vmax={vmax_log:.3f}.\n")
+        f.write(f"- Version 1 (manuscript): log10(1+u), one shared horizontal colorbar, "
+                f"vmax={vmax_log:.3f}.\n")
         f.write("- Version 2 (diagnostic, *_linear_colscale): per-column linear scale, "
                 "particle vmax taken at the 99.9 percentile to avoid a lone ringing spike; "
                 "column maxima:\n")
