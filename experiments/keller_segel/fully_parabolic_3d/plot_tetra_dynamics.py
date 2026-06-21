@@ -5,7 +5,6 @@ production diagnostics only.  This script never runs the solver and never
 reconstructs particles from centroids or radii.
 """
 import argparse
-import itertools
 import os
 import sys
 
@@ -19,6 +18,7 @@ EXP = os.path.abspath(os.path.join(HERE, "..", ".."))
 if EXP not in sys.path:
     sys.path.insert(0, EXP)
 from paper_style import TEXTWIDTH_IN, apply_style  # noqa: E402
+import diagnostics_pp3d as D  # noqa: E402
 import vc_load as V  # noqa: E402
 
 apply_style()
@@ -104,30 +104,38 @@ def add_curve(ax, ens, label, color, band=True):
         ax.fill_between(t, lo, hi, color=color, alpha=0.18, lw=0)
 
 
-def load_snapshot(path, target_time):
+def load_snapshots(path, target_times):
     d = np.load(path)
     times = np.asarray(d["times"], dtype=float)
     if times.size == 0:
         raise SystemExit(f"no snapshot times in {path}")
-    idx = int(np.argmin(np.abs(times - target_time)))
-    if not np.isclose(times[idx], target_time, atol=1e-10, rtol=0.0):
-        raise SystemExit(
-            f"snapshot {path} has no time {target_time:g}; available {times.tolist()}"
-        )
-    X = np.asarray(d[f"u_{idx}"], dtype=float)
     labels = np.asarray(d["labels"], dtype=int)
-    if X.ndim != 2 or X.shape[1] != 3 or labels.shape[0] != X.shape[0]:
-        raise SystemExit(f"bad snapshot shapes: X={X.shape}, labels={labels.shape}")
+    clouds = []
+    matched_times = []
+    matched_indices = []
+    for target_time in target_times:
+        idx = int(np.argmin(np.abs(times - target_time)))
+        if not np.isclose(times[idx], target_time, atol=1e-10, rtol=0.0):
+            raise SystemExit(
+                f"snapshot {path} has no time {target_time:g}; "
+                f"available {times.tolist()}"
+            )
+        X = np.asarray(d[f"u_{idx}"], dtype=float)
+        if X.ndim != 2 or X.shape[1] != 3 or labels.shape[0] != X.shape[0]:
+            raise SystemExit(f"bad snapshot shapes: X={X.shape}, labels={labels.shape}")
+        clouds.append(X)
+        matched_times.append(float(times[idx]))
+        matched_indices.append(idx)
     return {
         "path": path,
-        "time": float(times[idx]),
-        "time_index": idx,
-        "X": X,
+        "times": np.array(matched_times, dtype=float),
+        "time_indices": np.array(matched_indices, dtype=int),
+        "clouds": clouds,
         "labels": labels,
         "L": float(d["L"]),
         "a": float(d["a"]),
         "M": float(d["M"]),
-        "N": int(X.shape[0]),
+        "N": int(clouds[0].shape[0]),
         "K": int(d["K"]),
         "tau": float(d["tau"]),
         "chi": float(d["chi"]),
@@ -149,76 +157,121 @@ def deterministic_subsample(labels, per_cluster, seed):
     return np.concatenate(pieces)
 
 
-def displayed_cube(X, vertices, L, min_fraction=0.99):
-    half = max(1.25 * float(np.max(np.abs(vertices))), 1.5)
-    max_half = 0.5 * float(L)
-    while True:
-        inside = np.all((X >= -half) & (X <= half), axis=1)
-        fraction = float(np.mean(inside))
-        if fraction >= min_fraction or half >= max_half:
-            break
-        half = min(max_half, half + 0.25)
-    return (-half, half), fraction
+def unit(v):
+    n = float(np.linalg.norm(v))
+    if n == 0.0:
+        raise ValueError("zero vector")
+    return np.asarray(v, dtype=float) / n
 
 
-def plot_particle_panel(ax, snapshot, per_cluster, subsample_seed):
-    X = snapshot["X"]
-    labels = snapshot["labels"]
-    a = snapshot["a"]
-    L = snapshot["L"]
-    vertices = a * np.array(
-        [[1.0, 1.0, 1.0],
-         [1.0, -1.0, -1.0],
-         [-1.0, 1.0, -1.0],
-         [-1.0, -1.0, 1.0]]
-    )
-    scatter_indices = deterministic_subsample(labels, per_cluster, subsample_seed)
-    scatter_xyz = X[scatter_indices]
-    scatter_labels = labels[scatter_indices]
-    (lo, hi), inside_fraction = displayed_cube(X, vertices, L)
+def tangent_basis(n):
+    n = unit(n)
+    ref = np.array([1.0, 0.0, 0.0])
+    if abs(float(np.dot(ref, n))) > 0.85:
+        ref = np.array([0.0, 1.0, 0.0])
+    e1 = unit(ref - float(np.dot(ref, n)) * n)
+    e2 = unit(np.cross(n, e1))
+    return e1, e2
 
-    ax.set_proj_type("ortho")
-    for i, j in itertools.combinations(range(4), 2):
-        ax.plot(
-            [vertices[i, 0], vertices[j, 0]],
-            [vertices[i, 1], vertices[j, 1]],
-            [vertices[i, 2], vertices[j, 2]],
-            color="0.70",
-            lw=0.55,
-            ls="--",
-            zorder=0,
-        )
+
+def fibonacci_sphere(count):
+    i = np.arange(count, dtype=float)
+    z = 1.0 - 2.0 * (i + 0.5) / count
+    phi = i * np.pi * (3.0 - np.sqrt(5.0))
+    r = np.sqrt(np.maximum(0.0, 1.0 - z * z))
+    return np.column_stack((r * np.cos(phi), r * np.sin(phi), z))
+
+
+def min_projected_centroid_distance(centroids, n):
+    n = unit(n)
+    vals = []
+    for i in range(centroids.shape[0]):
+        for j in range(i + 1, centroids.shape[0]):
+            d = centroids[j] - centroids[i]
+            sq = float(np.dot(d, d) - np.dot(d, n) ** 2)
+            vals.append(np.sqrt(max(sq, 0.0)))
+    return float(min(vals))
+
+
+def choose_projection_basis(initial_centroids):
+    candidates = [
+        fibonacci_sphere(24000),
+        np.eye(3),
+        -np.eye(3),
+        np.array([unit(v) for v in initial_centroids - initial_centroids.mean(axis=0)]),
+    ]
+    dirs = np.vstack(candidates)
+    scores = np.array([min_projected_centroid_distance(initial_centroids, n)
+                       for n in dirs])
+    best = unit(dirs[int(np.argmax(scores))])
+    best_score = float(np.max(scores))
+
+    for step in (0.20, 0.08, 0.03, 0.012, 0.004):
+        e1, e2 = tangent_basis(best)
+        offsets = np.linspace(-step, step, 17)
+        local = []
+        for a in offsets:
+            for b in offsets:
+                local.append(unit(best + a * e1 + b * e2))
+        local = np.array(local)
+        scores = np.array([min_projected_centroid_distance(initial_centroids, n)
+                           for n in local])
+        idx = int(np.argmax(scores))
+        if float(scores[idx]) > best_score:
+            best = local[idx]
+            best_score = float(scores[idx])
+
+    # Orient the plotting basis by the widest projected centroid pair.
+    best = unit(best)
+    pair_vec = None
+    pair_norm = -np.inf
+    for i in range(initial_centroids.shape[0]):
+        for j in range(i + 1, initial_centroids.shape[0]):
+            d = initial_centroids[j] - initial_centroids[i]
+            p = d - float(np.dot(d, best)) * best
+            pn = float(np.linalg.norm(p))
+            if pn > pair_norm:
+                pair_norm = pn
+                pair_vec = p
+    e1 = unit(pair_vec)
+    e2 = unit(np.cross(best, e1))
+    origin = initial_centroids.mean(axis=0)
+    if float(np.dot(initial_centroids[0] - origin, e2)) < 0.0:
+        e2 = -e2
+    basis = np.vstack((e1, e2))
+    return basis, best, origin, best_score
+
+
+def project_points(X, basis, origin):
+    return (X - origin) @ basis.T
+
+
+def square_limits(projected_sets, margin=0.045):
+    P = np.vstack(projected_sets)
+    mins = P.min(axis=0)
+    maxs = P.max(axis=0)
+    center = 0.5 * (mins + maxs)
+    half = 0.5 * float(np.max(maxs - mins))
+    half *= 1.0 + margin
+    return np.array([center[0] - half, center[0] + half,
+                     center[1] - half, center[1] + half])
+
+
+def plot_snapshot(ax, projected, labels, centroids_projected, indices, title):
+    pts_all = projected[indices]
+    labels_all = labels[indices]
     for m in range(4):
-        pts = scatter_xyz[scatter_labels == m]
+        pts = pts_all[labels_all == m]
         color = CLUSTER_COLORS[m]
-        ax.scatter(pts[:, 0], pts[:, 1], pts[:, 2], s=1.7, color=color,
-                   alpha=0.34, linewidths=0, depthshade=False,
-                   rasterized=True, label=rf"$m={m + 1}$")
-    ax.scatter(vertices[:, 0], vertices[:, 1], vertices[:, 2],
-               s=24, marker="o", facecolors="none", edgecolors="k",
-               linewidths=0.65, depthshade=False, rasterized=False)
-
-    ax.set_xlim(lo, hi); ax.set_ylim(lo, hi); ax.set_zlim(lo, hi)
-    ax.set_box_aspect((1.0, 1.0, 1.0))
-    ax.view_init(elev=18, azim=38)
-    ax.set_title(r"(a) Active cell particles" "\n" r"at $T=3$",
-                 linespacing=0.9, pad=1.0)
-    ax.set_xlabel(r"$x$", labelpad=-4)
-    ax.set_ylabel(r"$y$", labelpad=-4)
-    ax.set_zlabel(r"$z$", labelpad=-6)
-    ticks = [-5, 0, 5] if hi >= 5.0 else [-2, 0, 2]
-    ax.set_xticks(ticks); ax.set_yticks(ticks); ax.set_zticks(ticks)
-    ax.tick_params(axis="both", which="major", pad=-2)
-    ax.legend(loc="upper left", bbox_to_anchor=(-0.02, 0.98), handlelength=1.0,
-              borderaxespad=0.0, labelspacing=0.1)
-    return {
-        "indices": scatter_indices,
-        "xyz": scatter_xyz,
-        "labels": scatter_labels,
-        "vertices": vertices,
-        "axis_limits": np.array([lo, hi], dtype=float),
-        "inside_fraction": inside_fraction,
-    }
+        ax.scatter(pts[:, 0], pts[:, 1], s=2.0, color=color, alpha=0.34,
+                   linewidths=0, rasterized=True)
+    ax.scatter(centroids_projected[:, 0], centroids_projected[:, 1],
+               marker="x", s=15, color="k", linewidths=0.7, rasterized=False)
+    ax.set_title(title, pad=1.0)
+    ax.set_xlabel(r"$p_1$")
+    ax.set_ylabel(r"$p_2$")
+    ax.set_aspect("equal", adjustable="box")
+    ax.grid(False)
 
 
 def main():
@@ -242,7 +295,7 @@ def main():
     ap.add_argument("--a", type=float, default=1.0)
     ap.add_argument("--representative_seed", type=int, default=0)
     ap.add_argument("--snapshot_time", type=float, default=3.0)
-    ap.add_argument("--subsample_per_cluster", type=int, default=1000)
+    ap.add_argument("--subsample_per_cluster", type=int, default=800)
     ap.add_argument("--subsample_seed", type=int, default=24012026)
     ap.add_argument("--out_prefix", default="figure_tetra_particle_dynamics")
     args = ap.parse_args()
@@ -250,17 +303,17 @@ def main():
     runs = add_derived(V.load_runs(args.run_dir))
     if not runs:
         raise SystemExit(f"no tetra diagnostics found in {args.run_dir}")
-    snapshot = load_snapshot(args.clouds, args.snapshot_time)
-    if snapshot["seed"] != args.representative_seed:
+    snapshots = load_snapshots(args.clouds, [0.0, args.snapshot_time])
+    if snapshots["seed"] != args.representative_seed:
         raise SystemExit(
-            f"snapshot seed {snapshot['seed']} does not match "
+            f"snapshot seed {snapshots['seed']} does not match "
             f"representative seed {args.representative_seed}"
         )
-    if (snapshot["N"] != args.base_N or snapshot["K"] != args.base_K
-            or not np.isclose(snapshot["tau"], args.base_tau)
-            or not np.isclose(snapshot["M"], args.M)
-            or not np.isclose(snapshot["a"], args.a)
-            or not np.isclose(snapshot["chi"], 1.0)):
+    if (snapshots["N"] != args.base_N or snapshots["K"] != args.base_K
+            or not np.isclose(snapshots["tau"], args.base_tau)
+            or not np.isclose(snapshots["M"], args.M)
+            or not np.isclose(snapshots["a"], args.a)
+            or not np.isclose(snapshots["chi"], 1.0)):
         raise SystemExit("snapshot metadata do not match the requested production config")
 
     base = dict(N=args.base_N, K=args.base_K, tau=args.base_tau,
@@ -275,17 +328,36 @@ def main():
     active_r = normalized_ensemble(runs, active_sel, "R05_mean")
     control_r = normalized_ensemble(runs, control_sel, "R05_mean", tgrid=active_r["t"])
 
-    fig = plt.figure(figsize=(1.018 * TEXTWIDTH_IN, 0.49 * TEXTWIDTH_IN),
-                     constrained_layout=True)
-    gs = fig.add_gridspec(1, 3, width_ratios=(1.08, 1.0, 1.0),
-                          wspace=0.18)
-    ax0 = fig.add_subplot(gs[0, 0], projection="3d")
-    ax1 = fig.add_subplot(gs[0, 1])
-    ax2 = fig.add_subplot(gs[0, 2])
-
-    scatter = plot_particle_panel(
-        ax0, snapshot, args.subsample_per_cluster, args.subsample_seed
+    labels = snapshots["labels"]
+    X0, XT = snapshots["clouds"]
+    L = snapshots["L"]
+    c0 = D.cluster_centroids(X0, labels, 4, L)
+    cT = D.cluster_centroids(XT, labels, 4, L)
+    basis, view_direction, projection_origin, projection_score = choose_projection_basis(c0)
+    P0 = project_points(X0, basis, projection_origin)
+    PT = project_points(XT, basis, projection_origin)
+    C0 = project_points(c0, basis, projection_origin)
+    CT = project_points(cT, basis, projection_origin)
+    scatter_indices = deterministic_subsample(
+        labels, args.subsample_per_cluster, args.subsample_seed
     )
+    axis_limits = square_limits([P0, PT])
+
+    fig = plt.figure(figsize=(1.096 * TEXTWIDTH_IN, 0.86 * TEXTWIDTH_IN),
+                     constrained_layout=True)
+    gs = fig.add_gridspec(2, 2, height_ratios=(1.05, 1.0),
+                          hspace=0.10, wspace=0.17)
+    ax0 = fig.add_subplot(gs[0, 0])
+    axT = fig.add_subplot(gs[0, 1])
+    ax1 = fig.add_subplot(gs[1, 0])
+    ax2 = fig.add_subplot(gs[1, 1])
+
+    plot_snapshot(ax0, P0, labels, C0, scatter_indices, r"(a) Active particles, $t=0$")
+    plot_snapshot(axT, PT, labels, CT, scatter_indices, r"Active particles, $t=3$")
+    for ax in (ax0, axT):
+        ax.set_xlim(axis_limits[0], axis_limits[1])
+        ax.set_ylim(axis_limits[2], axis_limits[3])
+        ax.tick_params(labelsize=5.4, length=2.0, pad=1.0)
 
     add_curve(ax1, active_d, r"chemotaxis, $\chi=1$", ACTIVE_COLOR)
     add_curve(ax1, control_d, r"diffusion control, $\chi=0$", CONTROL_COLOR)
@@ -340,16 +412,25 @@ def main():
         "M": args.M,
         "a": args.a,
         "representative_seed": args.representative_seed,
-        "snapshot_time": snapshot["time"],
+        "snapshot_times": snapshots["times"],
         "snapshot_path": np.array(args.clouds),
         "subsample_per_cluster": args.subsample_per_cluster,
         "subsample_seed": args.subsample_seed,
-        "panel_a_scatter_indices": scatter["indices"],
-        "panel_a_scatter_xyz": scatter["xyz"],
-        "panel_a_scatter_labels": scatter["labels"],
-        "panel_a_initial_vertices": scatter["vertices"],
-        "panel_a_axis_limits": scatter["axis_limits"],
-        "panel_a_cloud_fraction_inside_axes": scatter["inside_fraction"],
+        "projection_basis": basis,
+        "projection_origin": projection_origin,
+        "projection_view_direction": view_direction,
+        "projection_min_initial_centroid_separation": projection_score,
+        "panel_a_scatter_indices": scatter_indices,
+        "panel_a_scatter_labels": labels[scatter_indices],
+        "panel_a_t0_full_projected": P0,
+        "panel_a_t3_full_projected": PT,
+        "panel_a_t0_projected": P0[scatter_indices],
+        "panel_a_t3_projected": PT[scatter_indices],
+        "panel_a_t0_centroids_3d": c0,
+        "panel_a_t3_centroids_3d": cT,
+        "panel_a_t0_centroids_projected": C0,
+        "panel_a_t3_centroids_projected": CT,
+        "panel_a_axis_limits": axis_limits,
         "panel_b_active_t": active_d["t"],
         "panel_b_active_mean": active_d["mean"],
         "panel_b_active_std": active_d["std"],
@@ -386,7 +467,7 @@ def main():
     print(
         f"panel (a): active seed {args.representative_seed}, "
         f"{args.subsample_per_cluster} particles per cluster, "
-        f"cloud fraction inside displayed axes={scatter['inside_fraction']:.5f}"
+        f"projection min initial centroid separation={projection_score:.4f}"
     )
     print(
         f"panel (b) final ratios: active={active_d['mean'][-1]:.3f}, "
