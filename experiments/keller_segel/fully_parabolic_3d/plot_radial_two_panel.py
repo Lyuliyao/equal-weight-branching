@@ -22,11 +22,11 @@ from plot_radial_response import load, _match  # noqa: E402
 
 apply_style()
 mpl.rcParams.update({
-    "axes.titlesize": 7.2,
-    "axes.labelsize": 7.0,
-    "xtick.labelsize": 6.2,
-    "ytick.labelsize": 6.2,
-    "legend.fontsize": 6.2,
+    "axes.titlesize": 5.9,
+    "axes.labelsize": 6.0,
+    "xtick.labelsize": 5.5,
+    "ytick.labelsize": 5.5,
+    "legend.fontsize": 5.1,
 })
 
 
@@ -104,31 +104,33 @@ def main():
         for N in refine_Ns
     }
 
-    fig, ax = plt.subplots(1, 2, figsize=(TEXTWIDTH_IN, 0.58 * TEXTWIDTH_IN),
-                           sharey=False)
+    fig_w = 0.5 * TEXTWIDTH_IN
+    fig, ax = plt.subplots(1, 2, figsize=(fig_w, 0.68 * fig_w), sharey=False)
 
     colors_a = {Mw: "#1f77b4", Md: "#d62728"}
     add_curve(ax[0], weak, rf"$M={Mw:g}$", colors_a[Mw])
     add_curve(ax[0], delayed, rf"$M={Md:g}$", colors_a[Md])
-    ax[0].set_title("(a) Diffusion and delayed focusing")
+    ax[0].set_title("(a) Diffusion and\ndelayed focusing", linespacing=0.9, pad=1.0)
     ax[0].set_xlabel(r"$t$")
     ax[0].set_ylabel(r"$R_{0.5}(t)/R_{0.5}(0)$")
-    ax[0].legend(loc="best", handlelength=1.5)
+    ax[0].legend(loc="lower right", handlelength=1.1, labelspacing=0.2,
+                 borderaxespad=0.2)
 
     colors_b = ["#4c78a8", "#f58518", "#54a24b", "#b279a2"]
     for color, N in zip(colors_b, refine_Ns):
         if N == 20000:
-            label = r"$N=2\times 10^4$"
+            label = r"$2\times10^4$"
         elif N == 100000:
-            label = r"$N=10^5$"
+            label = r"$10^5$"
         elif N == 320000:
-            label = r"$N=3.2\times 10^5$"
+            label = r"$3.2\times10^5$"
         else:
             label = rf"$N={N:g}$"
         add_curve(ax[1], refine[N], label, color)
-    ax[1].set_title("(b) Particle-number refinement")
+    ax[1].set_title("(b) Particle-number\nrefinement", linespacing=0.9, pad=1.0)
     ax[1].set_xlabel(r"$t$")
-    ax[1].legend(loc="best", handlelength=1.5)
+    ax[1].legend(title=r"$N$", loc="upper right", handlelength=1.1,
+                 labelspacing=0.2, borderaxespad=0.2, title_fontsize=5.1)
 
     for a in ax:
         a.axhline(1.0, color="0.35", lw=0.7, ls=":")
@@ -138,7 +140,7 @@ def main():
     ax[0].set_ylim(0.15, 4.05)
     ax[1].set_ylim(0.15, 1.35)
 
-    fig.tight_layout(pad=0.35, w_pad=0.8)
+    fig.tight_layout(pad=0.18, w_pad=0.55)
 
     fig_dir = os.path.join(args.run_dir, "figures")
     os.makedirs(fig_dir, exist_ok=True)
