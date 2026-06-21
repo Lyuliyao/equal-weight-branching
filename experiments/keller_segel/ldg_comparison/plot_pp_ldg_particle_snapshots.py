@@ -354,6 +354,8 @@ def write_readme(path, args, times, W, vmax_log, col_vmax, part_dir, ldg_npz):
                 "field covers the view at every time.\n")
         f.write("- Particle field is a core-adaptive WINDOW Fourier reconstruction; the LDG field "
                 "is the full-domain positivity-preserving solution.\n")
+        f.write(f"- If particle KDE display is used, Gaussian bandwidth h = "
+                f"{args.kde_h_frac:g} W = {args.kde_h_frac * W:.4g}.\n")
         f.write("- The particle Fourier reconstruction rings NEGATIVE near the steep core; for "
                 "DISPLAY ONLY u is clipped at 0 (max(u,0)).  R_q radii and the centroid are "
                 "reconstruction-free and are not clipped.\n")
@@ -384,7 +386,7 @@ def main():
                     help="auto: KDE if the snapshot saved the cloud (X_u), else the saved "
                          "spectral P_K-mu field.  kde: force nonnegative Gaussian KDE.  "
                          "spectral: force the saved current_fourier readout.")
-    ap.add_argument("--kde_h_frac", type=float, default=0.06,
+    ap.add_argument("--kde_h_frac", type=float, default=0.02,
                     help="KDE bandwidth as a fraction of the view half-width W.")
     ap.add_argument("--kde_ngrid", type=int, default=221)
     ap.add_argument("--view_W", type=float, default=None,
