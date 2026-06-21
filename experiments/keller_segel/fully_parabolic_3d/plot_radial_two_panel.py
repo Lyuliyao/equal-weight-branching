@@ -104,8 +104,8 @@ def main():
         for N in refine_Ns
     }
 
-    fig, ax = plt.subplots(1, 2, figsize=(TEXTWIDTH_IN, 0.44 * TEXTWIDTH_IN),
-                           sharey=True)
+    fig, ax = plt.subplots(1, 2, figsize=(TEXTWIDTH_IN, 0.58 * TEXTWIDTH_IN),
+                           sharey=False)
 
     colors_a = {Mw: "#1f77b4", Md: "#d62728"}
     add_curve(ax[0], weak, rf"$M={Mw:g}$", colors_a[Mw])
@@ -133,10 +133,12 @@ def main():
     for a in ax:
         a.axhline(1.0, color="0.35", lw=0.7, ls=":")
         a.set_xlim(0, 2.0)
-        a.set_ylim(0.15, 4.05)
+        a.set_box_aspect(1)
         a.grid(True, alpha=0.28)
+    ax[0].set_ylim(0.15, 4.05)
+    ax[1].set_ylim(0.15, 1.35)
 
-    fig.tight_layout(pad=0.35, w_pad=1.0)
+    fig.tight_layout(pad=0.35, w_pad=0.8)
 
     fig_dir = os.path.join(args.run_dir, "figures")
     os.makedirs(fig_dir, exist_ok=True)
