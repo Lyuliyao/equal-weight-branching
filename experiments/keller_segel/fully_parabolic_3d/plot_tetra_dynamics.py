@@ -1,9 +1,8 @@
 """Create the manuscript tetrahedral 3D Keller--Segel dynamics figure.
 
-The script reads existing diagnostics.csv files only.  It never runs the
-solver.  The main-panel observables are restricted to centroid trajectories,
-normalized minimum centroid separation, and normalized mean per-cluster
-half-mass radius.
+Panel (a) uses a saved raw u-particle snapshot.  Panels (b)--(c) use archived
+production diagnostics only.  This script never runs the solver and never
+reconstructs particles from centroids or radii.
 """
 import argparse
 import itertools
@@ -86,31 +85,10 @@ def normalized_ensemble(runs, sel, col, tgrid=None, tmax=None):
         "t": tg,
         "mean": Y.mean(axis=0),
         "std": Y.std(axis=0) if Y.shape[0] > 1 else np.zeros_like(tg),
+        "values": Y,
         "nseed": Y.shape[0],
         "seeds": np.array(seeds, dtype=int),
     }
-
-
-def reliable_tmax(control_runs, threshold):
-    if any("A_min" not in r["cols"] for r in control_runs):
-        missing = [r["seed"] for r in control_runs if "A_min" not in r["cols"]]
-        raise SystemExit(
-            "control reliability A_min is required for panel (b); "
-            f"missing for seeds {missing}"
-        )
-
-    tg = np.asarray(control_runs[0]["cols"]["t"], dtype=float)
-    A = np.vstack([
-        np.interp(tg, r["cols"]["t"], r["cols"]["A_min"])
-        for r in control_runs
-    ])
-    ok = np.all(A >= threshold, axis=0)
-    if not bool(ok[0]):
-        return float(tg[0])
-    first_bad = np.flatnonzero(~ok)
-    if first_bad.size:
-        return float(tg[max(int(first_bad[0]) - 1, 0)])
-    return float(tg[-1])
 
 
 def add_curve(ax, ens, label, color, band=True):
@@ -126,82 +104,164 @@ def add_curve(ax, ens, label, color, band=True):
         ax.fill_between(t, lo, hi, color=color, alpha=0.18, lw=0)
 
 
-def set_equal_3d_limits(ax, xyz, pad=0.08):
-    mins = xyz.min(axis=0)
-    maxs = xyz.max(axis=0)
-    center = 0.5 * (mins + maxs)
-    radius = 0.5 * float(np.max(maxs - mins))
-    radius = radius * (1.0 + pad) if radius > 0.0 else 1.0
-    ax.set_xlim(center[0] - radius, center[0] + radius)
-    ax.set_ylim(center[1] - radius, center[1] + radius)
-    ax.set_zlim(center[2] - radius, center[2] + radius)
-    ax.set_box_aspect((1.0, 1.0, 1.0))
+def load_snapshot(path, target_time):
+    d = np.load(path)
+    times = np.asarray(d["times"], dtype=float)
+    if times.size == 0:
+        raise SystemExit(f"no snapshot times in {path}")
+    idx = int(np.argmin(np.abs(times - target_time)))
+    if not np.isclose(times[idx], target_time, atol=1e-10, rtol=0.0):
+        raise SystemExit(
+            f"snapshot {path} has no time {target_time:g}; available {times.tolist()}"
+        )
+    X = np.asarray(d[f"u_{idx}"], dtype=float)
+    labels = np.asarray(d["labels"], dtype=int)
+    if X.ndim != 2 or X.shape[1] != 3 or labels.shape[0] != X.shape[0]:
+        raise SystemExit(f"bad snapshot shapes: X={X.shape}, labels={labels.shape}")
+    return {
+        "path": path,
+        "time": float(times[idx]),
+        "time_index": idx,
+        "X": X,
+        "labels": labels,
+        "L": float(d["L"]),
+        "a": float(d["a"]),
+        "M": float(d["M"]),
+        "N": int(X.shape[0]),
+        "K": int(d["K"]),
+        "tau": float(d["tau"]),
+        "chi": float(d["chi"]),
+        "seed": int(d["seed"]),
+    }
 
 
-def plot_centroid_panel(ax, run):
-    c = run["cols"]
-    trajectories = []
-    initials = []
-    finals = []
+def deterministic_subsample(labels, per_cluster, seed):
+    rng = np.random.default_rng(seed)
+    pieces = []
     for m in range(4):
-        xyz = np.column_stack((c[f"c{m}_x"], c[f"c{m}_y"], c[f"c{m}_z"]))
-        trajectories.append(xyz)
-        initials.append(xyz[0])
-        finals.append(xyz[-1])
+        pool = np.flatnonzero(labels == m)
+        if pool.size < per_cluster:
+            raise SystemExit(
+                f"cluster {m} has only {pool.size} particles; need {per_cluster}"
+            )
+        chosen = rng.choice(pool, size=per_cluster, replace=False)
+        pieces.append(np.sort(chosen))
+    return np.concatenate(pieces)
 
-    initials = np.asarray(initials)
+
+def displayed_cube(X, vertices, L, min_fraction=0.99):
+    half = max(1.25 * float(np.max(np.abs(vertices))), 1.5)
+    max_half = 0.5 * float(L)
+    while True:
+        inside = np.all((X >= -half) & (X <= half), axis=1)
+        fraction = float(np.mean(inside))
+        if fraction >= min_fraction or half >= max_half:
+            break
+        half = min(max_half, half + 0.25)
+    return (-half, half), fraction
+
+
+def plot_particle_panel(ax, snapshot, per_cluster, subsample_seed):
+    X = snapshot["X"]
+    labels = snapshot["labels"]
+    a = snapshot["a"]
+    L = snapshot["L"]
+    vertices = a * np.array(
+        [[1.0, 1.0, 1.0],
+         [1.0, -1.0, -1.0],
+         [-1.0, 1.0, -1.0],
+         [-1.0, -1.0, 1.0]]
+    )
+    scatter_indices = deterministic_subsample(labels, per_cluster, subsample_seed)
+    scatter_xyz = X[scatter_indices]
+    scatter_labels = labels[scatter_indices]
+    (lo, hi), inside_fraction = displayed_cube(X, vertices, L)
+
+    ax.set_proj_type("ortho")
     for i, j in itertools.combinations(range(4), 2):
         ax.plot(
-            [initials[i, 0], initials[j, 0]],
-            [initials[i, 1], initials[j, 1]],
-            [initials[i, 2], initials[j, 2]],
-            color="0.76",
+            [vertices[i, 0], vertices[j, 0]],
+            [vertices[i, 1], vertices[j, 1]],
+            [vertices[i, 2], vertices[j, 2]],
+            color="0.70",
             lw=0.55,
+            ls="--",
             zorder=0,
         )
-
-    for m, xyz in enumerate(trajectories):
+    for m in range(4):
+        pts = scatter_xyz[scatter_labels == m]
         color = CLUSTER_COLORS[m]
-        ax.plot(xyz[:, 0], xyz[:, 1], xyz[:, 2], color=color, lw=1.15,
-                label=rf"$m={m + 1}$")
-        ax.scatter(xyz[0, 0], xyz[0, 1], xyz[0, 2], s=15, marker="o",
-                   color=color, edgecolor="0.15", linewidth=0.25, depthshade=False)
-        ax.scatter(xyz[-1, 0], xyz[-1, 1], xyz[-1, 2], s=22, marker="^",
-                   color=color, edgecolor="0.15", linewidth=0.25, depthshade=False)
+        ax.scatter(pts[:, 0], pts[:, 1], pts[:, 2], s=1.7, color=color,
+                   alpha=0.34, linewidths=0, depthshade=False,
+                   rasterized=True, label=rf"$m={m + 1}$")
+    ax.scatter(vertices[:, 0], vertices[:, 1], vertices[:, 2],
+               s=24, marker="o", facecolors="none", edgecolors="k",
+               linewidths=0.65, depthshade=False, rasterized=False)
 
-    all_xyz = np.vstack(trajectories)
-    set_equal_3d_limits(ax, all_xyz)
+    ax.set_xlim(lo, hi); ax.set_ylim(lo, hi); ax.set_zlim(lo, hi)
+    ax.set_box_aspect((1.0, 1.0, 1.0))
     ax.view_init(elev=18, azim=38)
-    ax.set_title("(a) Cluster-centroid\ntrajectories", linespacing=0.9, pad=1.0)
+    ax.set_title(r"(a) Active cell particles" "\n" r"at $T=3$",
+                 linespacing=0.9, pad=1.0)
     ax.set_xlabel(r"$x$", labelpad=-4)
     ax.set_ylabel(r"$y$", labelpad=-4)
     ax.set_zlabel(r"$z$", labelpad=-6)
+    ticks = [-5, 0, 5] if hi >= 5.0 else [-2, 0, 2]
+    ax.set_xticks(ticks); ax.set_yticks(ticks); ax.set_zticks(ticks)
     ax.tick_params(axis="both", which="major", pad=-2)
-    ax.legend(loc="upper left", bbox_to_anchor=(0.0, 0.98), handlelength=1.0,
+    ax.legend(loc="upper left", bbox_to_anchor=(-0.02, 0.98), handlelength=1.0,
               borderaxespad=0.0, labelspacing=0.1)
+    return {
+        "indices": scatter_indices,
+        "xyz": scatter_xyz,
+        "labels": scatter_labels,
+        "vertices": vertices,
+        "axis_limits": np.array([lo, hi], dtype=float),
+        "inside_fraction": inside_fraction,
+    }
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--run_dir", required=True,
-                    help="directory containing tetra baseline diagnostics")
+                    help="directory containing archived tetra production diagnostics")
+    ap.add_argument("--clouds", required=True,
+                    help="saved u-cloud snapshot NPZ from the representative active run")
     ap.add_argument("--out_root", required=True,
                     help="reference result root for figures/ and plot_data/")
     ap.add_argument("--paper_out", default=None,
-                    help="optional manuscript PDF path, e.g. paper/figure/ks3d_tetra.pdf")
+                    help="optional manuscript PDF path")
+    ap.add_argument("--paper_png", default=None,
+                    help="optional manuscript PNG path")
+    ap.add_argument("--trace_out", default=None,
+                    help="optional traceability NPZ path")
     ap.add_argument("--base_N", type=int, default=80000)
     ap.add_argument("--base_K", type=int, default=12)
     ap.add_argument("--base_tau", type=float, default=1e-3)
     ap.add_argument("--M", type=float, default=240.0)
     ap.add_argument("--a", type=float, default=1.0)
     ap.add_argument("--representative_seed", type=int, default=0)
-    ap.add_argument("--reliability_threshold", type=float, default=0.2)
-    ap.add_argument("--out_prefix", default="figure_tetra_dynamics")
+    ap.add_argument("--snapshot_time", type=float, default=3.0)
+    ap.add_argument("--subsample_per_cluster", type=int, default=1000)
+    ap.add_argument("--subsample_seed", type=int, default=24012026)
+    ap.add_argument("--out_prefix", default="figure_tetra_particle_dynamics")
     args = ap.parse_args()
 
     runs = add_derived(V.load_runs(args.run_dir))
     if not runs:
         raise SystemExit(f"no tetra diagnostics found in {args.run_dir}")
+    snapshot = load_snapshot(args.clouds, args.snapshot_time)
+    if snapshot["seed"] != args.representative_seed:
+        raise SystemExit(
+            f"snapshot seed {snapshot['seed']} does not match "
+            f"representative seed {args.representative_seed}"
+        )
+    if (snapshot["N"] != args.base_N or snapshot["K"] != args.base_K
+            or not np.isclose(snapshot["tau"], args.base_tau)
+            or not np.isclose(snapshot["M"], args.M)
+            or not np.isclose(snapshot["a"], args.a)
+            or not np.isclose(snapshot["chi"], 1.0)):
+        raise SystemExit("snapshot metadata do not match the requested production config")
 
     base = dict(N=args.base_N, K=args.base_K, tau=args.base_tau,
                 M=args.M, a=args.a)
@@ -210,25 +270,10 @@ def main():
     active_runs = require_baseline(runs, active_sel, "active")
     control_runs = require_baseline(runs, control_sel, "control")
 
-    active_rep = next(
-        (r for r in active_runs if r["seed"] == args.representative_seed),
-        None,
-    )
-    if active_rep is None:
-        seeds = [r["seed"] for r in active_runs]
-        raise SystemExit(
-            f"representative active seed {args.representative_seed} not found; "
-            f"available seeds: {seeds}"
-        )
-
-    t_reliable = reliable_tmax(control_runs, args.reliability_threshold)
-    control_t = control_runs[0]["cols"]["t"]
-    panel_b_t = control_t[control_t <= t_reliable + 10.0 * np.finfo(float).eps]
-
-    active_d = normalized_ensemble(runs, active_sel, "d_min", tgrid=panel_b_t)
-    control_d = normalized_ensemble(runs, control_sel, "d_min", tgrid=panel_b_t)
+    active_d = normalized_ensemble(runs, active_sel, "d_min")
+    control_d = normalized_ensemble(runs, control_sel, "d_min", tgrid=active_d["t"])
     active_r = normalized_ensemble(runs, active_sel, "R05_mean")
-    control_r = normalized_ensemble(runs, control_sel, "R05_mean")
+    control_r = normalized_ensemble(runs, control_sel, "R05_mean", tgrid=active_r["t"])
 
     fig = plt.figure(figsize=(1.018 * TEXTWIDTH_IN, 0.49 * TEXTWIDTH_IN),
                      constrained_layout=True)
@@ -238,7 +283,9 @@ def main():
     ax1 = fig.add_subplot(gs[0, 1])
     ax2 = fig.add_subplot(gs[0, 2])
 
-    plot_centroid_panel(ax0, active_rep)
+    scatter = plot_particle_panel(
+        ax0, snapshot, args.subsample_per_cluster, args.subsample_seed
+    )
 
     add_curve(ax1, active_d, r"chemotaxis, $\chi=1$", ACTIVE_COLOR)
     add_curve(ax1, control_d, r"diffusion control, $\chi=0$", CONTROL_COLOR)
@@ -246,7 +293,7 @@ def main():
     ax1.set_title("(b) Inter-cluster\nattraction", linespacing=0.9, pad=1.0)
     ax1.set_xlabel(r"$t$")
     ax1.set_ylabel(r"$d_{\min}(t)/d_{\min}(0)$")
-    ax1.set_xlim(float(panel_b_t[0]), float(panel_b_t[-1]))
+    ax1.set_xlim(float(active_d["t"][0]), float(active_d["t"][-1]))
     ax1.legend(loc="lower left", handlelength=1.2, labelspacing=0.18,
                borderaxespad=0.2)
 
@@ -256,7 +303,7 @@ def main():
     ax2.axhline(1.0, color="0.35", lw=0.65, ls=":")
     ax2.set_title("(c) Individual-cluster\nfocusing", linespacing=0.9, pad=1.0)
     ax2.set_xlabel(r"$t$")
-    ax2.set_ylabel(r"$R_{0.5}(t)/R_{0.5}(0)$")
+    ax2.set_ylabel(r"$\overline{R}_{0.5}(t)/\overline{R}_{0.5}(0)$")
     ax2.set_xlim(float(active_r["t"][0]), float(active_r["t"][-1]))
     ax2.set_ylim(0.32, 14.0)
     ax2.text(control_r["t"][-1] * 0.98, control_r["mean"][-1],
@@ -278,10 +325,14 @@ def main():
     if args.paper_out:
         os.makedirs(os.path.dirname(args.paper_out), exist_ok=True)
         fig.savefig(args.paper_out, dpi=300, bbox_inches="tight", pad_inches=0.01)
+    if args.paper_png:
+        os.makedirs(os.path.dirname(args.paper_png), exist_ok=True)
+        fig.savefig(args.paper_png, dpi=300, bbox_inches="tight", pad_inches=0.01)
     plt.close(fig)
 
     plot_dir = os.path.join(args.out_root, "plot_data")
     os.makedirs(plot_dir, exist_ok=True)
+    trace_path = args.trace_out or os.path.join(plot_dir, f"{args.out_prefix}.npz")
     out = {
         "base_N": args.base_N,
         "base_K": args.base_K,
@@ -289,41 +340,53 @@ def main():
         "M": args.M,
         "a": args.a,
         "representative_seed": args.representative_seed,
-        "reliability_threshold": args.reliability_threshold,
-        "t_reliable": t_reliable,
+        "snapshot_time": snapshot["time"],
+        "snapshot_path": np.array(args.clouds),
+        "subsample_per_cluster": args.subsample_per_cluster,
+        "subsample_seed": args.subsample_seed,
+        "panel_a_scatter_indices": scatter["indices"],
+        "panel_a_scatter_xyz": scatter["xyz"],
+        "panel_a_scatter_labels": scatter["labels"],
+        "panel_a_initial_vertices": scatter["vertices"],
+        "panel_a_axis_limits": scatter["axis_limits"],
+        "panel_a_cloud_fraction_inside_axes": scatter["inside_fraction"],
         "panel_b_active_t": active_d["t"],
         "panel_b_active_mean": active_d["mean"],
         "panel_b_active_std": active_d["std"],
+        "panel_b_active_values": active_d["values"],
         "panel_b_active_seeds": active_d["seeds"],
         "panel_b_control_t": control_d["t"],
         "panel_b_control_mean": control_d["mean"],
         "panel_b_control_std": control_d["std"],
+        "panel_b_control_values": control_d["values"],
         "panel_b_control_seeds": control_d["seeds"],
         "panel_c_active_t": active_r["t"],
         "panel_c_active_mean": active_r["mean"],
         "panel_c_active_std": active_r["std"],
+        "panel_c_active_values": active_r["values"],
         "panel_c_active_seeds": active_r["seeds"],
         "panel_c_control_t": control_r["t"],
         "panel_c_control_mean": control_r["mean"],
         "panel_c_control_std": control_r["std"],
+        "panel_c_control_values": control_r["values"],
         "panel_c_control_seeds": control_r["seeds"],
     }
-    for m in range(4):
-        for ax in ("x", "y", "z"):
-            out[f"panel_a_c{m}_{ax}"] = active_rep["cols"][f"c{m}_{ax}"]
-    np.savez(os.path.join(plot_dir, f"{args.out_prefix}.npz"), **out)
+    np.savez(trace_path, **out)
 
     print(f"wrote {fig_dir}/{args.out_prefix}.pdf/.png")
     if args.paper_out:
         print(f"wrote {args.paper_out}")
+    if args.paper_png:
+        print(f"wrote {args.paper_png}")
+    print(f"wrote traceability {trace_path}")
     print(
         f"baseline: N={args.base_N}, K={args.base_K}, "
         f"tau={args.base_tau:g}, M={args.M:g}, a={args.a:g}"
     )
     print(
-        f"panel (a): active seed {args.representative_seed}; "
-        f"panel (b): t <= {t_reliable:.3f} from control A_min >= "
-        f"{args.reliability_threshold:g}"
+        f"panel (a): active seed {args.representative_seed}, "
+        f"{args.subsample_per_cluster} particles per cluster, "
+        f"cloud fraction inside displayed axes={scatter['inside_fraction']:.5f}"
     )
     print(
         f"panel (b) final ratios: active={active_d['mean'][-1]:.3f}, "
