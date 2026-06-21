@@ -84,7 +84,7 @@ def render(S, out_root, prefix, disp=3.0):
     ext = [-S["rng"], S["rng"], -S["rng"], S["rng"]]
     fig_w = TEXTWIDTH_IN
     fig_h = 0.43 * TEXTWIDTH_IN
-    left = 0.30
+    left = 0.46
     right = 0.08
     panel_gap = 0.070
     cbar_pad = 0.012
@@ -99,7 +99,7 @@ def render(S, out_root, prefix, disp=3.0):
         for ri, (data, lab, cmap) in enumerate([(U, r"$\int u\,dz$", "viridis"),
                                                 (Vv, r"$\int v\,dz$", "magma")]):
             y = top_y if ri == 0 else bottom
-            fig.text(0.055, (y + 0.5 * panel) / fig_h,
+            fig.text(0.024, (y + 0.5 * panel) / fig_h,
                      lab + ("\n(norm.)" if variant == "normalized" else ""),
                      rotation=90, va="center", ha="center", fontsize=7)
             for ci in range(nt):
