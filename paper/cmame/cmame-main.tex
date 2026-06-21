@@ -1385,7 +1385,7 @@ throughout the same time interval and reaches approximately
 $3.75\,R_{0.5}(0)$. 
 \begin{figure}
     \centering
-    \includegraphics[width=\linewidth]{figure/ks3d_pp_validation.pdf}
+    \includegraphics[width=0.5\linewidth]{./figure/ks3d_pp_validation.pdf}
 \caption{
 Radial three-dimensional Keller--Segel dynamics measured by the
 particle half-mass radius. (a) Normalized half-mass radius for
@@ -1398,118 +1398,46 @@ one standard deviation where multiple seeds are available.
 }
     \label{fig:ks3d_radial_response}
 \end{figure}
-\paragraph{Radial delayed response.}
-Unless otherwise specified, we use
-$N=10^5$, $\tau=10^{-3}$, $K_{\rm dyn}=12$, $T=2$, and eight independent
-particle seeds. For the lower-mass case $M=72$, the half-mass radius grows
-throughout the simulated interval, reaching approximately
-$3.75\,R_{0.5}(0)$. In contrast, the $M=96$ cloud first spreads while the
-chemical field is generated from $v_0=0$, reaches
-approximately $1.26\,R_{0.5}(0)$ near
-$t_{\rm turn}\simeq0.20$, and subsequently contracts to
-approximately $0.21\,R_{0.5}(0)$. The initial expansion followed by
-contraction is the characteristic delayed response of the fully parabolic
-chemical field; it would be absent under an instantaneous elliptic closure.
-
-Figure~\ref{fig:ks3d_state} shows this evolution through the
-$xy$-mass marginals of the two particle measures. The cell cloud initially
-broadens while the chemical field accumulates, and a localized chemical
-profile subsequently drives the cell population back toward the center.
-
-
-At fixed $K_{\rm dyn}=12$, the particle quantile radius is stable under
-particle-number refinement. The final ratios
+At fixed $K=12$, the contraction is stable under particle-number
+refinement. As shown in Figure~\ref{fig:ks3d_radial_response}(b), the final
+ratios are
 \[
     \frac{R_{0.5}(T)}{R_{0.5}(0)}
     =
-    0.219,\qquad
-    0.211,\qquad
-    0.206
+    0.219,\qquad 0.211,\qquad 0.206
 \]
-are obtained with
-$N=2\times10^4$, $10^5$, and $3.2\times10^5$, respectively.
-Halving the time step from $10^{-3}$ to $5\times10^{-4}$ preserves both
-the delayed turnover and the subsequent focusing.
-
-The Fourier-bandwidth dependence is more consequential. Delayed turnover is
-observed for $K_{\rm dyn}=8$, $12$, and $16$, whereas the late-time value of
-$R_{0.5}$ decreases as the bandwidth is increased. The onset of the
-diffusion-to-focusing transition also shifts with $K_{\rm dyn}$. Consequently,
-the delayed response is robust at the tested resolutions, but neither the
-transition mass nor the final core width should be interpreted as a
-resolution-independent quantity.
-
-\paragraph{Nonradial multi-cluster dynamics.}
-To test genuinely three-dimensional, nonradial interactions, we initialize
-four equal Gaussian cell clusters of width $\sigma_c=0.25$ at the vertices
+for $N=2\times10^4$, $10^5$, and $3.2\times10^5$, respectively.
+Thus, over a sixteen-fold range of particle numbers, the final normalized
+radius changes by less than $6\%$.
+We next consider a nonradial configuration consisting of four equal Gaussian
+cell clusters of width $\sigma_c=0.25$, centered at the vertices
 \[
-    (1,1,1),\quad
-    (1,-1,-1),\quad
-    (-1,1,-1),\quad
+    (1,1,1),\qquad
+    (1,-1,-1),\qquad
+    (-1,1,-1),\qquad
     (-1,-1,1)
 \]
-of a regular tetrahedron. The total mass is $M=240$, so each cluster carries
-mass $M/4$. We compare an active chemotactic simulation with $\chi=1$ against
-a diffusion control with $\chi=0$, using the same initial particles in both
-arms. The remaining parameters are
+of a regular tetrahedron. The total cell mass is $M=240$. We compare the
+chemotactic dynamics with $\chi=1$ against a diffusion control with $\chi=0$,
+using the same initial particles in the two simulations. We take
 \[
     N=8\times10^4,\qquad
-    K_{\rm dyn}=12,\qquad
     \tau=10^{-3},\qquad
-    T=3,
+    K=12,\qquad
+    T=3.
 \]
-and the reported curves are averaged over four seeds.
-
-Let $\boldsymbol{c}_m(t)$ denote the centroid of the $m$th labelled cluster
-and define
+Let $\boldsymbol{c}_m(t)$ denote the torus centroid of the $m$th labelled
+cluster and define
 \[
     d_{\min}(t)
     =
     \min_{m\ne\ell}
     d_{\mathbb T_L^3}
-    \bigl(
-        \boldsymbol{c}_m(t),
-        \boldsymbol{c}_\ell(t)
-    \bigr).
+    \bigl(\boldsymbol{c}_m(t),\boldsymbol{c}_\ell(t)\bigr).
 \]
-In the active arm, the four clusters remain individually localized while
-their centroids move inward: the nearest-neighbour distance decreases from
-approximately $2.83$ to $2.33$. No comparable inward motion is observed in
-the diffusion control over the interval in which its increasingly diffuse
-cluster centroids remain well defined. At $T=3$, the mean per-cluster
-half-mass radius is approximately $0.16$ in the active arm and $3.8$ in the
-control. We therefore interpret this experiment as mutual chemotactic
-attraction accompanied by individual cluster focusing, rather than merger
-into a single central aggregate over the simulated time interval.
+We also compute the half-mass radius of each labelled cluster and report
+their mean.
 
-The small late-time radius in the active arm lies below the chemical-field
-reconstruction scale and is not interpreted as a converged physical core
-width. Its role is instead to provide a large active-versus-control contrast;
-the centroid motion supplies the complementary evidence for mutual
-attraction.
-
-% \begin{figure}[t]
-%     \centering
-%     \includegraphics[width=0.92\linewidth]{figure/ks3d_pp_tetra.pdf}
-%     \caption{
-%     Nonradial tetrahedral Keller--Segel experiment.
-%     Left: minimum pairwise distance $d_{\min}(t)$ between the four labelled
-%     cluster centroids for the active and diffusion-control arms.
-%     Right: mean per-cluster half-mass radius.
-%     Curves show seed means and shaded bands show one standard deviation over
-%     four seeds. The active clusters move inward and remain localized, whereas
-%     the control clusters diffuse. Late control-centroid values are not used
-%     once the diffuse clusters cease to have well-conditioned centroids.
-%     }
-%     \label{fig:ks3d_tetra}
-% \end{figure}
-
-Together, the radial and tetrahedral tests demonstrate that the coupled
-particle discretization can represent a dynamically generated chemical field,
-a delayed cell response, and nonradial multi-cluster interactions in three
-dimensions. These experiments are concentration stress tests. They do not
-establish a continuum singularity, a universal critical mass, or a
-Fourier-independent late-time core scale.
 \subsection{Six-dimensional field-coupled kinetic Keller--Segel}
 \label{sec:kinetic_ks}
 
